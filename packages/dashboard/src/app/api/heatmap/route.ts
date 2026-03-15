@@ -3,14 +3,33 @@ import { heatmapQuerySchema } from '@analytics-platform/shared';
 import { getHeatmapData } from '@/lib/queries/heatmap';
 import { auth } from '@/lib/auth';
 import { checkProjectMembership } from '@/lib/auth-check';
+import { verifyToolbarToken } from '@/lib/toolbar-token';
 
 export async function GET(request: NextRequest) {
+  const params = Object.fromEntries(request.nextUrl.searchParams);
+
+  // --- Auth: NextAuth session OR toolbar token ---
+  let authenticatedProjectId: string | null = null;
+
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (session?.user?.id) {
+    // Session auth — membership will be checked after parsing
+    authenticatedProjectId = null; // defer to membership check below
+  } else {
+    // No session — try toolbar token
+    const token = params.token;
+    if (token) {
+      const payload = await verifyToolbarToken(token);
+      if (payload) {
+        authenticatedProjectId = payload.pid;
+      }
+    }
+
+    if (!session?.user?.id && !authenticatedProjectId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
-  const params = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = heatmapQuerySchema.safeParse({
     projectId: params.projectId,
     url: params.url,
@@ -24,10 +43,27 @@ export async function GET(request: NextRequest) {
 
   const { projectId, url, dateRange, deviceType } = parsed.data;
 
-  if (!(await checkProjectMembership(session.user.id, projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  // --- Authorization ---
+  if (authenticatedProjectId) {
+    // Token auth — the token's pid must match the requested projectId
+    if (authenticatedProjectId !== projectId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+  } else {
+    // Session auth — check membership
+    if (!(await checkProjectMembership(session!.user.id, projectId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
   }
 
   const points = await getHeatmapData(projectId, url, dateRange, deviceType);
-  return NextResponse.json({ points });
+
+  return NextResponse.json(
+    { points },
+    {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+      },
+    },
+  );
 }
