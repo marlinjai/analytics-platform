@@ -34,12 +34,25 @@ Dashboard (Next.js)   → Query APIs       → ClickHouse MVs
 # Install dependencies
 pnpm install
 
-# Start databases
-docker compose up -d postgres clickhouse
+# Start databases and initialize schemas
+./scripts/setup.sh
+
+# Copy and edit environment config
+cp .env.example .env
 
 # Start development
 pnpm dev
 ```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## Production
+
+```bash
+docker compose up -d
+```
+
+See [Self-Hosting Guide](docs/public/self-hosting.md) for full details.
 
 ## Package Structure
 
