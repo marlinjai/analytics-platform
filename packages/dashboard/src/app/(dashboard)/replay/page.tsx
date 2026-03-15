@@ -1,0 +1,62 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import type { SessionSummary } from '@analytics-platform/shared';
+import { SessionList } from '@/components/replay/SessionList';
+import { DateRangePicker } from '@/components/layout/DateRangePicker';
+import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
+
+export default function ReplayListPage() {
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [from, setFrom] = useState(() => new Date(Date.now() - 7 * 86400000).toISOString());
+  const [to, setTo] = useState(() => new Date().toISOString());
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+
+  const fetchSessions = useCallback(async (append = false) => {
+    if (!projectId) return;
+    setLoading(true);
+
+    const params = new URLSearchParams({ projectId, from, to });
+    if (append && cursor) params.set('cursor', cursor);
+
+    try {
+      const res = await fetch(`/api/sessions?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSessions((prev) => append ? [...prev, ...data.sessions] : data.sessions);
+        setCursor(data.nextCursor);
+        setHasMore(!!data.nextCursor);
+      }
+    } catch {
+      // Network error
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, from, to, cursor]);
+
+  useEffect(() => {
+    setCursor(null);
+    fetchSessions(false);
+  }, [projectId, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="w-full max-w-xs">
+          <ProjectSwitcher currentProjectId={projectId} onSelect={setProjectId} />
+        </div>
+        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
+      </div>
+
+      <SessionList
+        sessions={sessions}
+        loading={loading}
+        hasMore={hasMore}
+        onLoadMore={() => fetchSessions(true)}
+      />
+    </div>
+  );
+}

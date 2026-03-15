@@ -1,0 +1,85 @@
+'use client';
+
+import Link from 'next/link';
+import type { SessionSummary } from '@analytics-platform/shared';
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `${mins}m ${secs}s`;
+}
+
+interface Props {
+  sessions: SessionSummary[];
+  loading: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
+}
+
+export function SessionList({ sessions, loading, hasMore, onLoadMore }: Props) {
+  if (loading && sessions.length === 0) {
+    return (
+      <div className="flex h-48 items-center justify-center rounded-xl border border-gray-800 bg-gray-900">
+        <p className="text-sm text-gray-500">Loading sessions...</p>
+      </div>
+    );
+  }
+
+  if (sessions.length === 0) {
+    return (
+      <div className="flex h-48 items-center justify-center rounded-xl border border-gray-800 bg-gray-900">
+        <p className="text-sm text-gray-500">No sessions found</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-900">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-gray-800 text-left text-xs text-gray-500">
+            <th className="px-4 py-3 font-medium">Session</th>
+            <th className="px-4 py-3 font-medium">Duration</th>
+            <th className="px-4 py-3 font-medium">Pages</th>
+            <th className="px-4 py-3 font-medium">Device</th>
+            <th className="px-4 py-3 font-medium">Country</th>
+            <th className="px-4 py-3 font-medium">Started</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sessions.map((s) => (
+            <tr key={s.sessionId} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+              <td className="px-4 py-3">
+                <Link
+                  href={`/replay/${s.sessionId}`}
+                  className="text-blue-400 hover:text-blue-300"
+                >
+                  {s.sessionId.slice(0, 8)}...
+                </Link>
+              </td>
+              <td className="px-4 py-3 text-gray-300">{formatDuration(s.duration)}</td>
+              <td className="px-4 py-3 text-gray-300">{s.pageviews}</td>
+              <td className="px-4 py-3 text-gray-400">{s.deviceType ?? '—'}</td>
+              <td className="px-4 py-3 text-gray-400">{s.country || '—'}</td>
+              <td className="px-4 py-3 text-gray-400">
+                {new Date(s.startedAt).toLocaleString()}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {hasMore && (
+        <div className="border-t border-gray-800 px-4 py-3 text-center">
+          <button
+            onClick={onLoadMore}
+            disabled={loading}
+            className="text-sm text-blue-400 hover:text-blue-300 disabled:text-gray-600"
+          >
+            {loading ? 'Loading...' : 'Load more'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
