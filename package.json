@@ -1,0 +1,24 @@
+{
+  "name": "analytics-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted analytics, heatmap, and session replay platform",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter @analytics-platform/dashboard dev",
+    "lint": "pnpm -r lint",
+    "test": "vitest",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0",
+    "husky": "^9.1.7",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  }
+}

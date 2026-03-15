@@ -1,0 +1,36 @@
+{
+  "name": "@marlinjai/analytics-tracker",
+  "version": "0.1.0",
+  "description": "Lightweight browser analytics tracker — pageviews, clicks, heatmaps, session replay",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@analytics-platform/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "rrweb": "^2.0.0-alpha.0"
+  },
+  "peerDependenciesMeta": {
+    "rrweb": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3"
+  },
+  "sideEffects": false,
+  "license": "MIT"
+}

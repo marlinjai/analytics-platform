@@ -1,0 +1,54 @@
+# Analytics Platform
+
+Self-hosted analytics, heatmap, and session replay platform.
+
+## Features
+
+- **Lightweight tracker** — <5KB gzip browser SDK, zero runtime dependencies
+- **Click heatmaps** — canvas-based visualization of click patterns
+- **Session replay** — rrweb-powered DOM recording and playback
+- **Privacy-first** — self-hosted, IP hashing (never stored raw), no third-party data sharing
+- **Real-time analytics** — ClickHouse-powered event ingestion and aggregation
+
+## Architecture
+
+```
+Browser (Tracker SDK) → POST /api/collect → ClickHouse (events)
+                                          → PostgreSQL (projects, users)
+Dashboard (Next.js)   → Query APIs       → ClickHouse MVs
+```
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Tracker SDK | TypeScript, rrweb (optional) |
+| Dashboard | Next.js 15, React 19, Tailwind CSS v4 |
+| Analytics DB | ClickHouse 24 |
+| Config DB | PostgreSQL 16 |
+| Auth | NextAuth v5 |
+
+## Getting Started
+
+```bash
+# Install dependencies
+pnpm install
+
+# Start databases
+docker compose up -d postgres clickhouse
+
+# Start development
+pnpm dev
+```
+
+## Package Structure
+
+| Package | Name | Description |
+|---------|------|-------------|
+| `packages/shared` | `@analytics-platform/shared` | Types, schemas, DDL (private) |
+| `packages/tracker` | `@marlinjai/analytics-tracker` | Browser SDK (published) |
+| `packages/dashboard` | `@analytics-platform/dashboard` | Next.js app (private) |
+
+## License
+
+MIT
