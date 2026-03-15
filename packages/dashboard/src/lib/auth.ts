@@ -3,7 +3,7 @@ import GitHub from 'next-auth/providers/github';
 import Credentials from 'next-auth/providers/credentials';
 import PostgresAdapter from '@auth/pg-adapter';
 import bcrypt from 'bcrypt';
-import { getDb } from './db.js';
+import { getDb } from './db';
 
 declare module 'next-auth' {
   interface Session {

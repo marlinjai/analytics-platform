@@ -6,12 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Monorepo env loading — single `.env.local` at project root, loaded via `scripts/dev.mjs`
+- NextAuth middleware secret handling for Edge runtime
+- Root page redirect — authenticated users now land on the dashboard overview
+
+### Changed
+- Dashboard dev script uses wrapper (`scripts/dev.mjs`) for centralized env loading
+- Seed script falls back to monorepo root `.env` when run standalone
+
+## [0.1.0] — 2026-03-15
+
 ### Added
-- Monorepo scaffold with pnpm workspaces
-- Shared contract layer: types, Zod schemas, ClickHouse + Postgres DDL
-- Tracker SDK stub with `TrackerConfig` type and `init()` placeholder
-- Dashboard stub (Next.js 15, React 19, Tailwind CSS v4)
+
+#### Phase 0: Scaffold
+- Monorepo scaffold with pnpm workspaces (`shared`, `tracker`, `dashboard`)
+- Shared contract layer: TypeScript types, Zod schemas, ClickHouse + Postgres DDL
 - Docker Compose for PostgreSQL 16 + ClickHouse 24
-- Clearify documentation config
-- Agent implementation specs (10 agents, 3 phases)
 - Commitlint + Husky for conventional commits
+- Agent implementation specs (10 agents, 3 phases)
+
+#### Phase 1: Foundation
+- Tracker SDK (`@marlinjai/analytics-tracker`) — pageviews, clicks, scroll depth, batching
+- Tracker session management with configurable timeout
+- Optional rrweb session replay integration (lazy-loaded, zero runtime deps)
+- Ingestion API (`POST /api/collect`) with validation, rate limiting, IP hashing
+- Shared package Zod schema validation and type exports
+
+#### Phase 2: Backend
+- NextAuth v5 authentication (GitHub OAuth + credentials)
+- Project CRUD API (`/api/projects`) with membership management
+- API key generation and management (`ap_live_` / `ap_test_` prefix format)
+- Query APIs: stats overview, timeseries, top pages, heatmap data, session list, replay chunks
+- ClickHouse query builders with parameterized queries
+- PostgreSQL config tables (users, projects, API keys, memberships)
+- Dev user seeding script
+
+#### Phase 3: Dashboard UI
+- Analytics overview page — stats cards, timeseries chart (recharts), top pages table
+- Heatmap visualization page — canvas overlay with URL selector and device toggle
+- Session replay player — rrweb-player with timeline scrubbing
+- Session list with cursor pagination and filtering
+- Sidebar navigation, project switcher, date range picker
+- Responsive dark-themed UI with Tailwind CSS v4
+
+#### Phase 4: Integration & Production
+- Dockerfile for standalone Next.js production build
+- Production Docker Compose with healthchecks, volumes, restart policies
+- Self-hosting documentation (`docs/public/self-hosting.md`)
+- Setup script for one-command local development
+- Getting started guide (`docs/public/getting-started.md`)

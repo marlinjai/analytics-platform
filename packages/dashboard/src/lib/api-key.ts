@@ -1,5 +1,5 @@
 import { API_KEY_PREFIX_LIVE, API_KEY_PREFIX_TEST } from '@analytics-platform/shared';
-import { getDb } from './db.js';
+import { getDb } from './db';
 
 async function sha256(input: string): Promise<string> {
   const encoder = new TextEncoder();

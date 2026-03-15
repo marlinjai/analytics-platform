@@ -9,48 +9,60 @@
 - [x] Clearify docs + agent specs
 - [x] ERP suite integration
 
-## Phase 1: Foundation
-- [ ] Shared package tests + validation (Agent 1: shared-build)
-- [ ] Tracker: pageviews, clicks, scroll, batching (Agent 2: tracker-core)
-- [ ] Tracker: rrweb session replay integration (Agent 3: tracker-replay)
-- [ ] API: ingestion endpoint POST /api/collect (Agent 4: api-ingestion)
+## Phase 1: Foundation (complete)
+- [x] Shared package tests + validation (Agent 1: shared-build)
+- [x] Tracker: pageviews, clicks, scroll, batching (Agent 2: tracker-core)
+- [x] Tracker: rrweb session replay integration (Agent 3: tracker-replay)
+- [x] API: ingestion endpoint POST /api/collect (Agent 4: api-ingestion)
 
-## Phase 2: Backend
-- [ ] API: stats, heatmap, session, replay query routes (Agent 5: api-queries)
-- [ ] API: project + API key CRUD (Agent 6: api-projects)
-- [ ] Dashboard: NextAuth authentication (Agent 7: dashboard-auth)
+## Phase 2: Backend (complete)
+- [x] API: stats, heatmap, session, replay query routes (Agent 5: api-queries)
+- [x] API: project + API key CRUD (Agent 6: api-projects)
+- [x] Dashboard: NextAuth authentication (Agent 7: dashboard-auth)
 
-## Phase 3: Dashboard UI
-- [ ] Analytics overview page — charts, stats cards, top pages (Agent 8: dashboard-overview)
-- [ ] Heatmap visualization page — canvas overlay (Agent 9: dashboard-heatmap)
-- [ ] Session replay player page — rrweb-player (Agent 10: dashboard-replay)
+## Phase 3: Dashboard UI (complete)
+- [x] Analytics overview page — charts, stats cards, top pages (Agent 8: dashboard-overview)
+- [x] Heatmap visualization page — canvas overlay (Agent 9: dashboard-heatmap)
+- [x] Session replay player page — rrweb-player (Agent 10: dashboard-replay)
 
-## Phase 4: Integration & Production Hardening
-- [ ] Wire SDK modules end-to-end (tracker -> ingestion -> queries -> dashboard)
+## Phase 4: Integration & Production (complete)
+- [x] Wire SDK modules end-to-end (tracker -> ingestion -> queries -> dashboard)
+- [x] Dockerfile for dashboard (production build)
+- [x] Docker Compose tuning (healthchecks, volumes, restart policies)
+- [x] Self-hosting guide documentation
+- [x] Install script (one-command setup)
+- [x] Production hardening (rate limiting, CORS, CSP headers)
+- [x] README finalization
 - [ ] End-to-end integration tests
-- [ ] Dockerfile for dashboard (production build)
-- [ ] Docker Compose tuning (healthchecks, volumes, restart policies)
-- [ ] Self-hosting guide documentation
-- [ ] Install script (one-command setup)
-- [ ] Production hardening (rate limiting, CORS, CSP headers)
-- [ ] README finalization
+
+## Phase 5: Polish & Reliability (next)
+- [ ] End-to-end integration tests (deferred from Phase 4)
+- [ ] Tracker SDK unit tests + bundle size CI check (<5KB gzip)
+- [ ] ClickHouse materialized view verification + migration tooling
+- [ ] Error boundary pages (proper 404, 500 pages instead of useInsertionEffect crashes)
+- [ ] Loading states and skeleton UI across all dashboard pages
+- [ ] Settings page (user profile, project settings, team management)
+- [ ] API key rotation workflow in dashboard
+- [ ] Dashboard empty states (no projects, no data, first-time onboarding)
+
+## Phase 6: Analytics Depth
+- [ ] Web analytics: UTM tracking, referrer parsing, geographic data, device breakdowns
+- [ ] Funnel analysis — define step sequences, measure conversion
+- [ ] Scroll heatmaps & attention maps
+- [ ] Data export (CSV, JSON API)
+- [ ] Custom date ranges with calendar picker
+- [ ] Dashboard filters (browser, OS, country, page)
+
+## Phase 7: Real-time & Scale
+- [ ] Real-time dashboard (WebSocket / SSE live counters)
+- [ ] Edge ingestion (Cloudflare Workers) for lower latency
+- [ ] ClickHouse cluster / multi-region deployment
+- [ ] Alerting (anomaly detection, threshold alerts)
 
 ## v2 (Deferred from MVP)
 - [ ] A/B testing & experimentation (deterministic hashing, variant assignment)
-- [ ] Scroll heatmaps & attention maps
 - [ ] Mouse movement heatmaps
-- [ ] Funnel analysis
 - [ ] Retention cohorts
 - [ ] Multi-tenant SaaS mode with billing
-- [ ] Edge ingestion (Cloudflare Workers)
-- [ ] Web analytics (UTM tracking, geographic data, device breakdowns)
 - [ ] Error tracking
 - [ ] Custom dashboards / saved reports
-- [ ] Real-time dashboard (WebSocket / SSE)
-- [ ] Alerting (anomaly detection)
-- [ ] Data export (CSV, API)
-- [ ] Multi-region ClickHouse deployment
-
-## Effort Estimate
-- **Phases 1–3:** ~17.5h wall-clock / ~33.5 agent-hours (2–3 days with agent team)
-- **Phase 4:** ~2h (lead agent)

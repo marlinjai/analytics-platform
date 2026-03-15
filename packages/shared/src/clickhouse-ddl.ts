@@ -80,8 +80,8 @@ AS SELECT
     url,
     device_type,
     toDate(timestamp)                    AS day,
-    intDiv(toUInt32(x), 10) * 10         AS x_bucket,
-    intDiv(toUInt32(y), 10) * 10         AS y_bucket,
+    intDiv(toUInt32(assumeNotNull(x)), 10) * 10  AS x_bucket,
+    intDiv(toUInt32(assumeNotNull(y)), 10) * 10  AS y_bucket,
     count()                              AS click_count
 FROM analytics.events
 WHERE type = 'click' AND x IS NOT NULL AND y IS NOT NULL
