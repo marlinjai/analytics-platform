@@ -22,7 +22,7 @@
 
 ## Phase 3: Dashboard UI (complete)
 - [x] Analytics overview page — charts, stats cards, top pages (Agent 8: dashboard-overview)
-- [x] Heatmap visualization page — canvas overlay (Agent 9: dashboard-heatmap)
+- [x] Heatmap visualization page — ~~canvas overlay~~ toolbar/bookmarklet activation page (Agent 9, refactored)
 - [x] Session replay player page — rrweb-player (Agent 10: dashboard-replay)
 
 ## Phase 4: Integration & Production (complete)
@@ -36,6 +36,8 @@
 - [ ] End-to-end integration tests
 
 ## Phase 5: Polish & Reliability (next)
+- [x] Heatmap: refactor from iframe overlay to toolbar/bookmarklet approach
+- [x] Heatmap query optimization (use materialized view)
 - [ ] End-to-end integration tests (deferred from Phase 4)
 - [ ] Tracker SDK unit tests + bundle size CI check (<5KB gzip)
 - [ ] ClickHouse materialized view verification + migration tooling
@@ -48,7 +50,7 @@
 ## Phase 6: Analytics Depth
 - [ ] Web analytics: UTM tracking, referrer parsing, geographic data, device breakdowns
 - [ ] Funnel analysis — define step sequences, measure conversion
-- [ ] Scroll heatmaps & attention maps
+- [ ] Scroll heatmaps & attention maps (toolbar infrastructure now in place)
 - [ ] Data export (CSV, JSON API)
 - [ ] Custom date ranges with calendar picker
 - [ ] Dashboard filters (browser, OS, country, page)

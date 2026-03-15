@@ -14,6 +14,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - Dashboard dev script uses wrapper (`scripts/dev.mjs`) for centralized env loading
 - Seed script falls back to monorepo root `.env` when run standalone
+- Heatmap: replaced iframe overlay with toolbar/bookmarklet approach for accurate on-site click visualization
+- Heatmap query optimized to use ClickHouse materialized view instead of raw events table
+
+### Added
+- Toolbar activation page with bookmarklet generator for viewing heatmaps on tracked sites
+- Toolbar auth token endpoint (`POST /api/toolbar/token`) for secure cross-origin data access
+- Toolbar script injection endpoint (`GET /api/toolbar/script`) with shadow DOM UI
+- Toolbar renders heatmap.js overlay directly on the tracked page (no iframe)
+
+### Removed
+- `heatmap.js` dependency from dashboard package (loaded via CDN in toolbar script)
+- `HeatmapOverlay.tsx` iframe-based component
 
 ## [0.1.0] — 2026-03-15
 
