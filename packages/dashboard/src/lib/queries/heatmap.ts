@@ -16,19 +16,16 @@ export async function getHeatmapData(
   const result = await ch.query({
     query: `
       SELECT
-        intDiv(toUInt32(x), 10) * 10 AS x,
-        intDiv(toUInt32(y), 10) * 10 AS y,
-        count() AS count
-      FROM analytics.events
+        x_bucket AS x,
+        y_bucket AS y,
+        sum(click_count) AS count
+      FROM analytics.heatmap_clicks_mv
       WHERE project_id = {projectId: UUID}
-        AND type = 'click'
         AND url = {url: String}
-        AND x IS NOT NULL
-        AND y IS NOT NULL
-        AND timestamp >= {from: DateTime64(3)}
-        AND timestamp <= {to: DateTime64(3)}
+        AND day >= toDate({from: String})
+        AND day <= toDate({to: String})
         ${deviceFilter}
-      GROUP BY x, y
+      GROUP BY x_bucket, y_bucket
       ORDER BY count DESC
     `,
     query_params: {
