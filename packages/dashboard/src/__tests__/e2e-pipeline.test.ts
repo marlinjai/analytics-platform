@@ -17,7 +17,8 @@ const DATABASE_URL =
   process.env.DATABASE_URL || 'postgres://analytics:analytics_dev@localhost:5432/analytics';
 const CLICKHOUSE_URL = process.env.CLICKHOUSE_URL || 'http://localhost:8123';
 const CLICKHOUSE_PASSWORD = process.env.CLICKHOUSE_PASSWORD || 'clickhouse_dev';
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const envBase = process.env.BASE_URL?.trim();
+const BASE_URL = envBase && envBase.startsWith('http') ? envBase : 'http://localhost:3000';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
