@@ -6,9 +6,10 @@ import type { Project } from '@analytics-platform/shared';
 interface Props {
   currentProjectId: string | null;
   onSelect: (projectId: string) => void;
+  onEmpty?: () => void;
 }
 
-export function ProjectSwitcher({ currentProjectId, onSelect }: Props) {
+export function ProjectSwitcher({ currentProjectId, onSelect, onEmpty }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
 
   useEffect(() => {
@@ -16,12 +17,14 @@ export function ProjectSwitcher({ currentProjectId, onSelect }: Props) {
       .then((r) => r.json())
       .then((data) => {
         setProjects(data.projects ?? []);
-        if (!currentProjectId && data.projects?.length > 0) {
+        if (data.projects?.length === 0) {
+          onEmpty?.();
+        } else if (!currentProjectId && data.projects?.length > 0) {
           onSelect(data.projects[0].id);
         }
       })
       .catch(() => {});
-  }, [currentProjectId, onSelect]);
+  }, [currentProjectId, onSelect, onEmpty]);
 
   return (
     <select

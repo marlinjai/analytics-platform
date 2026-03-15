@@ -7,9 +7,12 @@ import { TimeseriesChart } from '@/components/charts/TimeseriesChart';
 import { TopPagesTable } from '@/components/charts/TopPagesTable';
 import { DateRangePicker } from '@/components/layout/DateRangePicker';
 import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
+import { NoProjects } from '@/components/empty-states/NoProjects';
+import { NoData } from '@/components/empty-states/NoData';
 
 export default function OverviewPage() {
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [hasProjects, setHasProjects] = useState<boolean | null>(null);
   const [from, setFrom] = useState(() => new Date(Date.now() - 7 * 86400000).toISOString());
   const [to, setTo] = useState(() => new Date().toISOString());
   const [stats, setStats] = useState<StatsOverview | null>(null);
@@ -47,11 +50,33 @@ export default function OverviewPage() {
     fetchData();
   }, [fetchData]);
 
+  if (hasProjects === false) {
+    return (
+      <NoProjects
+        onCreated={(id) => {
+          setProjectId(id);
+          setHasProjects(true);
+        }}
+      />
+    );
+  }
+
+  if (!loading && projectId && stats && stats.pageviews === 0 && timeseries.length === 0) {
+    return <NoData projectId={projectId} />;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="w-full max-w-xs">
-          <ProjectSwitcher currentProjectId={projectId} onSelect={setProjectId} />
+          <ProjectSwitcher
+            currentProjectId={projectId}
+            onSelect={(id) => {
+              setProjectId(id);
+              setHasProjects(true);
+            }}
+            onEmpty={() => setHasProjects(false)}
+          />
         </div>
         <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
       </div>
