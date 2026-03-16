@@ -1,4 +1,4 @@
-import { getClickHouse } from '../clickhouse.js';
+import { getClickHouse } from '../clickhouse';
 import type { StatsOverview, TimeseriesPoint, TopPage, DateRange } from '@analytics-platform/shared';
 
 export async function getStatsOverview(

@@ -1,4 +1,4 @@
-import { getClickHouse } from '../clickhouse.js';
+import { getClickHouse } from '../clickhouse';
 import type { SessionSummary, DateRange } from '@analytics-platform/shared';
 
 export async function getSessionList(
