@@ -29,7 +29,8 @@ try {
 
 // Start Next.js dev server — inherits loaded env
 const nextBin = resolve(dashboardRoot, 'node_modules/.bin/next');
-const next = spawn(nextBin, ['dev', '--turbopack'], {
+const port = process.env.PORT || '3100';
+const next = spawn(nextBin, ['dev', '--turbopack', '--port', port], {
   cwd: dashboardRoot,
   stdio: 'inherit',
   env: process.env,

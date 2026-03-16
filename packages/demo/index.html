@@ -407,7 +407,7 @@
       // Ensure batch doesn't exceed 50 (API max)
       const batch = events.slice(0, 50);
 
-      const res = await fetch('http://localhost:3000/api/collect', {
+      const res = await fetch('http://localhost:3100/api/collect', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

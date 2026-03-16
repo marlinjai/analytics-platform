@@ -18,7 +18,7 @@ const DATABASE_URL =
 const CLICKHOUSE_URL = process.env.CLICKHOUSE_URL || 'http://localhost:8123';
 const CLICKHOUSE_PASSWORD = process.env.CLICKHOUSE_PASSWORD || 'clickhouse_dev';
 const envBase = process.env.BASE_URL?.trim();
-const BASE_URL = envBase && envBase.startsWith('http') ? envBase : 'http://localhost:3000';
+const BASE_URL = envBase && envBase.startsWith('http') ? envBase : 'http://localhost:3100';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
