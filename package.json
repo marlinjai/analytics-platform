@@ -6,6 +6,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "dev": "pnpm --filter @analytics-platform/dashboard dev",
+    "dev:demo": "pnpm --filter @analytics-platform/dashboard dev & pnpm --filter @analytics-platform/demo dev & wait",
     "lint": "pnpm -r lint",
     "test": "vitest",
     "typecheck": "pnpm -r typecheck"
