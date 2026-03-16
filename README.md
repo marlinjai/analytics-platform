@@ -61,6 +61,7 @@ See [Self-Hosting Guide](docs/public/self-hosting.md) for full details.
 | `packages/shared` | `@analytics-platform/shared` | Types, schemas, DDL (private) |
 | `packages/tracker` | `@marlinjai/analytics-tracker` | Browser SDK (published) |
 | `packages/dashboard` | `@analytics-platform/dashboard` | Next.js app (private) |
+| `packages/demo` | `@analytics-platform/demo` | Test page with traffic simulator (private) |
 
 ## License
 

@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Heatmap query optimized to use ClickHouse materialized view instead of raw events table
 
 ### Added
+- Demo page (`packages/demo`) — self-contained HTML landing page with simulated traffic for testing the full analytics pipeline (tracker -> /api/collect -> ClickHouse -> dashboard)
 - Toolbar activation page with bookmarklet generator for viewing heatmaps on tracked sites
 - Toolbar auth token endpoint (`POST /api/toolbar/token`) for secure cross-origin data access
 - Toolbar script injection endpoint (`GET /api/toolbar/script`) with shadow DOM UI
