@@ -50,7 +50,9 @@
 ## Phase 6: Analytics Depth
 - [ ] Web analytics: UTM tracking, referrer parsing, geographic data, device breakdowns
 - [ ] Funnel analysis — define step sequences, measure conversion
-- [ ] Scroll heatmaps & attention maps (toolbar infrastructure now in place)
+- [ ] Scroll depth heatmap — gradient overlay showing drop-off (see docs/superpowers/plans/2026-03-16-heatmap-map-types.md Phase A)
+- [ ] Rage click detection — highlight frustration points (Phase B)
+- [ ] Engagement zones — element-level click aggregation (Phase C)
 - [ ] Data export (CSV, JSON API)
 - [ ] Custom date ranges with calendar picker
 - [ ] Dashboard filters (browser, OS, country, page)
@@ -63,7 +65,7 @@
 
 ## v2 (Deferred from MVP)
 - [ ] A/B testing & experimentation (deterministic hashing, variant assignment)
-- [ ] Mouse movement heatmaps
+- [ ] Mouse move heatmap — cursor tracking with throttled sampling (Phase D)
 - [ ] Retention cohorts
 - [ ] Multi-tenant SaaS mode with billing
 - [ ] Error tracking
