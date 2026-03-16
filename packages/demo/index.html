@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CloudFlow - Modern SaaS Platform</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a2e; line-height: 1.6; background: #fafbfc; }
+    a { color: inherit; text-decoration: none; }
+
+    /* Header */
+    .header { display: flex; align-items: center; justify-content: space-between; padding: 16px 48px; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 10; }
+    .logo { font-size: 22px; font-weight: 700; color: #4f46e5; }
+    .nav { display: flex; gap: 32px; }
+    .nav a { font-size: 15px; font-weight: 500; color: #4b5563; transition: color 0.2s; }
+    .nav a:hover { color: #4f46e5; }
+    .header-actions { display: flex; gap: 12px; align-items: center; }
+    .btn { display: inline-block; padding: 10px 22px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
+    .btn-ghost { background: transparent; color: #4b5563; }
+    .btn-ghost:hover { color: #4f46e5; }
+    .btn-primary { background: #4f46e5; color: #fff; }
+    .btn-primary:hover { background: #4338ca; }
+    .btn-outline { background: transparent; border: 2px solid #4f46e5; color: #4f46e5; }
+    .btn-outline:hover { background: #4f46e5; color: #fff; }
+
+    /* Hero */
+    .hero { text-align: center; padding: 96px 48px 64px; max-width: 800px; margin: 0 auto; }
+    .hero h1 { font-size: 52px; font-weight: 800; line-height: 1.15; margin-bottom: 20px; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { font-size: 19px; color: #6b7280; margin-bottom: 36px; }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; }
+
+    /* Trusted */
+    .trusted { text-align: center; padding: 48px; color: #9ca3af; font-size: 14px; }
+    .trusted-logos { display: flex; gap: 48px; justify-content: center; margin-top: 16px; font-size: 18px; font-weight: 700; color: #d1d5db; }
+
+    /* Features */
+    .features { padding: 80px 48px; max-width: 1100px; margin: 0 auto; }
+    .features h2 { text-align: center; font-size: 36px; font-weight: 700; margin-bottom: 12px; }
+    .features .subtitle { text-align: center; color: #6b7280; font-size: 17px; margin-bottom: 56px; }
+    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+    .feature-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 32px; transition: box-shadow 0.2s, transform 0.2s; cursor: pointer; }
+    .feature-card:hover { box-shadow: 0 8px 24px rgba(79, 70, 229, 0.1); transform: translateY(-2px); }
+    .feature-icon { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 16px; }
+    .feature-card h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .feature-card p { font-size: 14px; color: #6b7280; }
+    .icon-blue { background: #ede9fe; color: #4f46e5; }
+    .icon-green { background: #d1fae5; color: #059669; }
+    .icon-orange { background: #fef3c7; color: #d97706; }
+    .icon-pink { background: #fce7f3; color: #db2777; }
+    .icon-cyan { background: #cffafe; color: #0891b2; }
+    .icon-slate { background: #e2e8f0; color: #475569; }
+
+    /* Pricing */
+    .pricing { padding: 80px 48px; background: #f9fafb; }
+    .pricing h2 { text-align: center; font-size: 36px; font-weight: 700; margin-bottom: 48px; }
+    .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; max-width: 960px; margin: 0 auto; }
+    .price-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 36px 28px; text-align: center; }
+    .price-card.popular { border-color: #4f46e5; box-shadow: 0 4px 16px rgba(79, 70, 229, 0.15); }
+    .price-card h3 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+    .price { font-size: 42px; font-weight: 800; margin: 12px 0 4px; }
+    .price span { font-size: 16px; font-weight: 400; color: #9ca3af; }
+    .price-card ul { list-style: none; margin: 20px 0; text-align: left; }
+    .price-card li { padding: 6px 0; font-size: 14px; color: #4b5563; }
+    .price-card li::before { content: "\2713 "; color: #4f46e5; font-weight: 700; }
+    .price-card .btn { width: 100%; margin-top: 12px; }
+
+    /* CTA */
+    .cta { text-align: center; padding: 96px 48px; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #fff; }
+    .cta h2 { font-size: 38px; font-weight: 700; margin-bottom: 16px; }
+    .cta p { font-size: 18px; opacity: 0.9; margin-bottom: 32px; }
+    .cta .btn-white { background: #fff; color: #4f46e5; font-weight: 700; padding: 14px 36px; font-size: 16px; border-radius: 10px; border: none; cursor: pointer; }
+    .cta .btn-white:hover { background: #f0f0ff; }
+
+    /* Footer */
+    .footer { padding: 48px; background: #1a1a2e; color: #9ca3af; }
+    .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px; max-width: 1100px; margin: 0 auto; }
+    .footer h4 { color: #fff; font-size: 15px; margin-bottom: 16px; }
+    .footer a { display: block; font-size: 14px; padding: 4px 0; color: #9ca3af; transition: color 0.2s; }
+    .footer a:hover { color: #fff; }
+    .footer-brand { font-size: 14px; line-height: 1.7; }
+    .footer-bottom { text-align: center; padding: 24px 48px; background: #13132a; color: #6b7280; font-size: 13px; }
+
+    /* Control Panel */
+    .control-panel { position: fixed; bottom: 0; left: 0; right: 0; background: #1e1e2e; color: #e5e7eb; padding: 20px 32px; z-index: 100; border-top: 2px solid #4f46e5; font-family: 'SF Mono', Monaco, 'Fira Code', monospace; }
+    .control-panel h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #a5b4fc; margin-bottom: 12px; }
+    .control-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .control-row label { font-size: 12px; color: #9ca3af; }
+    .control-row input { background: #2d2d3f; border: 1px solid #404060; border-radius: 6px; padding: 8px 12px; color: #e5e7eb; font-size: 13px; font-family: inherit; width: 280px; }
+    .control-row input::placeholder { color: #6b7280; }
+    .ctrl-btn { padding: 8px 18px; border-radius: 6px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+    .ctrl-btn-send { background: #4f46e5; color: #fff; }
+    .ctrl-btn-send:hover { background: #4338ca; }
+    .ctrl-btn-continuous { background: #059669; color: #fff; }
+    .ctrl-btn-continuous:hover { background: #047857; }
+    .ctrl-btn-stop { background: #dc2626; color: #fff; }
+    .ctrl-btn-stop:hover { background: #b91c1c; }
+    .status { font-size: 13px; color: #a5b4fc; margin-left: 8px; min-width: 200px; }
+    .status.error { color: #f87171; }
+    .status.success { color: #34d399; }
+
+    /* Spacing for fixed panel */
+    .page-bottom-spacer { height: 120px; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">CloudFlow</div>
+    <nav class="nav">
+      <a href="#features" id="nav-features">Features</a>
+      <a href="#pricing" id="nav-pricing">Pricing</a>
+      <a href="#" id="nav-docs">Docs</a>
+      <a href="#" id="nav-blog">Blog</a>
+      <a href="#" id="nav-changelog">Changelog</a>
+    </nav>
+    <div class="header-actions">
+      <button class="btn btn-ghost" id="btn-login">Log in</button>
+      <button class="btn btn-primary" id="btn-signup">Start Free Trial</button>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <h1>Ship faster with the modern dev platform</h1>
+    <p>CloudFlow gives your team a unified workspace for building, deploying, and monitoring applications. From idea to production in minutes, not weeks.</p>
+    <div class="hero-buttons">
+      <button class="btn btn-primary" id="btn-hero-start" style="padding: 14px 32px; font-size: 16px;">Get Started Free</button>
+      <button class="btn btn-outline" id="btn-hero-demo" style="padding: 14px 32px; font-size: 16px;">Book a Demo</button>
+    </div>
+  </section>
+
+  <!-- Trusted By -->
+  <section class="trusted">
+    <p>Trusted by 2,000+ teams worldwide</p>
+    <div class="trusted-logos">
+      <span>Acme Corp</span>
+      <span>Globex</span>
+      <span>Initech</span>
+      <span>Hooli</span>
+      <span>Piedmont</span>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <h2>Everything your team needs</h2>
+    <p class="subtitle">Powerful tools that scale with you, from startup to enterprise.</p>
+    <div class="feature-grid">
+      <div class="feature-card" data-track="feature-deploy">
+        <div class="feature-icon icon-blue">&#9729;</div>
+        <h3>Instant Deploys</h3>
+        <p>Push to main and see your changes live in seconds. Zero-downtime deployments with automatic rollback.</p>
+        <a href="#" style="display:inline-block; margin-top:12px; color:#4f46e5; font-size:14px; font-weight:600;">Learn more &rarr;</a>
+      </div>
+      <div class="feature-card" data-track="feature-analytics">
+        <div class="feature-icon icon-green">&#9776;</div>
+        <h3>Real-time Analytics</h3>
+        <p>Understand user behavior with built-in analytics. Heatmaps, session replays, and funnel analysis.</p>
+        <a href="#" style="display:inline-block; margin-top:12px; color:#4f46e5; font-size:14px; font-weight:600;">Learn more &rarr;</a>
+      </div>
+      <div class="feature-card" data-track="feature-collab">
+        <div class="feature-icon icon-orange">&#9733;</div>
+        <h3>Team Collaboration</h3>
+        <p>Share previews, leave comments, and manage access. Keep everyone on the same page effortlessly.</p>
+        <a href="#" style="display:inline-block; margin-top:12px; color:#4f46e5; font-size:14px; font-weight:600;">Learn more &rarr;</a>
+      </div>
+      <div class="feature-card" data-track="feature-edge">
+        <div class="feature-icon icon-pink">&#9889;</div>
+        <h3>Edge Functions</h3>
+        <p>Run server-side logic at the edge, close to your users. Sub-10ms cold starts globally.</p>
+        <a href="#" style="display:inline-block; margin-top:12px; color:#4f46e5; font-size:14px; font-weight:600;">Learn more &rarr;</a>
+      </div>
+      <div class="feature-card" data-track="feature-db">
+        <div class="feature-icon icon-cyan">&#9907;</div>
+        <h3>Managed Database</h3>
+        <p>Postgres with automatic backups, branching, and connection pooling. Scale without ops headaches.</p>
+        <a href="#" style="display:inline-block; margin-top:12px; color:#4f46e5; font-size:14px; font-weight:600;">Learn more &rarr;</a>
+      </div>
+      <div class="feature-card" data-track="feature-security">
+        <div class="feature-icon icon-slate">&#9670;</div>
+        <h3>Enterprise Security</h3>
+        <p>SOC 2 compliant with SSO, audit logs, and fine-grained RBAC. Built for regulated industries.</p>
+        <a href="#" style="display:inline-block; margin-top:12px; color:#4f46e5; font-size:14px; font-weight:600;">Learn more &rarr;</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section class="pricing" id="pricing">
+    <h2>Simple, transparent pricing</h2>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <h3>Hobby</h3>
+        <div class="price">$0 <span>/mo</span></div>
+        <ul>
+          <li>1 team member</li>
+          <li>3 projects</li>
+          <li>100K pageviews/mo</li>
+          <li>Community support</li>
+        </ul>
+        <button class="btn btn-outline" id="btn-price-hobby" style="width:100%;">Get Started</button>
+      </div>
+      <div class="price-card popular">
+        <h3>Pro</h3>
+        <div class="price">$29 <span>/mo</span></div>
+        <ul>
+          <li>Up to 10 members</li>
+          <li>Unlimited projects</li>
+          <li>1M pageviews/mo</li>
+          <li>Priority support</li>
+          <li>Advanced analytics</li>
+        </ul>
+        <button class="btn btn-primary" id="btn-price-pro" style="width:100%;">Start Free Trial</button>
+      </div>
+      <div class="price-card">
+        <h3>Enterprise</h3>
+        <div class="price">Custom</div>
+        <ul>
+          <li>Unlimited members</li>
+          <li>Unlimited everything</li>
+          <li>SSO &amp; audit logs</li>
+          <li>Dedicated support</li>
+          <li>SLA guarantee</li>
+        </ul>
+        <button class="btn btn-outline" id="btn-price-enterprise" style="width:100%;">Contact Sales</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <h2>Ready to build something great?</h2>
+    <p>Join 2,000+ teams already shipping faster with CloudFlow.</p>
+    <button class="btn-white" id="btn-cta-start">Start your free trial</button>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo" style="color:#a5b4fc; margin-bottom:12px;">CloudFlow</div>
+        <p>The modern platform for building and shipping web applications. Focus on your product, not infrastructure.</p>
+      </div>
+      <div>
+        <h4>Product</h4>
+        <a href="#">Features</a>
+        <a href="#">Pricing</a>
+        <a href="#">Integrations</a>
+        <a href="#">Changelog</a>
+      </div>
+      <div>
+        <h4>Resources</h4>
+        <a href="#">Documentation</a>
+        <a href="#">Guides</a>
+        <a href="#">API Reference</a>
+        <a href="#">Status</a>
+      </div>
+      <div>
+        <h4>Company</h4>
+        <a href="#">About</a>
+        <a href="#">Blog</a>
+        <a href="#">Careers</a>
+        <a href="#">Contact</a>
+      </div>
+    </div>
+  </footer>
+  <div class="footer-bottom">&copy; 2026 CloudFlow, Inc. All rights reserved.</div>
+
+  <!-- Bottom spacer for control panel -->
+  <div class="page-bottom-spacer"></div>
+
+  <!-- Control Panel -->
+  <div class="control-panel">
+    <h4>Analytics Pipeline Test Panel</h4>
+    <div class="control-row">
+      <div>
+        <label>API Key</label><br/>
+        <input type="text" id="input-api-key" placeholder="ap_live_..." />
+      </div>
+      <div>
+        <label>Project ID</label><br/>
+        <input type="text" id="input-project-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+      </div>
+      <div>
+        <label>Events per batch</label><br/>
+        <input type="number" id="input-count" value="30" min="1" max="50" style="width:80px;" />
+      </div>
+      <div style="padding-top:18px; display:flex; gap:8px; align-items:center;">
+        <button class="ctrl-btn ctrl-btn-send" id="btn-send">Send Simulated Events</button>
+        <button class="ctrl-btn ctrl-btn-continuous" id="btn-continuous">Send Continuous</button>
+        <button class="ctrl-btn ctrl-btn-stop" id="btn-stop" style="display:none;">Stop</button>
+      </div>
+      <div style="padding-top:18px;">
+        <span class="status" id="status">Ready</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Helpers ────────────────────────────────────────────
+    const $ = (sel) => document.querySelector(sel);
+    const statusEl = $('#status');
+    let totalSent = 0;
+    let continuousTimer = null;
+
+    function setStatus(msg, type = '') {
+      statusEl.textContent = msg;
+      statusEl.className = 'status' + (type ? ' ' + type : '');
+    }
+
+    function getSelector(el) {
+      if (el.id) return '#' + el.id;
+      let sel = el.tagName.toLowerCase();
+      if (el.className && typeof el.className === 'string') {
+        const classes = el.className.trim().split(/\s+/).slice(0, 2).join('.');
+        if (classes) sel += '.' + classes;
+      }
+      return sel;
+    }
+
+    function randomUserAgent() {
+      const agents = [
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/119.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
+        'Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0',
+        'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/605.1.15',
+      ];
+      return agents[Math.floor(Math.random() * agents.length)];
+    }
+
+    function randomReferrer() {
+      const refs = ['', 'https://www.google.com/', 'https://twitter.com/', 'https://news.ycombinator.com/', 'https://github.com/', ''];
+      return refs[Math.floor(Math.random() * refs.length)];
+    }
+
+    // ── Event Simulation ──────────────────────────────────
+    async function simulateTraffic(projectId, apiKey, count = 30) {
+      const sessionId = crypto.randomUUID();
+      const elements = document.querySelectorAll('a, button, [data-track], .feature-card, .price-card, .nav a');
+      const uniqueElements = [...new Set(elements)];
+
+      if (uniqueElements.length === 0) {
+        throw new Error('No clickable elements found on the page');
+      }
+
+      const events = [];
+      const baseTime = Date.now();
+      const ua = randomUserAgent();
+      const referrer = randomReferrer();
+
+      // Session start
+      events.push({
+        type: 'session_start',
+        projectId,
+        sessionId,
+        timestamp: baseTime,
+        url: location.href,
+        screenWidth: window.innerWidth,
+        screenHeight: window.innerHeight,
+        deviceType: 'desktop',
+        userAgent: ua,
+        referrer,
+      });
+
+      // Pageview
+      events.push({
+        type: 'pageview',
+        projectId,
+        sessionId,
+        timestamp: baseTime + 50,
+        url: location.href,
+        title: document.title,
+        screenWidth: window.innerWidth,
+        screenHeight: window.innerHeight,
+        deviceType: 'desktop',
+        userAgent: ua,
+        referrer,
+      });
+
+      // Simulated clicks on real elements
+      const clickCount = Math.min(count, 48); // leave room for other events in batch of 50
+      for (let i = 0; i < clickCount; i++) {
+        const el = uniqueElements[Math.floor(Math.random() * uniqueElements.length)];
+        const rect = el.getBoundingClientRect();
+        const x = rect.left + Math.random() * rect.width + window.scrollX;
+        const y = rect.top + Math.random() * rect.height + window.scrollY;
+
+        events.push({
+          type: 'click',
+          projectId,
+          sessionId,
+          timestamp: baseTime + 1000 + i * (150 + Math.floor(Math.random() * 300)),
+          url: location.href,
+          x: Math.round(x),
+          y: Math.round(y),
+          selector: getSelector(el),
+          screenWidth: window.innerWidth,
+          screenHeight: window.innerHeight,
+          deviceType: 'desktop',
+          userAgent: ua,
+        });
+      }
+
+      // Ensure batch doesn't exceed 50 (API max)
+      const batch = events.slice(0, 50);
+
+      const res = await fetch('http://localhost:3000/api/collect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: JSON.stringify(batch),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(`HTTP ${res.status}: ${body.error || res.statusText}`);
+      }
+
+      const result = await res.json();
+      return { sent: batch.length, accepted: result.accepted };
+    }
+
+    // ── UI Handlers ───────────────────────────────────────
+    function getInputs() {
+      const apiKey = $('#input-api-key').value.trim();
+      const projectId = $('#input-project-id').value.trim();
+      const count = parseInt($('#input-count').value, 10) || 30;
+
+      if (!apiKey) { setStatus('Please enter an API key', 'error'); return null; }
+      if (!projectId) { setStatus('Please enter a Project ID', 'error'); return null; }
+      return { apiKey, projectId, count };
+    }
+
+    async function sendOnce() {
+      const inputs = getInputs();
+      if (!inputs) return;
+
+      setStatus('Sending...');
+      try {
+        const result = await simulateTraffic(inputs.projectId, inputs.apiKey, inputs.count);
+        totalSent += result.sent;
+        setStatus(`Sent ${result.sent} events (${result.accepted} accepted). Total: ${totalSent}`, 'success');
+      } catch (err) {
+        setStatus(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    function startContinuous() {
+      const inputs = getInputs();
+      if (!inputs) return;
+
+      $('#btn-continuous').style.display = 'none';
+      $('#btn-stop').style.display = 'inline-block';
+      setStatus('Continuous mode active...', 'success');
+
+      async function tick() {
+        try {
+          const result = await simulateTraffic(inputs.projectId, inputs.apiKey, inputs.count);
+          totalSent += result.sent;
+          setStatus(`Continuous: sent ${result.sent} events. Total: ${totalSent}`, 'success');
+        } catch (err) {
+          setStatus(`Error: ${err.message}`, 'error');
+        }
+      }
+
+      tick(); // send immediately
+      continuousTimer = setInterval(tick, 5000);
+    }
+
+    function stopContinuous() {
+      clearInterval(continuousTimer);
+      continuousTimer = null;
+      $('#btn-continuous').style.display = 'inline-block';
+      $('#btn-stop').style.display = 'none';
+      setStatus(`Stopped. Total events sent: ${totalSent}`, 'success');
+    }
+
+    $('#btn-send').addEventListener('click', sendOnce);
+    $('#btn-continuous').addEventListener('click', startContinuous);
+    $('#btn-stop').addEventListener('click', stopContinuous);
+  </script>
+</body>
+</html>
