@@ -43,7 +43,7 @@ export async function verifyToolbarToken(
     const parts = token.split('.');
     if (parts.length !== 2) return null;
 
-    const [payloadB64, sigB64] = parts;
+    const [payloadB64, sigB64] = parts as [string, string];
 
     const key = await getHmacKey();
     const sigBytes = Buffer.from(sigB64, 'base64url');
