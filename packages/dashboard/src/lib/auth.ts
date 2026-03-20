@@ -2,7 +2,7 @@ import NextAuth from 'next-auth';
 import GitHub from 'next-auth/providers/github';
 import Credentials from 'next-auth/providers/credentials';
 import PostgresAdapter from '@auth/pg-adapter';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { getDb } from './db';
 
 declare module 'next-auth' {
