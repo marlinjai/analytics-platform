@@ -33,7 +33,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/packages/dashboard/public ./packages/dashboard/public
+# public dir may not exist — create empty fallback
+RUN mkdir -p ./packages/dashboard/public
 COPY --from=builder --chown=nextjs:nodejs /app/packages/dashboard/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/packages/dashboard/.next/static ./packages/dashboard/.next/static
 
