@@ -8,8 +8,13 @@ export async function middleware(request: NextRequest) {
     secret: process.env.NEXTAUTH_SECRET,
   });
   if (!token) {
+    // Use x-forwarded-host or NEXTAUTH_URL for the callback, not the internal container URL
+    const proto = request.headers.get('x-forwarded-proto') || 'https';
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
+    const publicUrl = `${proto}://${host}${request.nextUrl.pathname}${request.nextUrl.search}`;
+
     const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('callbackUrl', request.url);
+    loginUrl.searchParams.set('callbackUrl', publicUrl);
     return NextResponse.redirect(loginUrl);
   }
   return NextResponse.next();
