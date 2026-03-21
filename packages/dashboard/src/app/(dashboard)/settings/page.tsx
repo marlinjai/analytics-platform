@@ -146,7 +146,14 @@ export default function SettingsPage() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-100">{project.name}</p>
                   <p className="text-xs text-gray-400">{project.domain}</p>
-                  <p className="text-xs text-gray-500 font-mono truncate">ID: {project.id}</p>
+                  <button
+                    onClick={() => copyToClipboard(project.id)}
+                    className="flex items-center gap-1 text-xs text-gray-500 font-mono truncate hover:text-gray-300 transition"
+                    title="Click to copy project ID"
+                  >
+                    ID: {project.id}
+                    <span className="text-[10px]">{copied ? '(copied!)' : '(copy)'}</span>
+                  </button>
                 </div>
                 <button
                   onClick={() => handleDeleteProject(project)}
