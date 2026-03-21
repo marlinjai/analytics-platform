@@ -109,7 +109,7 @@ export default function SettingsPage() {
       });
       if (!res.ok) throw new Error('Failed to create key');
       const data = await res.json();
-      setRevealedKey(data.key);
+      setRevealedKey(data.key.fullKey);
       setNewKeyLabel('');
       fetchKeys(selectedProjectId);
     } catch {
