@@ -143,9 +143,10 @@ export default function SettingsPage() {
           <ul className="divide-y divide-gray-800">
             {projects.map((project) => (
               <li key={project.id} className="flex items-center justify-between py-3">
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-100">{project.name}</p>
                   <p className="text-xs text-gray-400">{project.domain}</p>
+                  <p className="text-xs text-gray-500 font-mono truncate">ID: {project.id}</p>
                 </div>
                 <button
                   onClick={() => handleDeleteProject(project)}
