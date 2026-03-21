@@ -29,6 +29,7 @@ export default function SettingsPage() {
   const [newKeyEnvironment, setNewKeyEnvironment] = useState<'live' | 'test'>('live');
   const [creatingKey, setCreatingKey] = useState(false);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [showRevoked, setShowRevoked] = useState(false);
 
   // Fetch projects
   const fetchProjects = useCallback(async () => {
@@ -180,43 +181,53 @@ export default function SettingsPage() {
             {/* Key list */}
             {loadingKeys ? (
               <p className="text-sm text-gray-400">Loading keys...</p>
-            ) : keys.length === 0 ? (
-              <p className="mb-4 text-sm text-gray-400">No API keys for this project.</p>
+            ) : keys.filter((k) => !k.revoked_at).length === 0 && !showRevoked ? (
+              <p className="mb-4 text-sm text-gray-400">No active API keys for this project.</p>
             ) : (
               <ul className="mb-4 divide-y divide-gray-800">
-                {keys.map((key) => {
-                  const isRevoked = !!key.revoked_at;
-                  return (
-                    <li key={key.id} className="flex items-center justify-between py-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-100">
-                          {key.label}
-                          {isRevoked && (
-                            <span className="ml-2 rounded bg-red-400/10 px-1.5 py-0.5 text-xs text-red-400">
-                              Revoked
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {key.prefix}*** &middot; Created{' '}
-                          {new Date(key.created_at).toLocaleDateString()}
-                          {key.last_used_at && (
-                            <> &middot; Last used {new Date(key.last_used_at).toLocaleDateString()}</>
-                          )}
-                        </p>
-                      </div>
-                      {!isRevoked && (
-                        <button
-                          onClick={() => handleRevokeKey(key.id)}
-                          className="shrink-0 rounded px-3 py-1 text-sm font-medium text-red-400 hover:bg-red-400/10 transition"
-                        >
-                          Revoke
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
+                {keys
+                  .filter((k) => showRevoked || !k.revoked_at)
+                  .map((key) => {
+                    const isRevoked = !!key.revoked_at;
+                    return (
+                      <li key={key.id} className={`flex items-center justify-between py-3 ${isRevoked ? 'opacity-50' : ''}`}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-100">
+                            {key.label}
+                            {isRevoked && (
+                              <span className="ml-2 rounded bg-red-400/10 px-1.5 py-0.5 text-xs text-red-400">
+                                Revoked
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {key.prefix}*** &middot; Created{' '}
+                            {new Date(key.created_at).toLocaleDateString()}
+                            {key.last_used_at && (
+                              <> &middot; Last used {new Date(key.last_used_at).toLocaleDateString()}</>
+                            )}
+                          </p>
+                        </div>
+                        {!isRevoked && (
+                          <button
+                            onClick={() => handleRevokeKey(key.id)}
+                            className="shrink-0 rounded px-3 py-1 text-sm font-medium text-red-400 hover:bg-red-400/10 transition"
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
               </ul>
+            )}
+            {keys.some((k) => !!k.revoked_at) && (
+              <button
+                onClick={() => setShowRevoked((v) => !v)}
+                className="mb-4 text-xs text-gray-500 hover:text-gray-300 transition"
+              >
+                {showRevoked ? 'Hide revoked keys' : `Show revoked keys (${keys.filter((k) => !!k.revoked_at).length})`}
+              </button>
             )}
 
             {/* Revealed key warning */}
