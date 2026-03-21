@@ -12,11 +12,16 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     try {
-      await signIn('credentials', {
+      const res = await signIn('credentials', {
         email,
         password,
-        redirectTo: '/',
+        redirect: false,
       });
+      if (res?.error) {
+        setError('Invalid credentials');
+      } else {
+        window.location.href = '/';
+      }
     } catch {
       setError('Invalid credentials');
     }
