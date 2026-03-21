@@ -1,4 +1,4 @@
-import type { TrackerEvent } from '@analytics-platform/shared';
+import type { TrackerEvent } from './constants';
 
 type EventCallback = (event: Omit<TrackerEvent, 'projectId' | 'sessionId' | 'timestamp'>) => void;
 

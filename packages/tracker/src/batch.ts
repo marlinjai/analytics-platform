@@ -1,5 +1,5 @@
-import type { TrackerEvent } from '@analytics-platform/shared';
-import { FLUSH_INTERVAL_MS, MAX_BATCH_SIZE } from '@analytics-platform/shared';
+import type { TrackerEvent } from './constants';
+import { FLUSH_INTERVAL_MS, MAX_BATCH_SIZE } from './constants';
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;

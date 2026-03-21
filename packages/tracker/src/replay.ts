@@ -1,5 +1,5 @@
 import type { AnalyticsTracker } from './tracker.js';
-import { MAX_REPLAY_CHUNK_BYTES } from '@analytics-platform/shared';
+import { MAX_REPLAY_CHUNK_BYTES } from './constants';
 
 const CHUNK_FLUSH_INTERVAL = 10_000; // 10 seconds
 

@@ -1,4 +1,4 @@
-import type { TrackerEvent } from '@analytics-platform/shared';
+import type { TrackerEvent } from './constants';
 import type { TrackerConfig } from './index.js';
 import { getOrCreateSession, touchSession } from './session.js';
 import { EventBatcher } from './batch.js';

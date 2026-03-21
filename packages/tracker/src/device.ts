@@ -1,5 +1,5 @@
-import type { DeviceType } from '@analytics-platform/shared';
-import { DEVICE_BREAKPOINTS } from '@analytics-platform/shared';
+import type { DeviceType } from './constants';
+import { DEVICE_BREAKPOINTS } from './constants';
 
 export function getDeviceType(width: number): DeviceType {
   if (width < DEVICE_BREAKPOINTS.mobile) return 'mobile';

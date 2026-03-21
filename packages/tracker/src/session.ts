@@ -1,4 +1,4 @@
-import { SESSION_TIMEOUT_MS } from '@analytics-platform/shared';
+import { SESSION_TIMEOUT_MS } from './constants';
 
 const SESSION_KEY = 'ap_session_id';
 const LAST_ACTIVITY_KEY = 'ap_last_activity';

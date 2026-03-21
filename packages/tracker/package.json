@@ -16,9 +16,7 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@analytics-platform/shared": "workspace:*"
-  },
+  "dependencies": {},
   "peerDependencies": {
     "rrweb": "^2.0.0-alpha.0"
   },

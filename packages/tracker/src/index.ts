@@ -1,4 +1,4 @@
-import type { TrackerEvent } from '@analytics-platform/shared';
+import type { TrackerEvent } from './constants';
 import { AnalyticsTracker } from './tracker.js';
 
 export interface TrackerConfig {
