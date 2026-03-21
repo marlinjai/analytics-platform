@@ -18,7 +18,7 @@ export class AnalyticsTracker {
 
     this.batcher = new EventBatcher(
       config.endpoint,
-      config.projectId,
+      config.apiKey,
       config.flushInterval,
       config.debug
     );

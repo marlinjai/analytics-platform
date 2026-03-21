@@ -6,6 +6,8 @@ export interface TrackerConfig {
   projectId: string;
   /** Ingestion endpoint URL. */
   endpoint: string;
+  /** API key (ap_live_... or ap_test_...). */
+  apiKey: string;
   /** Enable session replay (requires rrweb peer dep). Default: false. */
   replay?: boolean;
   /** Enable click heatmap tracking. Default: true. */
