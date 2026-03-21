@@ -30,6 +30,13 @@ export default function SettingsPage() {
   const [creatingKey, setCreatingKey] = useState(false);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [showRevoked, setShowRevoked] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function copyToClipboard(text: string) {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   // Fetch projects
   const fetchProjects = useCallback(async () => {
@@ -230,15 +237,55 @@ export default function SettingsPage() {
               </button>
             )}
 
-            {/* Revealed key warning */}
+            {/* Revealed key + integration guide */}
             {revealedKey && (
-              <div className="mb-4 rounded-lg border border-yellow-600/50 bg-yellow-500/10 p-4">
-                <p className="mb-1 text-sm font-semibold text-yellow-300">
-                  Copy this key now — it won&apos;t be shown again
-                </p>
-                <code className="block break-all rounded bg-gray-800 px-3 py-2 text-sm text-gray-100">
-                  {revealedKey}
-                </code>
+              <div className="mb-4 space-y-4">
+                <div className="rounded-lg border border-yellow-600/50 bg-yellow-500/10 p-4">
+                  <p className="mb-2 text-sm font-semibold text-yellow-300">
+                    Copy this key now — it won&apos;t be shown again
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="block flex-1 break-all rounded bg-gray-800 px-3 py-2 text-sm text-gray-100">
+                      {revealedKey}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(revealedKey)}
+                      className="shrink-0 rounded-lg bg-gray-700 px-3 py-2 text-sm font-medium text-gray-100 hover:bg-gray-600 transition"
+                    >
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
+                  <p className="mb-2 text-sm font-semibold text-gray-200">Quick setup</p>
+                  <p className="mb-3 text-xs text-gray-400">
+                    Add this snippet to your website&apos;s {'<head>'} or before {'</body>'}:
+                  </p>
+                  <div className="relative">
+                    <pre className="overflow-x-auto rounded bg-gray-800 px-3 py-2 text-xs text-gray-300">
+{`<script type="module">
+  import { init } from 'https://analytics.lumitra.co/tracker.js';
+  init({
+    projectId: '${selectedProjectId}',
+    endpoint: 'https://analytics.lumitra.co/api/collect',
+  });
+</script>`}
+                    </pre>
+                    <button
+                      onClick={() => copyToClipboard(`<script type="module">
+  import { init } from 'https://analytics.lumitra.co/tracker.js';
+  init({
+    projectId: '${selectedProjectId}',
+    endpoint: 'https://analytics.lumitra.co/api/collect',
+  });
+</script>`)}
+                      className="absolute right-2 top-2 rounded bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600 transition"
+                    >
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
