@@ -10,10 +10,23 @@ export interface HeatmapSettings {
   overlayVisible: boolean;
 }
 
+export interface HeatmapVisualSettings {
+  radius: number;    // 20-120, default 40
+  opacity: number;   // 0.1-1.0, default 0.75
+  blur: number;      // 0.3-1.0, default 0.8
+}
+
 const STORAGE_KEYS = {
   AUTH: "lumitra_auth",
   SETTINGS: "lumitra_settings",
+  VISUAL: "lumitra_visual",
 } as const;
+
+const DEFAULT_VISUAL: HeatmapVisualSettings = {
+  radius: 40,
+  opacity: 0.75,
+  blur: 0.8,
+};
 
 export async function getAuth(): Promise<AuthState | null> {
   return new Promise((resolve) => {
@@ -66,6 +79,27 @@ export async function setSettings(
   return new Promise((resolve) => {
     chrome.storage.local.set(
       { [STORAGE_KEYS.SETTINGS]: { ...current, ...settings } },
+      resolve
+    );
+  });
+}
+
+export async function getVisualSettings(): Promise<HeatmapVisualSettings> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(STORAGE_KEYS.VISUAL, (result) => {
+      const visual = result[STORAGE_KEYS.VISUAL] as HeatmapVisualSettings | undefined;
+      resolve(visual ?? DEFAULT_VISUAL);
+    });
+  });
+}
+
+export async function setVisualSettings(
+  settings: Partial<HeatmapVisualSettings>
+): Promise<void> {
+  const current = await getVisualSettings();
+  return new Promise((resolve) => {
+    chrome.storage.local.set(
+      { [STORAGE_KEYS.VISUAL]: { ...current, ...settings } },
       resolve
     );
   });

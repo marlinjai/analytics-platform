@@ -21,6 +21,7 @@ export type BackgroundMessage =
   | { type: "CLEAR_HEATMAP" }
   | { type: "REFRESH_TOKEN" }
   | { type: "OVERLAY_CLOSED" }
+  | { type: "SAVE_VISUAL_SETTINGS"; settings: { radius: number; opacity: number; blur: number } }
   | {
       type: "LOAD_OVERLAY_DATA";
       mode: "clicks" | "scroll" | "rage";
@@ -34,6 +35,7 @@ export type BackgroundMessage =
       pageWidth: number;
       pageHeight: number;
       isCanvasOnly?: boolean;
+      visualSettings?: { radius: number; opacity: number; blur: number };
     };
 
 export type BackgroundResponse =
@@ -173,6 +175,11 @@ async function handleMessage(
       return await handleOverlayDataRequest(message);
     }
 
+    case "SAVE_VISUAL_SETTINGS": {
+      await chrome.storage.local.set({ lumitra_visual: message.settings });
+      return { ok: true };
+    }
+
     case "REFRESH_TOKEN": {
       await refreshTokenIfNeeded();
       return { ok: true };
@@ -197,6 +204,7 @@ async function handleOverlayDataRequest(msg: {
   pageWidth: number;
   pageHeight: number;
   isCanvasOnly?: boolean;
+  visualSettings?: { radius: number; opacity: number; blur: number };
 }): Promise<BackgroundResponse> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return { ok: false, error: "No active tab" };
@@ -208,7 +216,7 @@ async function handleOverlayDataRequest(msg: {
       }
       // Try element-based first, fall back to coordinates if API unavailable
       try {
-        return await handleElementsMode(tab.id, msg);
+        return await handleElementsMode(tab.id, msg, msg.visualSettings);
       } catch (elemErr) {
         console.warn("[Lumitra] Element mode unavailable, falling back to coordinates:", elemErr);
         await sendToTab(tab.id, {
@@ -251,7 +259,8 @@ async function handleElementsMode(
     token: string;
     dashboardOrigin: string;
     url: string;
-  }
+  },
+  visual?: { radius: number; opacity: number; blur: number }
 ): Promise<BackgroundResponse> {
   const params = new URLSearchParams({
     projectId: msg.projectId,
@@ -321,7 +330,7 @@ async function handleElementsMode(
     target: { tabId },
     world: "MAIN" as chrome.scripting.ExecutionWorld,
     func: renderElementHeatmapInMainWorld,
-    args: [selectors, maxCount, clickPoints],
+    args: [selectors, maxCount, clickPoints, visual || { radius: 40, opacity: 0.75, blur: 0.8 }],
   });
 
   // Inject element inspector
@@ -523,7 +532,8 @@ async function handleRageMode(
 function renderElementHeatmapInMainWorld(
   selectors: Array<{ selector: string; count: number; sessions: number }>,
   maxCount: number,
-  clickPoints: Array<{ selector: string; ox: number; oy: number; ew: number; eh: number }>
+  clickPoints: Array<{ selector: string; ox: number; oy: number; ew: number; eh: number }>,
+  visual: { radius: number; opacity: number; blur: number }
 ): void {
   // Clean up previous
   const existingContainer = document.getElementById("lumitra-heatmap-container");
@@ -668,10 +678,10 @@ function renderElementHeatmapInMainWorld(
 
   const instance = h.create({
     container,
-    radius: 40,
-    maxOpacity: 0.75,
+    radius: visual.radius,
+    maxOpacity: visual.opacity,
     minOpacity: 0.05,
-    blur: 0.8,
+    blur: visual.blur,
   });
 
   // For precise mode, overlapping points at similar positions auto-intensify

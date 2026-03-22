@@ -9,6 +9,7 @@ import { DateRangePicker } from '@/components/layout/DateRangePicker';
 import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
 import { ScrollDepthChart } from '@/components/charts/ScrollDepthChart';
 import { RageClicksTable } from '@/components/charts/RageClicksTable';
+import { EngagementZonesTable } from '@/components/charts/EngagementZonesTable';
 import type { ScrollDepthRow, RageClickRow } from '@/lib/queries/advanced';
 
 export default function HeatmapPage() {
@@ -177,6 +178,24 @@ function HeatmapPageInner() {
             </div>
             <RageClicksTable data={rageClicks} loading={loadingRageClicks} />
           </div>
+
+          {/* Engagement Zones */}
+          {selectedUrl && (
+            <div className="rounded-xl border border-gray-800 bg-gray-900 p-6">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-white">Engagement Zones</h2>
+                <p className="mt-1 text-sm text-gray-400">
+                  Most-clicked elements on the selected page, ranked by total clicks.
+                </p>
+              </div>
+              <EngagementZonesTable
+                projectId={projectId}
+                url={selectedUrl}
+                dateRange={{ from, to }}
+                deviceType={deviceType}
+              />
+            </div>
+          )}
         </>
       )}
     </div>

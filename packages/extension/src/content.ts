@@ -52,6 +52,7 @@ let currentMode: OverlayMode = "off";
 let currentConfig: ShowOverlayMessage | null = null;
 let currentUrl = location.href;
 let minimized = false;
+let visualSettings = { radius: 40, opacity: 0.75, blur: 0.8 };
 
 // ─── Message listener ─────────────────────────────────────────────────────────
 
@@ -264,6 +265,63 @@ function renderWidget(config: ShowOverlayMessage): void {
 
     .dash-link:hover { text-decoration: underline; }
 
+    .controls-toggle {
+      background: none;
+      border: none;
+      color: #6b7280;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 4px 0;
+      width: 100%;
+      text-align: left;
+    }
+    .controls-toggle:hover { color: #d1d5db; }
+
+    .controls-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .slider-row label {
+      width: 52px;
+      flex-shrink: 0;
+    }
+
+    .slider-row input[type="range"] {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
+      outline: none;
+    }
+
+    .slider-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #6366f1;
+      cursor: pointer;
+    }
+
+    .slider-row .slider-value {
+      width: 28px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
     .mini-logo {
       width: 24px;
       height: 24px;
@@ -384,6 +442,71 @@ function renderWidget(config: ShowOverlayMessage): void {
   infoRow.appendChild(dashLink);
   widget.appendChild(infoRow);
 
+  // Visual controls (collapsible, only for clicks mode)
+  if (currentMode === "clicks") {
+    const toggle = document.createElement("button");
+    toggle.className = "controls-toggle";
+    toggle.textContent = "▸ Heatmap settings";
+    let controlsOpen = false;
+
+    const panel = document.createElement("div");
+    panel.className = "controls-panel";
+    panel.style.display = "none";
+
+    toggle.addEventListener("click", () => {
+      controlsOpen = !controlsOpen;
+      panel.style.display = controlsOpen ? "flex" : "none";
+      toggle.textContent = controlsOpen ? "▾ Heatmap settings" : "▸ Heatmap settings";
+    });
+
+    const sliders: { label: string; key: keyof typeof visualSettings; min: number; max: number; step: number }[] = [
+      { label: "Radius", key: "radius", min: 15, max: 120, step: 5 },
+      { label: "Opacity", key: "opacity", min: 0.1, max: 1.0, step: 0.05 },
+      { label: "Blur", key: "blur", min: 0.3, max: 1.0, step: 0.05 },
+    ];
+
+    sliders.forEach(({ label, key, min, max, step }) => {
+      const row = document.createElement("div");
+      row.className = "slider-row";
+
+      const lbl = document.createElement("label");
+      lbl.textContent = label;
+
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(min);
+      input.max = String(max);
+      input.step = String(step);
+      input.value = String(visualSettings[key]);
+
+      const valSpan = document.createElement("span");
+      valSpan.className = "slider-value";
+      valSpan.textContent = String(visualSettings[key]);
+
+      input.addEventListener("change", () => {
+        const val = parseFloat(input.value);
+        visualSettings[key] = val;
+        valSpan.textContent = key === "radius" ? String(val) : val.toFixed(2);
+        // Save to storage and re-render
+        chrome.runtime.sendMessage({ type: "SAVE_VISUAL_SETTINGS", settings: visualSettings });
+        activateMode("clicks");
+      });
+
+      input.addEventListener("input", () => {
+        const val = parseFloat(input.value);
+        valSpan.textContent = key === "radius" ? String(val) : val.toFixed(2);
+      });
+
+      row.appendChild(lbl);
+      row.appendChild(input);
+      row.appendChild(valSpan);
+      panel.appendChild(row);
+    });
+
+    widget.appendChild(toggle);
+    widget.appendChild(panel);
+  }
+
   // Status
   const status = document.createElement("div");
   status.className = "status";
@@ -448,6 +571,7 @@ function activateMode(mode: OverlayMode): void {
     pageWidth: Math.max(document.body.scrollWidth, document.documentElement.scrollWidth),
     pageHeight: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight),
     isCanvasOnly,
+    visualSettings,
   });
 }
 
