@@ -86,6 +86,18 @@
 - [ ] ClickHouse cluster / multi-region deployment
 - [ ] Alerting (anomaly detection, threshold alerts)
 
+## Phase 8: Browser Extension (planned)
+- [ ] Chrome extension MVP — heatmap overlay on any page (WXT + React + Shadow DOM)
+- [ ] Extension auth flow (toolbar token stored in chrome.storage.local)
+- [ ] Extension popup (project picker, date range, device toggle)
+- [ ] Content script with bundled heatmap.js (no CDN, CSP-safe)
+- [ ] SPA navigation handling (persist overlay across client-side routing)
+- [ ] Side panel for full analytics view alongside any page
+- [ ] Scroll depth + rage click overlays in extension
+- [ ] Chrome Web Store + Firefox Add-ons publishing
+- [ ] Cross-browser support (Chrome, Firefox, Edge via webextension-polyfill)
+See: docs/superpowers/plans/2026-03-22-browser-extension.md
+
 ## v2 (Deferred from MVP)
 - [ ] A/B testing & experimentation
 - [ ] Mouse move heatmap — cursor tracking with throttled sampling
@@ -93,6 +105,5 @@
 - [ ] Multi-tenant SaaS mode with billing
 - [ ] Error tracking
 - [ ] Custom dashboards / saved reports
-- [ ] Browser extension for heatmap overlay (replaces bookmarklet)
 - [ ] AI-powered insights + anomaly detection
 - [ ] Team collaboration (invitations, roles, shared dashboards)
