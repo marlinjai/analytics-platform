@@ -5,6 +5,17 @@ import { auth } from '@/lib/auth';
 import { checkProjectMembership } from '@/lib/auth-check';
 import { verifyToolbarToken } from '@/lib/toolbar-token';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Max-Age': '86400',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 export async function GET(request: NextRequest) {
   const params = Object.fromEntries(request.nextUrl.searchParams);
 

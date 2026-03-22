@@ -66,19 +66,27 @@
 - [x] API key rotation workflow
 - [x] Onboarding flow (step-by-step first project + tracker setup)
 
-## Phase 6: Analytics Depth (in progress)
+## Phase 6: Analytics Depth (complete)
 - [x] Web analytics: UTM tracking, referrer parsing
 - [x] Geographic data (GeoIP via ip-api.com with in-memory cache; country breakdown table + flag emojis)
 - [x] Device/browser/OS breakdowns (parse user agent server-side)
 - [x] Traffic sources table (referrers grouped by domain)
-- [ ] Funnel analysis — define step sequences, measure conversion
-- [ ] Scroll depth heatmap — gradient overlay showing drop-off
-- [ ] Rage click detection — highlight frustration points
+- [x] Funnel analysis — funnels page with step builder and drop-off visualization
+- [x] Scroll depth heatmap — quartile bars per page on heatmap page
+- [x] Rage click detection — table on heatmap page (3+ clicks in 2s)
 - [ ] Engagement zones — element-level click aggregation
 - [x] Data export (CSV and JSON via /api/stats/export; export button in dashboard header)
-- [ ] Custom date ranges with calendar picker
+- [x] Custom date ranges with calendar picker (two-click range selection)
 - [x] Dashboard filters (browser, OS, country, page, source, device) — URL-encoded for shareable views
 - [x] Click-to-filter (click any table row to filter entire dashboard)
+
+### Q2 Features (complete)
+- [x] Mobile navigation (hamburger + slide-out drawer)
+- [x] Area chart with gradient fill, smooth curves, custom tooltip
+- [x] Remote SDK configuration (project_settings table + toggle UI in Settings)
+- [x] Skeleton loading states across all pages
+- [x] 3-step onboarding flow (create project → install tracker → verify events)
+- [x] API key rotation workflow
 
 ## Phase 7: Real-time & Scale
 - [ ] Real-time dashboard (WebSocket / SSE live counters)
