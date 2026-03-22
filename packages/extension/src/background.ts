@@ -515,20 +515,43 @@ function renderElementHeatmapInMainWorld(
 
   if (selectors.length === 0) return;
 
-  // Map selectors → element center positions → h337 data points
-  const points: Array<{ x: number; y: number; value: number }> = [];
+  // Map selectors → element positions → h337 data points
+  // Spread multiple points across larger elements for better coverage
+  const points: Array<{ x: number; y: number; value: number; radius?: number }> = [];
+  let maxRadius = 0;
 
   selectors.forEach(({ selector, count, sessions }) => {
     try {
       const elements = document.querySelectorAll(selector);
       elements.forEach((el) => {
         const rect = el.getBoundingClientRect();
-        // Skip elements that are hidden or zero-size
         if (rect.width === 0 && rect.height === 0) return;
-        // Convert to page coordinates (not viewport)
-        const centerX = Math.round(rect.left + window.scrollX + rect.width / 2);
-        const centerY = Math.round(rect.top + window.scrollY + rect.height / 2);
-        points.push({ x: centerX, y: centerY, value: count });
+
+        const scrollX = window.scrollX;
+        const scrollY = window.scrollY;
+        const baseX = rect.left + scrollX;
+        const baseY = rect.top + scrollY;
+        const centerX = Math.round(baseX + rect.width / 2);
+        const centerY = Math.round(baseY + rect.height / 2);
+
+        // Radius proportional to element size (covers the element area)
+        const elRadius = Math.max(Math.round(Math.max(rect.width, rect.height) / 2), 30);
+        if (elRadius > maxRadius) maxRadius = elRadius;
+
+        // Place center point
+        points.push({ x: centerX, y: centerY, value: count, radius: elRadius });
+
+        // For larger elements, add corner points to spread the heat
+        if (rect.width > 80 || rect.height > 80) {
+          const inset = Math.min(rect.width, rect.height) * 0.25;
+          const cornerValue = Math.max(Math.round(count * 0.4), 1);
+          points.push(
+            { x: Math.round(baseX + inset), y: Math.round(baseY + inset), value: cornerValue, radius: elRadius },
+            { x: Math.round(baseX + rect.width - inset), y: Math.round(baseY + inset), value: cornerValue, radius: elRadius },
+            { x: Math.round(baseX + inset), y: Math.round(baseY + rect.height - inset), value: cornerValue, radius: elRadius },
+            { x: Math.round(baseX + rect.width - inset), y: Math.round(baseY + rect.height - inset), value: cornerValue, radius: elRadius },
+          );
+        }
 
         // Tag element for inspector tooltip
         const htmlEl = el as HTMLElement;
@@ -578,15 +601,17 @@ function renderElementHeatmapInMainWorld(
       maxOpacity?: number;
       minOpacity?: number;
       blur?: number;
-    }): { setData(d: { max: number; data: typeof points }): void };
+    }): { setData(d: { max: number; data: Array<{ x: number; y: number; value: number; radius?: number }> }): void };
   } }).h337;
+
+  const radius = Math.max(maxRadius, 50);
 
   const instance = h.create({
     container,
-    radius: 40,
-    maxOpacity: 0.6,
-    minOpacity: 0,
-    blur: 0.85,
+    radius,
+    maxOpacity: 0.75,
+    minOpacity: 0.05,
+    blur: 0.8,
   });
 
   instance.setData({ max: maxCount, data: points });
