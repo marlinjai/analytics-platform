@@ -7,11 +7,25 @@ export async function getStatsOverview(
 ): Promise<StatsOverview> {
   const ch = getClickHouse();
 
-  const result = await ch.query({
+  // Event-level metrics
+  const eventResult = await ch.query({
     query: `
       SELECT
         countIf(type = 'pageview') AS pageviews,
-        uniqExactIf(ip_hash, type = 'pageview') AS visitors,
+        uniqExactIf(ip_hash, type = 'pageview') AS visitors
+      FROM analytics.events
+      WHERE project_id = {projectId: UUID}
+        AND timestamp >= {from: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}
+    `,
+    query_params: { projectId, ...chDateParams(dateRange) },
+    format: 'JSONEachRow',
+  });
+
+  // Session-level metrics
+  const sessionResult = await ch.query({
+    query: `
+      SELECT
         uniqExact(session_id) AS sessions,
         avg(session_duration) AS avg_session_duration,
         countIf(session_pageviews = 1) / greatest(count(), 1) AS bounce_rate
@@ -27,21 +41,20 @@ export async function getStatsOverview(
         GROUP BY session_id
       )
     `,
-    query_params: {
-      projectId,
-      ...chDateParams(dateRange),
-    },
+    query_params: { projectId, ...chDateParams(dateRange) },
     format: 'JSONEachRow',
   });
 
-  const rows = await result.json<StatsOverview>();
-  const row = rows[0];
+  const eventRows = await eventResult.json<Record<string, unknown>>();
+  const sessionRows = await sessionResult.json<Record<string, unknown>>();
+  const e = eventRows[0] ?? {};
+  const s = sessionRows[0] ?? {};
   return {
-    pageviews: Number(row?.pageviews ?? 0),
-    visitors: Number(row?.visitors ?? 0),
-    sessions: Number(row?.sessions ?? 0),
-    avgSessionDuration: Number(row?.avgSessionDuration ?? 0),
-    bounceRate: Number(row?.bounceRate ?? 0),
+    pageviews: Number(e.pageviews ?? 0),
+    visitors: Number(e.visitors ?? 0),
+    sessions: Number(s.sessions ?? 0),
+    avgSessionDuration: Number(s.avg_session_duration ?? 0),
+    bounceRate: Number(s.bounce_rate ?? 0),
   };
 }
 

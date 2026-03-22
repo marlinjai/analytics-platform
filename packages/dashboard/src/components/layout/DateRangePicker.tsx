@@ -1,9 +1,12 @@
 'use client';
 
 const presets = [
-  { label: '7d', days: 7 },
-  { label: '30d', days: 30 },
-  { label: '90d', days: 90 },
+  { label: '12h', hours: 12 },
+  { label: '24h', hours: 24 },
+  { label: '3d', hours: 72 },
+  { label: '7d', hours: 168 },
+  { label: '30d', hours: 720 },
+  { label: '90d', hours: 2160 },
 ];
 
 interface Props {
@@ -16,9 +19,9 @@ export function DateRangePicker({ from, to, onChange }: Props) {
   return (
     <div className="flex items-center gap-2">
       {presets.map((preset) => {
-        const presetFrom = new Date(Date.now() - preset.days * 86400000).toISOString();
+        const presetFrom = new Date(Date.now() - preset.hours * 3600000).toISOString();
         const presetTo = new Date().toISOString();
-        const active = Math.abs(new Date(from).getTime() - new Date(presetFrom).getTime()) < 86400000;
+        const active = Math.abs(new Date(from).getTime() - new Date(presetFrom).getTime()) < preset.hours * 3600000 * 0.1;
 
         return (
           <button

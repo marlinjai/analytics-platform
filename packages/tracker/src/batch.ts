@@ -61,6 +61,7 @@ export class EventBatcher {
           },
           body,
           keepalive: true,
+          credentials: 'omit',
         });
 
         if (res.ok) {
