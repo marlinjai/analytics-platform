@@ -241,9 +241,11 @@ async function handleClicksMode(
     url: msg.url,
     from: msg.from,
     to: msg.to,
-    deviceType: msg.deviceType,
     token: msg.token,
   });
+  if (msg.deviceType && msg.deviceType !== "all") {
+    params.set("deviceType", msg.deviceType);
+  }
 
   const res = await fetch(`${msg.dashboardOrigin}/api/heatmap?${params}`);
   if (!res.ok) throw new Error(`Heatmap API error: ${res.status}`);

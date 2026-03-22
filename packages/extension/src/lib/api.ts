@@ -117,7 +117,7 @@ export function dateRangeDates(range: "7d" | "30d" | "90d"): {
   const to = new Date();
   const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
   return {
-    from: from.toISOString().split("T")[0],
-    to: to.toISOString().split("T")[0],
+    from: from.toISOString(),
+    to: to.toISOString(),
   };
 }
