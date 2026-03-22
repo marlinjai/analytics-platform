@@ -89,17 +89,17 @@
 - [x] API key rotation workflow
 
 ## Phase 7: Real-time & Scale
-- [ ] Real-time dashboard (WebSocket / SSE live counters)
+- [x] Real-time dashboard (WebSocket not needed — polling works; live visitor counter + auto-refresh toggle)
 - [ ] Edge ingestion (Cloudflare Workers) for lower latency
 - [ ] ClickHouse cluster / multi-region deployment
 - [ ] Alerting (anomaly detection, threshold alerts)
 
-## Phase 8: Browser Extension (planned)
-- [ ] Chrome extension MVP — heatmap overlay on any page (WXT + React + Shadow DOM)
-- [ ] Extension auth flow (toolbar token stored in chrome.storage.local)
-- [ ] Extension popup (project picker, date range, device toggle)
-- [ ] Content script with bundled heatmap.js (no CDN, CSP-safe)
-- [ ] SPA navigation handling (persist overlay across client-side routing)
+## Phase 8: Browser Extension (in progress)
+- [x] Chrome extension MVP — heatmap overlay on any page (WXT + React + Shadow DOM)
+- [x] Extension auth flow (toolbar token stored in chrome.storage.local)
+- [x] Extension popup (project picker, date range, device toggle)
+- [x] Content script with bundled heatmap.js (no CDN, CSP-safe)
+- [x] SPA navigation handling (persist overlay across client-side routing)
 - [ ] Side panel for full analytics view alongside any page
 - [ ] Scroll depth + rage click overlays in extension
 - [ ] Chrome Web Store + Firefox Add-ons publishing

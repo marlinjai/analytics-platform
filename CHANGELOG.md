@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-03-22
+## [0.5.0] - 2026-03-22
 
 ### Added
 - **GeoIP integration** — enrichment pipeline calls ip-api.com with in-memory 24-hour cache; country stored on every event
@@ -21,6 +21,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - All `/api/stats/*` routes accept optional `page`, `country`, `browser`, `os`, `device`, `source` query params (backward compatible)
 - All stats query functions in `lib/queries/stats.ts` accept an optional `DashboardFilters` argument
 - Overview page grid now includes Countries table alongside Sources, Browsers, OS, and Devices
+
+## [0.4.0] - 2026-03-22
+
+### Added
+- Browser extension MVP (Chrome MV3) — heatmap overlay on any page regardless of CSP
+- Real-time visitor counter with green pulsing dot (15s polling)
+- Auto-refresh toggle for dashboard (30s interval)
+- SWR migration for data fetching (replaces raw fetch/useState)
+- Team collaboration: invite members, manage roles, accept invitation flow
+- Health check endpoint (GET /api/health — Postgres + ClickHouse status)
+- CORS OPTIONS preflight handler on /api/heatmap
+- Accept-invite page for team invitations
+
+### Changed
+- Phase 6 marked complete in roadmap (funnels, scroll depth, rage clicks, calendar, filters)
+- Q2 features marked complete (mobile nav, area chart, remote SDK config, skeleton UI, onboarding)
 
 ## [0.3.0] - 2026-03-22
 

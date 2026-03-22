@@ -114,6 +114,36 @@ init({
 
 The tracker uses IP hashing for anonymous session identification. No cookies are set and no persistent identifiers are stored in the browser — no consent banner is required under GDPR or ePrivacy regulations.
 
+## Browser Extension
+
+The analytics platform includes a Chrome extension that lets you view heatmap overlays directly on any tracked page, bypassing Content Security Policy restrictions that would otherwise block iframe or script injection.
+
+### What it does
+
+The extension injects a Shadow DOM overlay onto the page you are viewing, fetches heatmap click data from your dashboard, and renders it using a bundled copy of heatmap.js — no CDN requests, no CSP conflicts. A popup lets you pick the project, date range, and device type without leaving the page.
+
+### Loading the extension in Chrome (developer mode)
+
+1. Build the extension:
+
+   ```bash
+   pnpm --filter @analytics-platform/extension build
+   ```
+
+2. Open Chrome and navigate to `chrome://extensions`.
+3. Enable **Developer mode** using the toggle in the top-right corner.
+4. Click **Load unpacked** and select the `packages/extension/dist/` directory.
+5. The Lumitra Analytics extension icon will appear in your toolbar.
+
+### Connecting it to your dashboard
+
+1. Click the extension icon to open the popup.
+2. Enter your dashboard URL (e.g. `https://analytics.lumitra.co`) and sign in when prompted — the extension stores a toolbar token in `chrome.storage.local`.
+3. Select your project, date range, and device type from the popup.
+4. Navigate to any page that has the tracker installed and click **Show heatmap** to activate the overlay.
+
+The overlay persists across client-side navigation in SPAs and can be toggled on or off at any time from the popup.
+
 ## Environment Variables
 
 | Variable | Description | Default |
