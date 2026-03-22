@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Lumitra Analytics",
+  "version": "0.1.0",
+  "description": "Heatmap overlay for Lumitra Analytics",
+  "permissions": ["activeTab", "storage", "alarms"],
+  "host_permissions": ["https://analytics.lumitra.co/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["heatmap.min.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

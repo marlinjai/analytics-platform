@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import useSWR from 'swr';
 import type {
   StatsOverview,
   TimeseriesPoint,
@@ -11,6 +12,7 @@ import type {
   CountryRow,
   DashboardFilters,
 } from '@analytics-platform/shared';
+import { fetcher } from '@/lib/fetcher';
 import { StatsCards } from '@/components/charts/StatsCards';
 import { TimeseriesChart } from '@/components/charts/TimeseriesChart';
 import { TopPagesTable } from '@/components/charts/TopPagesTable';
@@ -118,6 +120,42 @@ function ExportMenu({ onExport, disabled }: ExportMenuProps) {
   );
 }
 
+// ── Auto-refresh toggle ───────────────────────────────────────
+
+interface AutoRefreshToggleProps {
+  enabled: boolean;
+  onToggle: () => void;
+}
+
+function AutoRefreshToggle({ enabled, onToggle }: AutoRefreshToggleProps) {
+  return (
+    <button
+      onClick={onToggle}
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+        enabled
+          ? 'border-green-700 bg-green-900/40 text-green-400 hover:bg-green-900/60'
+          : 'border-gray-700 bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+      }`}
+      title={enabled ? 'Auto-refresh on (every 30s) — click to disable' : 'Enable auto-refresh'}
+    >
+      <svg
+        className={`h-3 w-3 ${enabled ? 'animate-spin [animation-duration:3s]' : ''}`}
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2.5}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+        />
+      </svg>
+      {enabled ? 'Auto-refresh on' : 'Auto-refresh'}
+    </button>
+  );
+}
+
 // ── Inner component (uses useSearchParams — must live inside <Suspense>) ──────
 
 function OverviewPageInner() {
@@ -150,15 +188,7 @@ function OverviewPageInner() {
     return out;
   });
 
-  const [stats, setStats] = useState<StatsOverview | null>(null);
-  const [timeseries, setTimeseries] = useState<TimeseriesPoint[]>([]);
-  const [pages, setPages] = useState<TopPage[]>([]);
-  const [sources, setSources] = useState<TopSource[]>([]);
-  const [browsers, setBrowsers] = useState<BreakdownRow[]>([]);
-  const [os, setOs] = useState<BreakdownRow[]>([]);
-  const [devices, setDevices] = useState<BreakdownRow[]>([]);
-  const [countries, setCountries] = useState<CountryRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   // Sync filters → URL search params (skip first mount to avoid double-push)
@@ -181,63 +211,83 @@ function OverviewPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  const fetchData = useCallback(async () => {
-    if (!projectId) return;
-    setLoading(true);
+  // ── SWR keys (null when projectId not yet known → hooks skip) ────────────
 
-    const base = `projectId=${projectId}&from=${from}&to=${to}`;
+  const base = projectId ? `projectId=${projectId}&from=${from}&to=${to}` : null;
 
-    try {
-      const [statsRes, pagesRes, sourcesRes, browsersRes, osRes, devicesRes, countriesRes] =
-        await Promise.all([
-          fetch(appendFilters(`/api/stats?${base}`, filters)),
-          fetch(appendFilters(`/api/stats/pages?${base}`, filters)),
-          fetch(appendFilters(`/api/stats/sources?${base}`, filters)),
-          fetch(appendFilters(`/api/stats/browsers?${base}`, filters)),
-          fetch(appendFilters(`/api/stats/os?${base}`, filters)),
-          fetch(appendFilters(`/api/stats/devices?${base}`, filters)),
-          fetch(appendFilters(`/api/stats/countries?${base}`, filters)),
-        ]);
+  const statsKey = base ? appendFilters(`/api/stats?${base}`, filters) : null;
+  const pagesKey = base ? appendFilters(`/api/stats/pages?${base}`, filters) : null;
+  const sourcesKey = base ? appendFilters(`/api/stats/sources?${base}`, filters) : null;
+  const browsersKey = base ? appendFilters(`/api/stats/browsers?${base}`, filters) : null;
+  const osKey = base ? appendFilters(`/api/stats/os?${base}`, filters) : null;
+  const devicesKey = base ? appendFilters(`/api/stats/devices?${base}`, filters) : null;
+  const countriesKey = base ? appendFilters(`/api/stats/countries?${base}`, filters) : null;
+  const realtimeKey = projectId ? `/api/stats/realtime?projectId=${projectId}` : null;
 
-      if (statsRes.ok) {
-        const data = await statsRes.json();
-        setStats(data.overview);
-        setTimeseries(data.timeseries);
-      }
-      if (pagesRes.ok) {
-        const data = await pagesRes.json();
-        setPages(data.pages);
-      }
-      if (sourcesRes.ok) {
-        const data = await sourcesRes.json();
-        setSources(data.sources);
-      }
-      if (browsersRes.ok) {
-        const data = await browsersRes.json();
-        setBrowsers(data.browsers);
-      }
-      if (osRes.ok) {
-        const data = await osRes.json();
-        setOs(data.os);
-      }
-      if (devicesRes.ok) {
-        const data = await devicesRes.json();
-        setDevices(data.devices);
-      }
-      if (countriesRes.ok) {
-        const data = await countriesRes.json();
-        setCountries(data.countries);
-      }
-    } catch {
-      // Network error
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, from, to, filters]);
+  const swrOptions = { refreshInterval: autoRefresh ? 30_000 : 0 };
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const { data: statsData, isLoading: statsLoading } = useSWR<{
+    overview: StatsOverview;
+    timeseries: TimeseriesPoint[];
+  }>(statsKey, fetcher, swrOptions);
+
+  const { data: pagesData, isLoading: pagesLoading } = useSWR<{ pages: TopPage[] }>(
+    pagesKey,
+    fetcher,
+    swrOptions,
+  );
+  const { data: sourcesData, isLoading: sourcesLoading } = useSWR<{ sources: TopSource[] }>(
+    sourcesKey,
+    fetcher,
+    swrOptions,
+  );
+  const { data: browsersData, isLoading: browsersLoading } = useSWR<{ browsers: BreakdownRow[] }>(
+    browsersKey,
+    fetcher,
+    swrOptions,
+  );
+  const { data: osData, isLoading: osLoading } = useSWR<{ os: BreakdownRow[] }>(
+    osKey,
+    fetcher,
+    swrOptions,
+  );
+  const { data: devicesData, isLoading: devicesLoading } = useSWR<{ devices: BreakdownRow[] }>(
+    devicesKey,
+    fetcher,
+    swrOptions,
+  );
+  const { data: countriesData, isLoading: countriesLoading } = useSWR<{ countries: CountryRow[] }>(
+    countriesKey,
+    fetcher,
+    swrOptions,
+  );
+
+  // Realtime visitors — polls every 15 s independently of the auto-refresh toggle
+  const { data: realtimeData } = useSWR<{ currentVisitors: number }>(
+    realtimeKey,
+    fetcher,
+    { refreshInterval: 15_000 },
+  );
+
+  // Derived values
+  const loading =
+    statsLoading ||
+    pagesLoading ||
+    sourcesLoading ||
+    browsersLoading ||
+    osLoading ||
+    devicesLoading ||
+    countriesLoading;
+
+  const stats = statsData?.overview ?? null;
+  const timeseries = statsData?.timeseries ?? [];
+  const pages = pagesData?.pages ?? [];
+  const sources = sourcesData?.sources ?? [];
+  const browsers = browsersData?.browsers ?? [];
+  const os = osData?.os ?? [];
+  const devices = devicesData?.devices ?? [];
+  const countries = countriesData?.countries ?? [];
+  const currentVisitors = realtimeData?.currentVisitors ?? null;
 
   // ── Filter helpers ────────────────────────────────────────────
 
@@ -259,29 +309,32 @@ function OverviewPageInner() {
 
   // ── Export ────────────────────────────────────────────────────
 
-  async function handleExport(format: 'csv' | 'json') {
-    if (!projectId || exporting) return;
-    setExporting(true);
-    try {
-      const base = `projectId=${projectId}&from=${from}&to=${to}&format=${format}`;
-      const url = appendFilters(`/api/stats/export?${base}`, filters);
-      const res = await fetch(url);
-      if (!res.ok) return;
+  const handleExport = useCallback(
+    async (format: 'csv' | 'json') => {
+      if (!projectId || exporting) return;
+      setExporting(true);
+      try {
+        const exportBase = `projectId=${projectId}&from=${from}&to=${to}&format=${format}`;
+        const url = appendFilters(`/api/stats/export?${exportBase}`, filters);
+        const res = await fetch(url);
+        if (!res.ok) return;
 
-      const blob = await res.blob();
-      const disposition = res.headers.get('Content-Disposition') ?? '';
-      const filenameMatch = disposition.match(/filename="([^"]+)"/);
-      const filename = filenameMatch?.[1] ?? `analytics-export.${format}`;
+        const blob = await res.blob();
+        const disposition = res.headers.get('Content-Disposition') ?? '';
+        const filenameMatch = disposition.match(/filename="([^"]+)"/);
+        const filename = filenameMatch?.[1] ?? `analytics-export.${format}`;
 
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    } finally {
-      setExporting(false);
-    }
-  }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } finally {
+        setExporting(false);
+      }
+    },
+    [projectId, from, to, filters, exporting],
+  );
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -315,6 +368,10 @@ function OverviewPageInner() {
           />
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <AutoRefreshToggle
+            enabled={autoRefresh}
+            onToggle={() => setAutoRefresh((v) => !v)}
+          />
           <DateRangePicker
             from={from}
             to={to}
@@ -330,7 +387,7 @@ function OverviewPageInner() {
       {/* Active filter pills */}
       <FilterPills filters={filters} onRemove={removeFilter} onClearAll={clearAllFilters} />
 
-      <StatsCards stats={stats} loading={loading} />
+      <StatsCards stats={stats} loading={loading} currentVisitors={currentVisitors} />
       <TimeseriesChart data={timeseries} loading={loading} />
       <TopPagesTable
         pages={pages}

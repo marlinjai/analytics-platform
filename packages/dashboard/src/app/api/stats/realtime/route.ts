@@ -1,0 +1,38 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/lib/auth';
+import { checkProjectMembership } from '@/lib/auth-check';
+import { getClickHouse } from '@/lib/clickhouse';
+
+export async function GET(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const projectId = request.nextUrl.searchParams.get('projectId');
+  if (!projectId) {
+    return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
+  }
+
+  if (!(await checkProjectMembership(session.user.id, projectId))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const ch = getClickHouse();
+
+  const result = await ch.query({
+    query: `
+      SELECT uniqExact(session_id) AS current_visitors
+      FROM analytics.events
+      WHERE project_id = {projectId: UUID}
+        AND timestamp >= now() - INTERVAL 5 MINUTE
+    `,
+    query_params: { projectId },
+    format: 'JSONEachRow',
+  });
+
+  const rows = await result.json<{ current_visitors: number }>();
+  const currentVisitors = Number(rows[0]?.current_visitors ?? 0);
+
+  return NextResponse.json({ currentVisitors });
+}
