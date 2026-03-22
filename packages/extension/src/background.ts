@@ -5,7 +5,7 @@
  * - Store/retrieve auth token via chrome.storage.local
  * - Refresh token every 50 minutes via chrome.alarms
  * - Route messages from popup → content script
- * - Proxy API calls so the content script never needs the raw token
+ * - Fetch overlay data (heatmap, scroll, rage) and inject rendering into MAIN world
  */
 
 import { DASHBOARD_ORIGIN, fetchToolbarToken } from "./lib/api.js";
@@ -19,22 +19,32 @@ export type BackgroundMessage =
   | { type: "GET_AUTH_STATE" }
   | { type: "LOAD_HEATMAP"; projectId: string; from: string; to: string; deviceType: string }
   | { type: "CLEAR_HEATMAP" }
-  | { type: "REFRESH_TOKEN" };
+  | { type: "REFRESH_TOKEN" }
+  | { type: "OVERLAY_CLOSED" }
+  | {
+      type: "LOAD_OVERLAY_DATA";
+      mode: "clicks" | "scroll" | "rage";
+      projectId: string;
+      from: string;
+      to: string;
+      deviceType: string;
+      token: string;
+      dashboardOrigin: string;
+      url: string;
+      pageWidth: number;
+      pageHeight: number;
+    };
 
 export type BackgroundResponse =
   | { ok: true; data?: unknown }
   | { ok: false; error: string };
 
-// ─── Alarm name ───────────────────────────────────────────────────────────────
+// ─── Alarm ────────────────────────────────────────────────────────────────────
 
 const TOKEN_REFRESH_ALARM = "lumitra_token_refresh";
 
-// ─── Alarm setup ──────────────────────────────────────────────────────────────
-
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create(TOKEN_REFRESH_ALARM, {
-    periodInMinutes: 50,
-  });
+  chrome.alarms.create(TOKEN_REFRESH_ALARM, { periodInMinutes: 50 });
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -48,7 +58,6 @@ async function refreshTokenIfNeeded(): Promise<void> {
   const auth = await getAuth();
   if (!auth) return;
 
-  // Refresh if token expires within 10 minutes
   const TEN_MINUTES = 10 * 60 * 1000;
   if (auth.expiresAt - Date.now() > TEN_MINUTES) return;
 
@@ -61,7 +70,6 @@ async function refreshTokenIfNeeded(): Promise<void> {
     });
   } catch (err) {
     console.error("[Lumitra] Token refresh failed:", err);
-    // Don't clear auth — keep old token, user will see auth error on next heatmap load
   }
 }
 
@@ -76,7 +84,6 @@ chrome.runtime.onMessage.addListener(
     handleMessage(message)
       .then(sendResponse)
       .catch((err: Error) => sendResponse({ ok: false, error: err.message }));
-    // Return true to keep the channel open for async response
     return true;
   }
 );
@@ -110,8 +117,7 @@ async function handleMessage(
 
     case "DISCONNECT": {
       await clearAuth();
-      // Clear overlay on current tab
-      await sendToActiveTab({ type: "CLEAR_HEATMAP" });
+      await sendToActiveTab({ type: "CLEAR_OVERLAY" });
       return { ok: true };
     }
 
@@ -119,26 +125,27 @@ async function handleMessage(
       const auth = await getAuth();
       if (!auth) return { ok: false, error: "Not authenticated" };
 
-      // Refresh token if needed before forwarding
       await refreshTokenIfNeeded();
       const freshAuth = await getAuth();
       if (!freshAuth) return { ok: false, error: "Auth expired" };
 
-      // Ensure content script is injected before sending message
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) return { ok: false, error: "No active tab found" };
 
+      // Ensure content script is injected
       try {
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           files: ["content.js"],
         });
       } catch {
-        // Content script may already be injected — that's fine
+        // Already injected
       }
 
+      // Tell content script to show the widget
       const forwarded = await sendToActiveTab({
-        type: "LOAD_HEATMAP",
+        type: "SHOW_OVERLAY",
+        mode: "clicks",
         projectId: message.projectId || freshAuth.projectId,
         from: message.from,
         to: message.to,
@@ -152,8 +159,17 @@ async function handleMessage(
     }
 
     case "CLEAR_HEATMAP": {
-      await sendToActiveTab({ type: "CLEAR_HEATMAP" });
+      await sendToActiveTab({ type: "CLEAR_OVERLAY" });
       return { ok: true };
+    }
+
+    case "OVERLAY_CLOSED": {
+      // Content script closed the overlay — nothing to do in background
+      return { ok: true };
+    }
+
+    case "LOAD_OVERLAY_DATA": {
+      return await handleOverlayDataRequest(message);
     }
 
     case "REFRESH_TOKEN": {
@@ -166,16 +182,424 @@ async function handleMessage(
   }
 }
 
+// ─── Overlay data fetching + main-world injection ─────────────────────────────
+
+async function handleOverlayDataRequest(msg: {
+  mode: "clicks" | "scroll" | "rage";
+  projectId: string;
+  from: string;
+  to: string;
+  deviceType: string;
+  token: string;
+  dashboardOrigin: string;
+  url: string;
+  pageWidth: number;
+  pageHeight: number;
+}): Promise<BackgroundResponse> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return { ok: false, error: "No active tab" };
+
+  try {
+    if (msg.mode === "clicks") {
+      return await handleClicksMode(tab.id, msg);
+    } else if (msg.mode === "scroll") {
+      return await handleScrollMode(tab.id, msg);
+    } else if (msg.mode === "rage") {
+      return await handleRageMode(tab.id, msg);
+    }
+    return { ok: false, error: "Unknown mode" };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : "Unknown error";
+    // Notify content script of error
+    await sendToTab(tab.id, {
+      type: "LOAD_HEATMAP_RESULT",
+      mode: msg.mode,
+      data: null,
+      error: errorMsg,
+    });
+    return { ok: false, error: errorMsg };
+  }
+}
+
+async function handleClicksMode(
+  tabId: number,
+  msg: {
+    projectId: string;
+    from: string;
+    to: string;
+    deviceType: string;
+    token: string;
+    dashboardOrigin: string;
+    url: string;
+    pageWidth: number;
+    pageHeight: number;
+  }
+): Promise<BackgroundResponse> {
+  // Fetch heatmap data
+  const params = new URLSearchParams({
+    projectId: msg.projectId,
+    url: msg.url,
+    from: msg.from,
+    to: msg.to,
+    deviceType: msg.deviceType,
+    token: msg.token,
+  });
+
+  const res = await fetch(`${msg.dashboardOrigin}/api/heatmap?${params}`);
+  if (!res.ok) throw new Error(`Heatmap API error: ${res.status}`);
+
+  const payload = await res.json();
+  const points = payload.points || payload.data || [];
+  const max = payload.max ?? Math.max(...points.map((d: { value: number }) => d.value), 1);
+
+  // First inject heatmap.js into main world
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["heatmap.min.js"],
+    world: "MAIN" as chrome.scripting.ExecutionWorld,
+  });
+
+  // Then inject rendering code into main world
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN" as chrome.scripting.ExecutionWorld,
+    func: renderHeatmapInMainWorld,
+    args: [points, max, msg.pageWidth, msg.pageHeight],
+  });
+
+  // Notify content script
+  await sendToTab(tabId, {
+    type: "LOAD_HEATMAP_RESULT",
+    mode: "clicks",
+    data: { count: points.length },
+  });
+
+  return { ok: true };
+}
+
+async function handleScrollMode(
+  tabId: number,
+  msg: {
+    projectId: string;
+    from: string;
+    to: string;
+    token: string;
+    dashboardOrigin: string;
+    url: string;
+    pageHeight: number;
+  }
+): Promise<BackgroundResponse> {
+  const params = new URLSearchParams({
+    projectId: msg.projectId,
+    from: msg.from,
+    to: msg.to,
+    token: msg.token,
+  });
+
+  const res = await fetch(`${msg.dashboardOrigin}/api/stats/scroll?${params}`);
+  if (!res.ok) throw new Error(`Scroll API error: ${res.status}`);
+
+  const payload = await res.json();
+  const data = payload.data || [];
+
+  // Find the row matching current URL, or use aggregated data
+  const urlPath = new URL(msg.url).pathname;
+  const row = data.find((d: { url: string }) => {
+    try {
+      return new URL(d.url).pathname === urlPath;
+    } catch {
+      return d.url === urlPath;
+    }
+  }) || data[0];
+
+  const depths = row
+    ? { p25: row.p25, p50: row.p50, p75: row.p75, p90: row.p90, avg: row.avgDepth }
+    : null;
+
+  // Inject scroll visualization into main world
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN" as chrome.scripting.ExecutionWorld,
+    func: renderScrollOverlayInMainWorld,
+    args: [depths, msg.pageHeight],
+  });
+
+  await sendToTab(tabId, {
+    type: "LOAD_HEATMAP_RESULT",
+    mode: "scroll",
+    data: depths,
+  });
+
+  return { ok: true };
+}
+
+async function handleRageMode(
+  tabId: number,
+  msg: {
+    projectId: string;
+    from: string;
+    to: string;
+    token: string;
+    dashboardOrigin: string;
+    url: string;
+  }
+): Promise<BackgroundResponse> {
+  const params = new URLSearchParams({
+    projectId: msg.projectId,
+    from: msg.from,
+    to: msg.to,
+    token: msg.token,
+  });
+
+  const res = await fetch(`${msg.dashboardOrigin}/api/stats/rage-clicks?${params}`);
+  if (!res.ok) throw new Error(`Rage clicks API error: ${res.status}`);
+
+  const payload = await res.json();
+  const data = payload.data || [];
+
+  // Filter to current URL
+  const urlPath = new URL(msg.url).pathname;
+  const matches = data.filter((d: { url: string }) => {
+    try {
+      return new URL(d.url).pathname === urlPath;
+    } catch {
+      return d.url === urlPath;
+    }
+  });
+
+  const selectors = matches.map((d: { selector: string; count: number }) => ({
+    selector: d.selector,
+    count: d.count,
+  }));
+
+  // Inject rage click visualization into main world
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN" as chrome.scripting.ExecutionWorld,
+    func: renderRageOverlayInMainWorld,
+    args: [selectors],
+  });
+
+  await sendToTab(tabId, {
+    type: "LOAD_HEATMAP_RESULT",
+    mode: "rage",
+    data: { count: selectors.length },
+  });
+
+  return { ok: true };
+}
+
+// ─── Main-world rendering functions ───────────────────────────────────────────
+// These run in the page's main world via chrome.scripting.executeScript
+
+function renderHeatmapInMainWorld(
+  points: Array<{ x: number; y: number; value: number }>,
+  max: number,
+  pageWidth: number,
+  pageHeight: number
+): void {
+  // Remove existing
+  const existing = document.getElementById("lumitra-heatmap-container");
+  if (existing) existing.remove();
+
+  // Create container
+  const container = document.createElement("div");
+  container.id = "lumitra-heatmap-container";
+  container.style.cssText = [
+    "position:absolute",
+    "top:0",
+    "left:0",
+    `width:${pageWidth}px`,
+    `height:${pageHeight}px`,
+    "pointer-events:none",
+    "z-index:2147483645",
+  ].join(";");
+
+  document.documentElement.appendChild(container);
+
+  // Use h337 (available in main world after heatmap.min.js injection)
+  if (typeof (window as unknown as { h337: unknown }).h337 === "undefined") {
+    console.error("[Lumitra] h337 not available in main world");
+    return;
+  }
+
+  const h = (window as unknown as { h337: {
+    create(config: {
+      container: HTMLElement;
+      radius?: number;
+      maxOpacity?: number;
+      minOpacity?: number;
+      blur?: number;
+    }): { setData(d: { max: number; data: typeof points }): void };
+  } }).h337;
+
+  const instance = h.create({
+    container,
+    radius: 25,
+    maxOpacity: 0.6,
+    minOpacity: 0,
+    blur: 0.75,
+  });
+
+  instance.setData({ max, data: points });
+}
+
+function renderScrollOverlayInMainWorld(
+  depths: { p25: number; p50: number; p75: number; p90: number; avg: number } | null,
+  pageHeight: number
+): void {
+  const existing = document.getElementById("lumitra-scroll-strip");
+  if (existing) existing.remove();
+
+  if (!depths) return;
+
+  const strip = document.createElement("div");
+  strip.id = "lumitra-scroll-strip";
+  strip.style.cssText = [
+    "position:fixed",
+    "top:0",
+    "right:0",
+    "width:40px",
+    `height:100vh`,
+    "z-index:2147483645",
+    "pointer-events:none",
+    `background:linear-gradient(to bottom, rgba(16,185,129,0.5) 0%, rgba(16,185,129,0.4) ${depths.p25}%, rgba(234,179,8,0.4) ${depths.p50}%, rgba(239,68,68,0.4) ${depths.p75}%, rgba(239,68,68,0.6) ${depths.p90}%, rgba(127,29,29,0.3) 100%)`,
+    "border-left:1px solid rgba(255,255,255,0.1)",
+  ].join(";");
+
+  // Add percentage labels
+  const labels = [
+    { pct: depths.p25, label: `25% · ${depths.p25}%` },
+    { pct: depths.p50, label: `50% · ${depths.p50}%` },
+    { pct: depths.p75, label: `75% · ${depths.p75}%` },
+    { pct: depths.p90, label: `90% · ${depths.p90}%` },
+  ];
+
+  labels.forEach(({ pct, label }) => {
+    const marker = document.createElement("div");
+    marker.style.cssText = [
+      "position:absolute",
+      `top:${pct}%`,
+      "right:44px",
+      "background:rgba(3,7,18,0.9)",
+      "color:#f3f4f6",
+      "font-size:10px",
+      "font-family:system-ui,sans-serif",
+      "padding:2px 6px",
+      "border-radius:4px",
+      "white-space:nowrap",
+      "pointer-events:none",
+    ].join(";");
+    marker.textContent = label;
+    strip.appendChild(marker);
+
+    const line = document.createElement("div");
+    line.style.cssText = [
+      "position:absolute",
+      `top:${pct}%`,
+      "left:0",
+      "right:0",
+      "height:1px",
+      "background:rgba(255,255,255,0.3)",
+    ].join(";");
+    strip.appendChild(line);
+  });
+
+  // Avg indicator
+  const avgMarker = document.createElement("div");
+  avgMarker.style.cssText = [
+    "position:absolute",
+    `top:${depths.avg}%`,
+    "left:4px",
+    "right:4px",
+    "height:2px",
+    "background:#818cf8",
+    "border-radius:1px",
+  ].join(";");
+  strip.appendChild(avgMarker);
+
+  document.documentElement.appendChild(strip);
+}
+
+function renderRageOverlayInMainWorld(
+  selectors: Array<{ selector: string; count: number }>
+): void {
+  // Clean up existing rage indicators
+  document.querySelectorAll("[data-lumitra-rage]").forEach((el) => {
+    (el as HTMLElement).style.outline = "";
+    (el as HTMLElement).style.animation = "";
+    el.removeAttribute("data-lumitra-rage");
+  });
+
+  const existingStyle = document.getElementById("lumitra-rage-style");
+  if (existingStyle) existingStyle.remove();
+
+  if (selectors.length === 0) return;
+
+  // Inject pulse animation
+  const style = document.createElement("style");
+  style.id = "lumitra-rage-style";
+  style.textContent = `
+    @keyframes lumitra-rage-pulse {
+      0%, 100% { outline-color: rgba(239, 68, 68, 0.8); }
+      50% { outline-color: rgba(239, 68, 68, 0.3); }
+    }
+  `;
+  document.head.appendChild(style);
+
+  selectors.forEach(({ selector, count }) => {
+    try {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach((el) => {
+        const htmlEl = el as HTMLElement;
+        htmlEl.setAttribute("data-lumitra-rage", String(count));
+        htmlEl.style.outline = "2px solid rgba(239, 68, 68, 0.8)";
+        htmlEl.style.animation = "lumitra-rage-pulse 1.5s ease-in-out infinite";
+
+        // Add tooltip
+        const badge = document.createElement("div");
+        badge.style.cssText = [
+          "position:absolute",
+          "top:-8px",
+          "right:-8px",
+          "background:#dc2626",
+          "color:#fff",
+          "font-size:10px",
+          "font-family:system-ui,sans-serif",
+          "padding:1px 5px",
+          "border-radius:8px",
+          "z-index:2147483645",
+          "pointer-events:none",
+        ].join(";");
+        badge.textContent = `${count}`;
+        badge.setAttribute("data-lumitra-rage", "badge");
+
+        // Ensure relative positioning for badge
+        const pos = getComputedStyle(htmlEl).position;
+        if (pos === "static") {
+          htmlEl.style.position = "relative";
+        }
+        htmlEl.appendChild(badge);
+      });
+    } catch {
+      // Invalid selector — skip
+    }
+  });
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function sendToActiveTab(message: object): Promise<boolean> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return false;
+  return sendToTab(tab.id, message);
+}
+
+async function sendToTab(tabId: number, message: object): Promise<boolean> {
   try {
-    await chrome.tabs.sendMessage(tab.id, message);
+    await chrome.tabs.sendMessage(tabId, message);
     return true;
   } catch {
-    // Content script may not be injected yet on this tab
     return false;
   }
 }
