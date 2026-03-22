@@ -73,6 +73,16 @@ await build({
   jsx: "automatic",
 });
 
+// ─── Side Panel ──────────────────────────────────────────────────────────────
+
+await build({
+  ...sharedOptions,
+  entryPoints: [resolve(ROOT, "src/sidepanel/sidepanel.tsx")],
+  outfile: resolve(DIST, "sidepanel.js"),
+  format: "iife",
+  jsx: "automatic",
+});
+
 // ─── Copy static assets ───────────────────────────────────────────────────────
 
 // manifest.json
@@ -84,6 +94,13 @@ const popupHtml = readFileSync(
   "utf8"
 ).replace("popup.js", "popup.js"); // already correct
 writeFileSync(resolve(DIST, "popup.html"), popupHtml);
+
+// sidepanel.html
+const sidepanelHtml = readFileSync(
+  resolve(ROOT, "src/sidepanel/sidepanel.html"),
+  "utf8"
+);
+writeFileSync(resolve(DIST, "sidepanel.html"), sidepanelHtml);
 
 // icons
 cpSync(resolve(ROOT, "icons"), resolve(DIST, "icons"), { recursive: true });

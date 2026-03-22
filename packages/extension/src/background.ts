@@ -48,6 +48,11 @@ const TOKEN_REFRESH_ALARM = "lumitra_token_refresh";
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(TOKEN_REFRESH_ALARM, { periodInMinutes: 50 });
+
+  // Enable side panel to open on action click (alongside popup)
+  if (chrome.sidePanel) {
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
+  }
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
