@@ -22,7 +22,7 @@
 
 ## Phase 3: Dashboard UI (complete)
 - [x] Analytics overview page — charts, stats cards, top pages (Agent 8: dashboard-overview)
-- [x] Heatmap visualization page — ~~canvas overlay~~ toolbar/bookmarklet activation page (Agent 9, refactored)
+- [x] Heatmap visualization page — toolbar/bookmarklet activation page (Agent 9, refactored)
 - [x] Session replay player page — rrweb-player (Agent 10: dashboard-replay)
 
 ## Phase 4: Integration & Production (complete)
@@ -33,29 +33,52 @@
 - [x] Install script (one-command setup)
 - [x] Production hardening (rate limiting, CORS, CSP headers)
 - [x] README finalization
-- [ ] End-to-end integration tests
+- [x] Terraform deployment module (Hetzner + Cloudflare DNS)
+- [x] Production deployment at analytics.lumitra.co
+- [x] Tracker SDK published to npm (@marlinjai/analytics-tracker)
+- [x] First client integration (Lola Stories landing page)
 
-## Phase 5: Polish & Reliability (next)
+### Production fixes (2026-03-20/21)
+- [x] TypeScript build errors (toolbar-token types, missing public dir)
+- [x] bcrypt → bcryptjs for Next.js standalone compatibility
+- [x] NextAuth secureCookie:true for Caddy reverse proxy
+- [x] Middleware callbackUrl using forwarded host instead of container URL
+- [x] Login page redirect:false for credentials provider
+- [x] ClickHouse auth password sync between .env and compose
+- [x] ClickHouse DateTime64 Z suffix stripping in queries
+- [x] Stats overview query split (UNKNOWN_IDENTIFIER fix)
+- [x] CORS headers on /api/collect + OPTIONS preflight handler
+- [x] Tracker credentials:omit to prevent cookie interference
+- [x] Settings page crash (API key object rendering)
+- [x] Revoked keys hidden by default + copy buttons + integration snippet
+- [x] Date range presets (12h, 24h, 3d, 7d, 30d, 90d)
+- [x] Project ID visible + copyable in settings
+
+## Phase 5: Polish & Reliability (in progress)
 - [x] Heatmap: refactor from iframe overlay to toolbar/bookmarklet approach
 - [x] Heatmap query optimization (use materialized view)
-- [ ] End-to-end integration tests (deferred from Phase 4)
-- [ ] Tracker SDK unit tests + bundle size CI check (<5KB gzip)
-- [ ] ClickHouse materialized view verification + migration tooling
-- [ ] Error boundary pages (proper 404, 500 pages instead of useInsertionEffect crashes)
+- [x] Dashboard empty states (no projects, no data)
+- [x] Settings page (project list, API key management)
+- [ ] End-to-end integration tests
+- [ ] Tracker SDK bundle size CI check (<5KB gzip)
+- [ ] ClickHouse schema migration tooling (replace manual setup.sh)
 - [ ] Loading states and skeleton UI across all dashboard pages
-- [ ] Settings page (user profile, project settings, team management)
-- [ ] API key rotation workflow in dashboard
-- [ ] Dashboard empty states (no projects, no data, first-time onboarding)
+- [ ] API key rotation workflow
+- [ ] Onboarding flow (step-by-step first project + tracker setup)
 
 ## Phase 6: Analytics Depth
-- [ ] Web analytics: UTM tracking, referrer parsing, geographic data, device breakdowns
+- [ ] Web analytics: UTM tracking, referrer parsing
+- [ ] Geographic data (GeoIP integration — MaxMind GeoLite2)
+- [ ] Device/browser/OS breakdowns (parse user agent server-side)
+- [ ] Traffic sources table (referrers grouped by domain)
 - [ ] Funnel analysis — define step sequences, measure conversion
-- [ ] Scroll depth heatmap — gradient overlay showing drop-off (see docs/superpowers/plans/2026-03-16-heatmap-map-types.md Phase A)
-- [ ] Rage click detection — highlight frustration points (Phase B)
-- [ ] Engagement zones — element-level click aggregation (Phase C)
+- [ ] Scroll depth heatmap — gradient overlay showing drop-off
+- [ ] Rage click detection — highlight frustration points
+- [ ] Engagement zones — element-level click aggregation
 - [ ] Data export (CSV, JSON API)
 - [ ] Custom date ranges with calendar picker
 - [ ] Dashboard filters (browser, OS, country, page)
+- [ ] Click-to-filter (click any table row to filter entire dashboard)
 
 ## Phase 7: Real-time & Scale
 - [ ] Real-time dashboard (WebSocket / SSE live counters)
@@ -64,9 +87,12 @@
 - [ ] Alerting (anomaly detection, threshold alerts)
 
 ## v2 (Deferred from MVP)
-- [ ] A/B testing & experimentation (deterministic hashing, variant assignment)
-- [ ] Mouse move heatmap — cursor tracking with throttled sampling (Phase D)
+- [ ] A/B testing & experimentation
+- [ ] Mouse move heatmap — cursor tracking with throttled sampling
 - [ ] Retention cohorts
 - [ ] Multi-tenant SaaS mode with billing
 - [ ] Error tracking
 - [ ] Custom dashboards / saved reports
+- [ ] Browser extension for heatmap overlay (replaces bookmarklet)
+- [ ] AI-powered insights + anomaly detection
+- [ ] Team collaboration (invitations, roles, shared dashboards)
