@@ -37,33 +37,82 @@ Opens at [http://localhost:3000](http://localhost:3000).
 
 ## Add the Tracker to Your Site
 
-```html
-<script type="module">
-  import { init } from 'https://your-cdn.com/analytics-tracker.js';
+The tracker is **cookie-free** and does not fingerprint users — no consent banner required under GDPR/ePrivacy.
 
-  init({
-    projectId: 'your-project-uuid',
-    endpoint: 'http://localhost:3000/api/collect',
-  });
-</script>
-```
-
-Or install via npm:
+### Install via npm
 
 ```bash
 pnpm add @marlinjai/analytics-tracker
 ```
 
-```typescript
+### Next.js integration
+
+Create a wrapper component and render it in your root layout:
+
+```tsx
+// components/LumitraAnalytics.tsx
+'use client';
+
+import { useEffect } from 'react';
 import { init } from '@marlinjai/analytics-tracker';
 
+export function LumitraAnalytics() {
+  useEffect(() => {
+    init({
+      projectId: process.env.NEXT_PUBLIC_ANALYTICS_PROJECT_ID!,
+      endpoint: 'https://analytics.lumitra.co/api/collect',
+    });
+  }, []);
+
+  return null;
+}
+```
+
+```tsx
+// app/layout.tsx
+import { LumitraAnalytics } from '@/components/LumitraAnalytics';
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html>
+      <body>
+        {children}
+        <LumitraAnalytics />
+      </body>
+    </html>
+  );
+}
+```
+
+Set `NEXT_PUBLIC_ANALYTICS_PROJECT_ID` in your `.env.local` to the project ID shown in the analytics dashboard settings.
+
+### Plain HTML integration
+
+```html
+<script type="module">
+  import { init } from 'https://unpkg.com/@marlinjai/analytics-tracker/dist/index.js';
+
+  init({
+    projectId: 'your-project-uuid',
+    endpoint: 'https://analytics.lumitra.co/api/collect',
+  });
+</script>
+```
+
+### Optional features
+
+```typescript
 init({
   projectId: 'your-project-uuid',
-  endpoint: 'http://localhost:3000/api/collect',
-  replay: true,    // Enable session replay
+  endpoint: 'https://analytics.lumitra.co/api/collect',
+  replay: true,    // Enable session replay (lazy-loads rrweb)
   heatmap: true,   // Enable click heatmaps
 });
 ```
+
+### Privacy
+
+The tracker uses IP hashing for anonymous session identification. No cookies are set and no persistent identifiers are stored in the browser — no consent banner is required under GDPR or ePrivacy regulations.
 
 ## Environment Variables
 

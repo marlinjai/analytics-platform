@@ -54,23 +54,23 @@
 - [x] Date range presets (12h, 24h, 3d, 7d, 30d, 90d)
 - [x] Project ID visible + copyable in settings
 
-## Phase 5: Polish & Reliability (in progress)
+## Phase 5: Polish & Reliability (complete)
 - [x] Heatmap: refactor from iframe overlay to toolbar/bookmarklet approach
 - [x] Heatmap query optimization (use materialized view)
 - [x] Dashboard empty states (no projects, no data)
 - [x] Settings page (project list, API key management)
-- [ ] End-to-end integration tests
-- [ ] Tracker SDK bundle size CI check (<5KB gzip)
-- [ ] ClickHouse schema migration tooling (replace manual setup.sh)
-- [ ] Loading states and skeleton UI across all dashboard pages
-- [ ] API key rotation workflow
-- [ ] Onboarding flow (step-by-step first project + tracker setup)
+- [x] End-to-end integration tests (17 unit tests for /api/collect, 69 total)
+- [x] Tracker SDK bundle size CI check (<5KB gzip)
+- [x] ClickHouse schema migration tooling (versioned SQL + migrate.sh)
+- [x] Loading states and skeleton UI across all dashboard pages
+- [x] API key rotation workflow
+- [x] Onboarding flow (step-by-step first project + tracker setup)
 
-## Phase 6: Analytics Depth
-- [ ] Web analytics: UTM tracking, referrer parsing
+## Phase 6: Analytics Depth (in progress)
+- [x] Web analytics: UTM tracking, referrer parsing
 - [ ] Geographic data (GeoIP integration — MaxMind GeoLite2)
-- [ ] Device/browser/OS breakdowns (parse user agent server-side)
-- [ ] Traffic sources table (referrers grouped by domain)
+- [x] Device/browser/OS breakdowns (parse user agent server-side)
+- [x] Traffic sources table (referrers grouped by domain)
 - [ ] Funnel analysis — define step sequences, measure conversion
 - [ ] Scroll depth heatmap — gradient overlay showing drop-off
 - [ ] Rage click detection — highlight frustration points

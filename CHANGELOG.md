@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-22
+
+### Added
+- Production deployment via Terraform (Hetzner + Cloudflare DNS) at analytics.lumitra.co
+- Tracker SDK published to npm as @marlinjai/analytics-tracker
+- First client integration (Lola Stories landing page)
+- Skeleton loading states across all dashboard pages
+- 3-step onboarding flow (create project → install tracker → verify events)
+- API key rotation workflow
+- Traffic sources table with favicons
+- Browser, OS, device breakdown tables
+- UTM parameter tracking in tracker SDK
+- User agent parsing (browser + OS detection)
+- 4 new API routes: /stats/sources, /stats/browsers, /stats/os, /stats/devices
+- ClickHouse migration tooling (versioned SQL + migrate.sh)
+- Tracker bundle size CI check (<5KB gzip)
+- 17 new unit tests for /api/collect endpoint (69 total)
+- Date range presets: 12h, 24h, 3d added alongside 7d, 30d, 90d
+- Copy buttons for project ID and API keys
+- Integration snippet shown after API key creation
+
+### Fixed
+- bcrypt → bcryptjs for Next.js standalone build compatibility
+- NextAuth secureCookie for Caddy reverse proxy authentication
+- Middleware callbackUrl using forwarded host instead of container URL
+- Login redirect with credentials provider (redirect:false)
+- ClickHouse DateTime64 Z suffix in query parameters
+- Stats overview query split to fix UNKNOWN_IDENTIFIER error
+- CORS headers + OPTIONS preflight on /api/collect
+- Tracker credentials:omit to prevent cookie interference
+- Settings page crash from API key object rendering
+- Missing public directory in Dockerfile build
+
+### Changed
+- Revoked API keys hidden by default with "Show revoked" toggle
+- Tracker SDK decoupled from @analytics-platform/shared (zero runtime deps)
+
 ### Fixed
 - Monorepo env loading — single `.env.local` at project root, loaded via `scripts/dev.mjs`
 - NextAuth middleware secret handling for Edge runtime
