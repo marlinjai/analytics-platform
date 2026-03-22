@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { SessionSummary } from '@analytics-platform/shared';
+import { SkeletonSessionList } from '@/components/ui/Skeleton';
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -19,11 +20,7 @@ interface Props {
 
 export function SessionList({ sessions, loading, hasMore, onLoadMore }: Props) {
   if (loading && sessions.length === 0) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-xl border border-gray-800 bg-gray-900">
-        <p className="text-sm text-gray-500">Loading sessions...</p>
-      </div>
-    );
+    return <SkeletonSessionList rows={6} />;
   }
 
   if (sessions.length === 0) {

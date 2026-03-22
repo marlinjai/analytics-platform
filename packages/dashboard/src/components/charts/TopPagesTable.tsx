@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { TopPage } from '@analytics-platform/shared';
+import { SkeletonTableRows } from '@/components/ui/Skeleton';
 
 type SortKey = 'views' | 'visitors';
 
@@ -16,11 +17,7 @@ export function TopPagesTable({ pages, loading }: Props) {
   const sorted = [...pages].sort((a, b) => b[sortBy] - a[sortBy]);
 
   if (loading) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-xl border border-gray-800 bg-gray-900">
-        <p className="text-sm text-gray-500">Loading...</p>
-      </div>
-    );
+    return <SkeletonTableRows rows={5} cols={3} />;
   }
 
   return (

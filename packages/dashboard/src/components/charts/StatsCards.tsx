@@ -1,6 +1,7 @@
 'use client';
 
 import type { StatsOverview } from '@analytics-platform/shared';
+import { SkeletonStatsCards } from '@/components/ui/Skeleton';
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -29,6 +30,10 @@ interface Props {
 }
 
 export function StatsCards({ stats, loading }: Props) {
+  if (loading) {
+    return <SkeletonStatsCards />;
+  }
+
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
       {cards.map((card) => (
@@ -38,7 +43,7 @@ export function StatsCards({ stats, loading }: Props) {
         >
           <p className="text-xs font-medium text-gray-400">{card.label}</p>
           <p className="mt-1 text-2xl font-bold text-gray-100">
-            {loading ? '—' : stats ? card.format(stats[card.key]) : '0'}
+            {stats ? card.format(stats[card.key]) : '0'}
           </p>
         </div>
       ))}

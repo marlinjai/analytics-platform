@@ -39,6 +39,8 @@ export interface ServerEnrichedFields {
   ipHash: string;
   country?: string;
   receivedAt: number;
+  browser?: string;
+  os?: string;
 }
 
 /** Full event as stored in ClickHouse. */
@@ -96,6 +98,16 @@ export interface StatsOverview {
 export interface TopPage {
   url: string;
   views: number;
+  visitors: number;
+}
+
+export interface TopSource {
+  domain: string;
+  visitors: number;
+}
+
+export interface BreakdownRow {
+  name: string;
   visitors: number;
 }
 

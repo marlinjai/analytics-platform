@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { DeviceType, TopPage } from '@analytics-platform/shared';
+import { SkeletonUrlList } from '@/components/ui/Skeleton';
 import { UrlSelector } from '@/components/heatmap/UrlSelector';
 import { DeviceToggle } from '@/components/heatmap/DeviceToggle';
 import { DateRangePicker } from '@/components/layout/DateRangePicker';
@@ -12,6 +13,7 @@ export default function HeatmapPage() {
   const [from, setFrom] = useState(() => new Date(Date.now() - 7 * 86400000).toISOString());
   const [to, setTo] = useState(() => new Date().toISOString());
   const [urls, setUrls] = useState<string[]>([]);
+  const [loadingUrls, setLoadingUrls] = useState(false);
   const [selectedUrl, setSelectedUrl] = useState('');
   const [deviceType, setDeviceType] = useState<DeviceType | ''>('');
   const [bookmarkletHref, setBookmarkletHref] = useState('');
@@ -31,10 +33,12 @@ export default function HeatmapPage() {
   // Fetch available URLs
   useEffect(() => {
     if (!projectId) return;
+    setLoadingUrls(true);
     fetch(`/api/stats/pages?projectId=${projectId}&from=${from}&to=${to}`)
       .then((r) => r.json())
       .then((data) => setUrls((data.pages as TopPage[]).map((p) => p.url)))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoadingUrls(false));
   }, [projectId, from, to]);
 
   return (
@@ -100,7 +104,9 @@ export default function HeatmapPage() {
               </div>
               <DeviceToggle selected={deviceType} onChange={setDeviceType} />
             </div>
-            {urls.length > 0 ? (
+            {loadingUrls ? (
+              <SkeletonUrlList rows={5} />
+            ) : urls.length > 0 ? (
               <ul className="mt-4 space-y-1 text-sm text-gray-400">
                 {urls.map((url) => (
                   <li key={url} className="truncate">

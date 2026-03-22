@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { SkeletonProjectList, SkeletonKeyList } from '@/components/ui/Skeleton';
 
 interface Project {
   id: string;
@@ -31,11 +32,47 @@ export default function SettingsPage() {
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [showRevoked, setShowRevoked] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [rotatingKeyId, setRotatingKeyId] = useState<string | null>(null);
 
   async function copyToClipboard(text: string) {
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  /** Derive environment from stored prefix value */
+  function envFromPrefix(prefix: string): 'live' | 'test' {
+    return prefix.startsWith('ap_test_') ? 'test' : 'live';
+  }
+
+  // Rotate key: create new key with same label+env, then revoke old key
+  async function handleRotateKey(key: ApiKey) {
+    if (!confirm(`Rotate key "${key.label}"? The current key will be revoked and a new one created.`)) return;
+    setRotatingKeyId(key.id);
+    setRevealedKey(null);
+    try {
+      const environment = envFromPrefix(key.prefix);
+      // 1. Create new key
+      const createRes = await fetch(`/api/projects/${selectedProjectId}/keys`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: key.label, environment }),
+      });
+      if (!createRes.ok) throw new Error('Failed to create replacement key');
+      const createData = await createRes.json();
+      const newFullKey: string = createData.key.fullKey;
+
+      // 2. Revoke old key
+      await fetch(`/api/projects/${selectedProjectId}/keys/${key.id}`, { method: 'DELETE' });
+
+      // 3. Show new key
+      setRevealedKey(newFullKey);
+      fetchKeys(selectedProjectId);
+    } catch {
+      // silently ignore — user can retry
+    } finally {
+      setRotatingKeyId(null);
+    }
   }
 
   // Fetch projects
@@ -136,7 +173,7 @@ export default function SettingsPage() {
         <h2 className="mb-4 text-lg font-semibold text-gray-100">Projects</h2>
 
         {loadingProjects ? (
-          <p className="text-sm text-gray-400">Loading projects...</p>
+          <SkeletonProjectList rows={3} />
         ) : projects.length === 0 ? (
           <p className="text-sm text-gray-400">No projects yet.</p>
         ) : (
@@ -195,7 +232,7 @@ export default function SettingsPage() {
           <>
             {/* Key list */}
             {loadingKeys ? (
-              <p className="text-sm text-gray-400">Loading keys...</p>
+              <SkeletonKeyList rows={3} />
             ) : keys.filter((k) => !k.revoked_at).length === 0 && !showRevoked ? (
               <p className="mb-4 text-sm text-gray-400">No active API keys for this project.</p>
             ) : (
@@ -224,12 +261,22 @@ export default function SettingsPage() {
                           </p>
                         </div>
                         {!isRevoked && (
-                          <button
-                            onClick={() => handleRevokeKey(key.id)}
-                            className="shrink-0 rounded px-3 py-1 text-sm font-medium text-red-400 hover:bg-red-400/10 transition"
-                          >
-                            Revoke
-                          </button>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              onClick={() => handleRotateKey(key)}
+                              disabled={rotatingKeyId === key.id}
+                              className="rounded px-3 py-1 text-sm font-medium text-blue-400 hover:bg-blue-400/10 disabled:opacity-50 transition"
+                              title="Create a new key with the same label and revoke this one"
+                            >
+                              {rotatingKeyId === key.id ? 'Rotating…' : 'Rotate'}
+                            </button>
+                            <button
+                              onClick={() => handleRevokeKey(key.id)}
+                              className="rounded px-3 py-1 text-sm font-medium text-red-400 hover:bg-red-400/10 transition"
+                            >
+                              Revoke
+                            </button>
+                          </div>
                         )}
                       </li>
                     );

@@ -1,5 +1,5 @@
 import { getClickHouse, chDateParams } from '../clickhouse';
-import type { StatsOverview, TimeseriesPoint, TopPage, DateRange } from '@analytics-platform/shared';
+import type { StatsOverview, TimeseriesPoint, TopPage, TopSource, BreakdownRow, DateRange } from '@analytics-platform/shared';
 
 export async function getStatsOverview(
   projectId: string,
@@ -124,4 +124,128 @@ export async function getTopPages(
   });
 
   return result.json<TopPage>();
+}
+
+export async function getTopSources(
+  projectId: string,
+  dateRange: DateRange
+): Promise<TopSource[]> {
+  const ch = getClickHouse();
+
+  const result = await ch.query({
+    query: `
+      SELECT
+        domain(referrer) AS domain,
+        uniqExact(ip_hash) AS visitors
+      FROM analytics.events
+      WHERE project_id = {projectId: UUID}
+        AND type = 'pageview'
+        AND referrer != ''
+        AND timestamp >= {from: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}
+      GROUP BY domain
+      ORDER BY visitors DESC
+      LIMIT 50
+    `,
+    query_params: {
+      projectId,
+      ...chDateParams(dateRange),
+    },
+    format: 'JSONEachRow',
+  });
+
+  return result.json<TopSource>();
+}
+
+export async function getBrowserBreakdown(
+  projectId: string,
+  dateRange: DateRange
+): Promise<BreakdownRow[]> {
+  const ch = getClickHouse();
+
+  const result = await ch.query({
+    query: `
+      SELECT
+        browser AS name,
+        uniqExact(ip_hash) AS visitors
+      FROM analytics.events
+      WHERE project_id = {projectId: UUID}
+        AND type = 'pageview'
+        AND browser != ''
+        AND timestamp >= {from: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}
+      GROUP BY name
+      ORDER BY visitors DESC
+      LIMIT 50
+    `,
+    query_params: {
+      projectId,
+      ...chDateParams(dateRange),
+    },
+    format: 'JSONEachRow',
+  });
+
+  return result.json<BreakdownRow>();
+}
+
+export async function getOsBreakdown(
+  projectId: string,
+  dateRange: DateRange
+): Promise<BreakdownRow[]> {
+  const ch = getClickHouse();
+
+  const result = await ch.query({
+    query: `
+      SELECT
+        os AS name,
+        uniqExact(ip_hash) AS visitors
+      FROM analytics.events
+      WHERE project_id = {projectId: UUID}
+        AND type = 'pageview'
+        AND os != ''
+        AND timestamp >= {from: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}
+      GROUP BY name
+      ORDER BY visitors DESC
+      LIMIT 50
+    `,
+    query_params: {
+      projectId,
+      ...chDateParams(dateRange),
+    },
+    format: 'JSONEachRow',
+  });
+
+  return result.json<BreakdownRow>();
+}
+
+export async function getDeviceBreakdown(
+  projectId: string,
+  dateRange: DateRange
+): Promise<BreakdownRow[]> {
+  const ch = getClickHouse();
+
+  const result = await ch.query({
+    query: `
+      SELECT
+        device_type AS name,
+        uniqExact(ip_hash) AS visitors
+      FROM analytics.events
+      WHERE project_id = {projectId: UUID}
+        AND type = 'pageview'
+        AND device_type != ''
+        AND timestamp >= {from: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}
+      GROUP BY name
+      ORDER BY visitors DESC
+      LIMIT 50
+    `,
+    query_params: {
+      projectId,
+      ...chDateParams(dateRange),
+    },
+    format: 'JSONEachRow',
+  });
+
+  return result.json<BreakdownRow>();
 }

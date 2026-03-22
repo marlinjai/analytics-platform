@@ -14,7 +14,8 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bundle-check": "bash ../../scripts/check-bundle-size.sh"
   },
   "dependencies": {},
   "peerDependencies": {

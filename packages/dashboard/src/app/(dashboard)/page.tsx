@@ -1,13 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { StatsOverview, TimeseriesPoint, TopPage } from '@analytics-platform/shared';
+import type {
+  StatsOverview,
+  TimeseriesPoint,
+  TopPage,
+  TopSource,
+  BreakdownRow,
+} from '@analytics-platform/shared';
 import { StatsCards } from '@/components/charts/StatsCards';
 import { TimeseriesChart } from '@/components/charts/TimeseriesChart';
 import { TopPagesTable } from '@/components/charts/TopPagesTable';
+import { SourcesTable } from '@/components/charts/SourcesTable';
+import { TechBreakdown } from '@/components/charts/TechBreakdown';
 import { DateRangePicker } from '@/components/layout/DateRangePicker';
 import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
-import { NoProjects } from '@/components/empty-states/NoProjects';
+import { Onboarding } from '@/components/empty-states/Onboarding';
 import { NoData } from '@/components/empty-states/NoData';
 
 export default function OverviewPage() {
@@ -18,6 +26,10 @@ export default function OverviewPage() {
   const [stats, setStats] = useState<StatsOverview | null>(null);
   const [timeseries, setTimeseries] = useState<TimeseriesPoint[]>([]);
   const [pages, setPages] = useState<TopPage[]>([]);
+  const [sources, setSources] = useState<TopSource[]>([]);
+  const [browsers, setBrowsers] = useState<BreakdownRow[]>([]);
+  const [os, setOs] = useState<BreakdownRow[]>([]);
+  const [devices, setDevices] = useState<BreakdownRow[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -25,9 +37,13 @@ export default function OverviewPage() {
     setLoading(true);
 
     try {
-      const [statsRes, pagesRes] = await Promise.all([
+      const [statsRes, pagesRes, sourcesRes, browsersRes, osRes, devicesRes] = await Promise.all([
         fetch(`/api/stats?projectId=${projectId}&from=${from}&to=${to}`),
         fetch(`/api/stats/pages?projectId=${projectId}&from=${from}&to=${to}`),
+        fetch(`/api/stats/sources?projectId=${projectId}&from=${from}&to=${to}`),
+        fetch(`/api/stats/browsers?projectId=${projectId}&from=${from}&to=${to}`),
+        fetch(`/api/stats/os?projectId=${projectId}&from=${from}&to=${to}`),
+        fetch(`/api/stats/devices?projectId=${projectId}&from=${from}&to=${to}`),
       ]);
 
       if (statsRes.ok) {
@@ -38,6 +54,22 @@ export default function OverviewPage() {
       if (pagesRes.ok) {
         const data = await pagesRes.json();
         setPages(data.pages);
+      }
+      if (sourcesRes.ok) {
+        const data = await sourcesRes.json();
+        setSources(data.sources);
+      }
+      if (browsersRes.ok) {
+        const data = await browsersRes.json();
+        setBrowsers(data.browsers);
+      }
+      if (osRes.ok) {
+        const data = await osRes.json();
+        setOs(data.os);
+      }
+      if (devicesRes.ok) {
+        const data = await devicesRes.json();
+        setDevices(data.devices);
       }
     } catch {
       // Network error
@@ -52,8 +84,8 @@ export default function OverviewPage() {
 
   if (hasProjects === false) {
     return (
-      <NoProjects
-        onCreated={(id) => {
+      <Onboarding
+        onReady={(id) => {
           setProjectId(id);
           setHasProjects(true);
         }}
@@ -84,6 +116,13 @@ export default function OverviewPage() {
       <StatsCards stats={stats} loading={loading} />
       <TimeseriesChart data={timeseries} loading={loading} />
       <TopPagesTable pages={pages} loading={loading} />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <SourcesTable sources={sources} loading={loading} />
+        <TechBreakdown title="Browsers" rows={browsers} loading={loading} />
+        <TechBreakdown title="Operating Systems" rows={os} loading={loading} />
+        <TechBreakdown title="Devices" rows={devices} loading={loading} />
+      </div>
     </div>
   );
 }

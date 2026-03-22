@@ -27,6 +27,8 @@ export type {
   StatsOverview,
   TimeseriesPoint,
   TopPage,
+  TopSource,
+  BreakdownRow,
   HeatmapPoint,
   SessionSummary,
   Project,

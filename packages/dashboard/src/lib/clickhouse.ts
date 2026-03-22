@@ -50,6 +50,8 @@ export async function insertEvents(events: StoredEvent[]): Promise<void> {
       user_agent: e.userAgent ?? '',
       ip_hash: e.ipHash,
       country: e.country ?? '',
+      browser: e.browser ?? '',
+      os: e.os ?? '',
     })),
     format: 'JSONEachRow',
   });

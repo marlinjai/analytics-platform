@@ -1,0 +1,27 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getBrowserBreakdown } from '@/lib/queries/stats';
+import { auth } from '@/lib/auth';
+import { checkProjectMembership } from '@/lib/auth-check';
+
+export async function GET(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const params = request.nextUrl.searchParams;
+  const projectId = params.get('projectId');
+  const from = params.get('from');
+  const to = params.get('to');
+
+  if (!projectId || !from || !to) {
+    return NextResponse.json({ error: 'Missing projectId, from, or to' }, { status: 400 });
+  }
+
+  if (!(await checkProjectMembership(session.user.id, projectId))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const browsers = await getBrowserBreakdown(projectId, { from, to });
+  return NextResponse.json({ browsers });
+}

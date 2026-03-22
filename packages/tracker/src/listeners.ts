@@ -24,13 +24,26 @@ function getCssSelector(el: Element): string {
   return parts.join(' > ').slice(0, 256);
 }
 
+function parseUtmParams(url: string): Record<string, string> {
+  const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
+  const params = new URL(url).searchParams;
+  const utm: Record<string, string> = {};
+  for (const key of UTM_KEYS) {
+    const value = params.get(key);
+    if (value) utm[key] = value;
+  }
+  return utm;
+}
+
 export function attachPageviewListener(cb: EventCallback): () => void {
   const trackPageview = () => {
+    const utmParams = parseUtmParams(location.href);
     cb({
       type: 'pageview',
       url: location.href,
       referrer: document.referrer,
       title: document.title,
+      ...(Object.keys(utmParams).length > 0 && { properties: utmParams }),
     });
   };
 

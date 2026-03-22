@@ -2,6 +2,7 @@
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { TimeseriesPoint } from '@analytics-platform/shared';
+import { SkeletonChart } from '@/components/ui/Skeleton';
 
 interface Props {
   data: TimeseriesPoint[];
@@ -10,11 +11,7 @@ interface Props {
 
 export function TimeseriesChart({ data, loading }: Props) {
   if (loading) {
-    return (
-      <div className="flex h-72 items-center justify-center rounded-xl border border-gray-800 bg-gray-900">
-        <p className="text-sm text-gray-500">Loading...</p>
-      </div>
-    );
+    return <SkeletonChart />;
   }
 
   if (data.length === 0) {
