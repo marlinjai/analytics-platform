@@ -1,5 +1,13 @@
 import { createClient } from '@clickhouse/client';
-import type { StoredEvent } from '@analytics-platform/shared';
+import type { StoredEvent, DateRange } from '@analytics-platform/shared';
+
+/** Strip trailing Z from ISO dates — ClickHouse DateTime64 doesn't accept it */
+export function chDateParams(dateRange: DateRange) {
+  return {
+    from: dateRange.from.replace('Z', ''),
+    to: dateRange.to.replace('Z', ''),
+  };
+}
 
 let client: ReturnType<typeof createClient> | null = null;
 

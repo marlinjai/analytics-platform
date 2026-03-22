@@ -1,4 +1,4 @@
-import { getClickHouse } from '../clickhouse';
+import { getClickHouse, chDateParams } from '../clickhouse';
 import type { HeatmapPoint, DateRange, DeviceType } from '@analytics-platform/shared';
 
 export async function getHeatmapData(
@@ -31,8 +31,7 @@ export async function getHeatmapData(
     query_params: {
       projectId,
       url,
-      from: dateRange.from,
-      to: dateRange.to,
+      ...chDateParams(dateRange),
       ...(deviceType && { deviceType }),
     },
     format: 'JSONEachRow',

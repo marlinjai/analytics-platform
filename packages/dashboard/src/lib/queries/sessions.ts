@@ -1,4 +1,4 @@
-import { getClickHouse } from '../clickhouse';
+import { getClickHouse, chDateParams } from '../clickhouse';
 import type { SessionSummary, DateRange } from '@analytics-platform/shared';
 
 export async function getSessionList(
@@ -33,8 +33,7 @@ export async function getSessionList(
     `,
     query_params: {
       projectId,
-      from: dateRange.from,
-      to: dateRange.to,
+      ...chDateParams(dateRange),
       limit: limit + 1,
       ...(cursor && { cursor }),
     },

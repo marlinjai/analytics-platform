@@ -1,4 +1,4 @@
-import { getClickHouse } from '../clickhouse';
+import { getClickHouse, chDateParams } from '../clickhouse';
 import type { StatsOverview, TimeseriesPoint, TopPage, DateRange } from '@analytics-platform/shared';
 
 export async function getStatsOverview(
@@ -29,8 +29,7 @@ export async function getStatsOverview(
     `,
     query_params: {
       projectId,
-      from: dateRange.from,
-      to: dateRange.to,
+      ...chDateParams(dateRange),
     },
     format: 'JSONEachRow',
   });
@@ -75,8 +74,7 @@ export async function getTimeseries(
     `,
     query_params: {
       projectId,
-      from: dateRange.from,
-      to: dateRange.to,
+      ...chDateParams(dateRange),
     },
     format: 'JSONEachRow',
   });
@@ -107,8 +105,7 @@ export async function getTopPages(
     `,
     query_params: {
       projectId,
-      from: dateRange.from,
-      to: dateRange.to,
+      ...chDateParams(dateRange),
     },
     format: 'JSONEachRow',
   });
