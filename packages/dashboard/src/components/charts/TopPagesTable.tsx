@@ -9,9 +9,10 @@ type SortKey = 'views' | 'visitors';
 interface Props {
   pages: TopPage[];
   loading: boolean;
+  onFilterClick?: (url: string) => void;
 }
 
-export function TopPagesTable({ pages, loading }: Props) {
+export function TopPagesTable({ pages, loading, onFilterClick }: Props) {
   const [sortBy, setSortBy] = useState<SortKey>('views');
 
   const sorted = [...pages].sort((a, b) => b[sortBy] - a[sortBy]);
@@ -53,7 +54,11 @@ export function TopPagesTable({ pages, loading }: Props) {
               </tr>
             ) : (
               sorted.map((page) => (
-                <tr key={page.url} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                <tr
+                  key={page.url}
+                  className={`border-b border-gray-800/50 hover:bg-gray-800/30 ${onFilterClick ? 'cursor-pointer' : ''}`}
+                  onClick={() => onFilterClick?.(page.url)}
+                >
                   <td className="max-w-xs truncate px-4 py-2 text-gray-300">{page.url}</td>
                   <td className="px-4 py-2 text-gray-100">{page.views.toLocaleString()}</td>
                   <td className="px-4 py-2 text-gray-100">{page.visitors.toLocaleString()}</td>

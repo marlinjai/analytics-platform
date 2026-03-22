@@ -60,6 +60,52 @@ export function parseUserAgent(ua: string): UAParsed {
   return { browser, os };
 }
 
+// ── GeoIP ────────────────────────────────────────────────────
+
+interface GeoResult {
+  country: string;
+  countryCode: string;
+}
+
+// Simple in-memory cache: ip → { country, countryCode, expiresAt }
+const geoCache = new Map<string, GeoResult & { expiresAt: number }>();
+const GEO_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// IPs to skip (private / loopback)
+const PRIVATE_IP_RE =
+  /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|::1$|fc00:|fe80:)/;
+
+async function lookupCountry(ip: string): Promise<GeoResult> {
+  if (!ip || PRIVATE_IP_RE.test(ip)) {
+    return { country: '', countryCode: '' };
+  }
+
+  const cached = geoCache.get(ip);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { country: cached.country, countryCode: cached.countryCode };
+  }
+
+  try {
+    const res = await fetch(
+      `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=country,countryCode`,
+      { signal: AbortSignal.timeout(2000) }
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { country?: string; countryCode?: string };
+      const result: GeoResult = {
+        country: data.country ?? '',
+        countryCode: data.countryCode ?? '',
+      };
+      geoCache.set(ip, { ...result, expiresAt: Date.now() + GEO_CACHE_TTL_MS });
+      return result;
+    }
+  } catch {
+    // Network error or timeout — fall through to empty result
+  }
+
+  return { country: '', countryCode: '' };
+}
+
 export async function enrichEvents(
   events: TrackerEvent[],
   ip: string
@@ -68,13 +114,16 @@ export async function enrichEvents(
   const ipHash = await sha256(`${ip}:${salt}`);
   const receivedAt = Date.now();
 
+  // One GeoIP lookup per batch (all events share the same IP)
+  const { country } = await lookupCountry(ip);
+
   return events.map((event) => {
     const { browser, os } = parseUserAgent(event.userAgent ?? '');
     return {
       ...event,
       eventId: crypto.randomUUID(),
       ipHash,
-      country: '', // stub — add GeoIP lookup later
+      country,
       receivedAt,
       browser,
       os,

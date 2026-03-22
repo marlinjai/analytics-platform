@@ -1,14 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import type { DeviceType, TopPage } from '@analytics-platform/shared';
 import { SkeletonUrlList } from '@/components/ui/Skeleton';
 import { UrlSelector } from '@/components/heatmap/UrlSelector';
 import { DeviceToggle } from '@/components/heatmap/DeviceToggle';
 import { DateRangePicker } from '@/components/layout/DateRangePicker';
 import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
+import { ScrollDepthChart } from '@/components/charts/ScrollDepthChart';
+import { RageClicksTable } from '@/components/charts/RageClicksTable';
+import type { ScrollDepthRow, RageClickRow } from '@/lib/queries/advanced';
 
 export default function HeatmapPage() {
+  return <Suspense><HeatmapPageInner /></Suspense>;
+}
+
+function HeatmapPageInner() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [from, setFrom] = useState(() => new Date(Date.now() - 7 * 86400000).toISOString());
   const [to, setTo] = useState(() => new Date().toISOString());
@@ -17,6 +24,14 @@ export default function HeatmapPage() {
   const [selectedUrl, setSelectedUrl] = useState('');
   const [deviceType, setDeviceType] = useState<DeviceType | ''>('');
   const [bookmarkletHref, setBookmarkletHref] = useState('');
+
+  // Scroll depth state
+  const [scrollData, setScrollData] = useState<ScrollDepthRow[]>([]);
+  const [loadingScroll, setLoadingScroll] = useState(false);
+
+  // Rage clicks state
+  const [rageClicks, setRageClicks] = useState<RageClickRow[]>([]);
+  const [loadingRageClicks, setLoadingRageClicks] = useState(false);
 
   // Build bookmarklet href on client only (needs window.location.origin)
   useEffect(() => {
@@ -41,6 +56,28 @@ export default function HeatmapPage() {
       .finally(() => setLoadingUrls(false));
   }, [projectId, from, to]);
 
+  // Fetch scroll depth data
+  useEffect(() => {
+    if (!projectId) return;
+    setLoadingScroll(true);
+    fetch(`/api/stats/scroll?projectId=${projectId}&from=${from}&to=${to}`)
+      .then((r) => r.json())
+      .then((data) => setScrollData(data.data ?? []))
+      .catch(() => {})
+      .finally(() => setLoadingScroll(false));
+  }, [projectId, from, to]);
+
+  // Fetch rage clicks
+  useEffect(() => {
+    if (!projectId) return;
+    setLoadingRageClicks(true);
+    fetch(`/api/stats/rage-clicks?projectId=${projectId}&from=${from}&to=${to}`)
+      .then((r) => r.json())
+      .then((data) => setRageClicks(data.data ?? []))
+      .catch(() => {})
+      .finally(() => setLoadingRageClicks(false));
+  }, [projectId, from, to]);
+
   return (
     <div className="space-y-6">
       {/* Project & date controls */}
@@ -61,7 +98,7 @@ export default function HeatmapPage() {
 
       {!projectId ? (
         <div className="flex h-64 items-center justify-center rounded-xl border border-gray-800 bg-gray-900">
-          <p className="text-sm text-gray-500">Select a project to generate your toolbar bookmarklet.</p>
+          <p className="text-sm text-gray-500">Select a project to view heatmap data.</p>
         </div>
       ) : (
         <>
@@ -117,6 +154,28 @@ export default function HeatmapPage() {
             ) : (
               <p className="mt-4 text-sm text-gray-500">No tracked pages found for the selected date range.</p>
             )}
+          </div>
+
+          {/* Scroll Depth */}
+          <div className="rounded-xl border border-gray-800 bg-gray-900 p-6">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-white">Scroll Depth</h2>
+              <p className="mt-1 text-sm text-gray-400">
+                How far visitors scroll on each page. Bars show the depth reached by each percentile of sessions.
+              </p>
+            </div>
+            <ScrollDepthChart data={scrollData} loading={loadingScroll} />
+          </div>
+
+          {/* Rage Clicks */}
+          <div className="rounded-xl border border-gray-800 bg-gray-900 p-6">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-white">Rage Clicks</h2>
+              <p className="mt-1 text-sm text-gray-400">
+                Elements clicked 3 or more times in rapid succession — a sign of user frustration.
+              </p>
+            </div>
+            <RageClicksTable data={rageClicks} loading={loadingRageClicks} />
           </div>
         </>
       )}

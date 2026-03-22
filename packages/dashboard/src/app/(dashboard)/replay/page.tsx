@@ -1,12 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import type { SessionSummary } from '@analytics-platform/shared';
 import { SessionList } from '@/components/replay/SessionList';
 import { DateRangePicker } from '@/components/layout/DateRangePicker';
 import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
 
 export default function ReplayListPage() {
+  return <Suspense><ReplayListPageInner /></Suspense>;
+}
+
+function ReplayListPageInner() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [from, setFrom] = useState(() => new Date(Date.now() - 7 * 86400000).toISOString());
   const [to, setTo] = useState(() => new Date().toISOString());

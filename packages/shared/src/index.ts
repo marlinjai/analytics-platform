@@ -29,6 +29,8 @@ export type {
   TopPage,
   TopSource,
   BreakdownRow,
+  CountryRow,
+  DashboardFilters,
   HeatmapPoint,
   SessionSummary,
   Project,

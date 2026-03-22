@@ -1,16 +1,24 @@
 'use client';
 
-import type { BreakdownRow } from '@analytics-platform/shared';
+import type { CountryRow } from '@analytics-platform/shared';
 
 interface Props {
-  title: string;
-  rows: BreakdownRow[];
+  countries: CountryRow[];
   loading: boolean;
-  onFilterClick?: (name: string) => void;
+  onFilterClick?: (country: string) => void;
 }
 
-export function TechBreakdown({ title, rows, loading, onFilterClick }: Props) {
-  const maxVisitors = rows[0]?.visitors ?? 1;
+/** Convert a 2-letter ISO country code to a flag emoji */
+function countryCodeToFlag(code: string): string {
+  if (!code || code.length !== 2) return '';
+  const codePoints = [...code.toUpperCase()].map(
+    (ch) => 0x1f1e0 + ch.charCodeAt(0) - 'A'.charCodeAt(0)
+  );
+  return String.fromCodePoint(...codePoints);
+}
+
+export function CountriesTable({ countries, loading, onFilterClick }: Props) {
+  const maxVisitors = countries[0]?.visitors ?? 1;
 
   if (loading) {
     return (
@@ -23,35 +31,39 @@ export function TechBreakdown({ title, rows, loading, onFilterClick }: Props) {
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900">
       <div className="border-b border-gray-800 px-4 py-3">
-        <h3 className="text-sm font-medium text-gray-300">{title}</h3>
+        <h3 className="text-sm font-medium text-gray-300">Countries</h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-800 text-left text-xs text-gray-500">
-              <th className="px-4 py-2 font-medium">Name</th>
+              <th className="px-4 py-2 font-medium">Country</th>
               <th className="px-4 py-2 font-medium">Visitors</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {countries.length === 0 ? (
               <tr>
                 <td colSpan={2} className="px-4 py-6 text-center text-gray-500">
-                  No data yet
+                  No country data yet
                 </td>
               </tr>
             ) : (
-              rows.map((row) => {
+              countries.map((row) => {
                 const pct = Math.round((row.visitors / maxVisitors) * 100);
+                const flag = countryCodeToFlag(row.countryCode);
                 return (
                   <tr
-                    key={row.name}
+                    key={row.country}
                     className={`border-b border-gray-800/50 hover:bg-gray-800/30 ${onFilterClick ? 'cursor-pointer' : ''}`}
-                    onClick={() => onFilterClick?.(row.name)}
+                    onClick={() => onFilterClick?.(row.country)}
                   >
                     <td className="px-4 py-2">
                       <div className="flex flex-col gap-1">
-                        <span className="text-gray-300">{row.name || 'Unknown'}</span>
+                        <span className="flex items-center gap-2 text-gray-300">
+                          {flag && <span aria-hidden="true">{flag}</span>}
+                          {row.country || 'Unknown'}
+                        </span>
                         <div className="h-1 w-full overflow-hidden rounded-full bg-gray-800">
                           <div
                             className="h-full rounded-full bg-indigo-500"

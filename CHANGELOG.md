@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-22
+
+### Added
+- **GeoIP integration** — enrichment pipeline calls ip-api.com with in-memory 24-hour cache; country stored on every event
+- **Country breakdown** — new `GET /api/stats/countries` route + `CountriesTable` component with flag emojis and bar charts
+- **Data export** — `GET /api/stats/export?format=csv|json` downloads all stats (pages, sources, browsers, OS, devices, countries) as a single file; export button with dropdown added to Overview header
+- **Dashboard filters** — filter state (page, country, browser, OS, device, source) encoded in URL search params for shareable views
+- **Click-to-filter** — clicking any row in TopPages, Sources, Countries, Browsers, OS, or Devices tables sets a filter and re-fetches all stats
+- **Filter pill bar** — active filters shown as dismissible pills with per-filter X buttons and "Clear all"; disappears when no filters are active
+- `CountryRow` and `DashboardFilters` types exported from `@analytics-platform/shared`
+
+### Changed
+- All `/api/stats/*` routes accept optional `page`, `country`, `browser`, `os`, `device`, `source` query params (backward compatible)
+- All stats query functions in `lib/queries/stats.ts` accept an optional `DashboardFilters` argument
+- Overview page grid now includes Countries table alongside Sources, Browsers, OS, and Devices
+
 ## [0.3.0] - 2026-03-22
 
 ### Added

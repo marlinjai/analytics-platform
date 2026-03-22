@@ -3,6 +3,36 @@
 import { useEffect, useState, useCallback } from 'react';
 import { SkeletonProjectList, SkeletonKeyList } from '@/components/ui/Skeleton';
 
+// ---------------------------------------------------------------------------
+// SDK Settings types & defaults
+// ---------------------------------------------------------------------------
+interface SdkSettings {
+  replay: boolean;
+  heatmap: boolean;
+  scrollDepth: boolean;
+}
+
+const SDK_DEFAULTS: SdkSettings = {
+  replay: false,
+  heatmap: true,
+  scrollDepth: true,
+};
+
+const SDK_TOGGLE_LABELS: Record<keyof SdkSettings, { label: string; description: string }> = {
+  replay: {
+    label: 'Session Replay',
+    description: 'Record and replay user sessions. Increases data volume.',
+  },
+  heatmap: {
+    label: 'Heatmaps',
+    description: 'Track click and scroll heatmap data.',
+  },
+  scrollDepth: {
+    label: 'Scroll Depth',
+    description: 'Measure how far down the page users scroll.',
+  },
+};
+
 interface Project {
   id: string;
   name: string;
@@ -33,6 +63,11 @@ export default function SettingsPage() {
   const [showRevoked, setShowRevoked] = useState(false);
   const [copied, setCopied] = useState(false);
   const [rotatingKeyId, setRotatingKeyId] = useState<string | null>(null);
+
+  // SDK settings state
+  const [sdkSettings, setSdkSettings] = useState<SdkSettings>(SDK_DEFAULTS);
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   async function copyToClipboard(text: string) {
     await navigator.clipboard.writeText(text);
@@ -72,6 +107,45 @@ export default function SettingsPage() {
       // silently ignore — user can retry
     } finally {
       setRotatingKeyId(null);
+    }
+  }
+
+  // Fetch SDK settings for the selected project
+  const fetchSettings = useCallback(async (projectId: string) => {
+    if (!projectId) {
+      setSdkSettings(SDK_DEFAULTS);
+      return;
+    }
+    setLoadingSettings(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/settings`);
+      if (!res.ok) throw new Error('Failed to fetch settings');
+      const data = await res.json();
+      setSdkSettings({ ...SDK_DEFAULTS, ...(data.settings ?? {}) });
+    } catch {
+      setSdkSettings(SDK_DEFAULTS);
+    } finally {
+      setLoadingSettings(false);
+    }
+  }, []);
+
+  // Toggle a single SDK setting
+  async function handleToggle(key: keyof SdkSettings) {
+    if (!selectedProjectId) return;
+    const newValue = !sdkSettings[key];
+    setSdkSettings((prev) => ({ ...prev, [key]: newValue }));
+    setSavingSettings(true);
+    try {
+      await fetch(`/api/projects/${selectedProjectId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: newValue }),
+      });
+    } catch {
+      // Revert optimistic update on failure
+      setSdkSettings((prev) => ({ ...prev, [key]: !newValue }));
+    } finally {
+      setSavingSettings(false);
     }
   }
 
@@ -116,7 +190,8 @@ export default function SettingsPage() {
   useEffect(() => {
     setRevealedKey(null);
     fetchKeys(selectedProjectId);
-  }, [selectedProjectId, fetchKeys]);
+    fetchSettings(selectedProjectId);
+  }, [selectedProjectId, fetchKeys, fetchSettings]);
 
   // Delete project
   async function handleDeleteProject(project: Project) {
@@ -204,29 +279,90 @@ export default function SettingsPage() {
         )}
       </section>
 
+      {/* Shared project selector */}
+      <section className="rounded-xl border border-gray-800 bg-gray-900 p-6">
+        <h2 className="mb-4 text-lg font-semibold text-gray-100">Selected Project</h2>
+        <label htmlFor="project-select-top" className="mb-1 block text-sm text-gray-400">
+          Choose a project to manage its settings and API keys
+        </label>
+        <select
+          id="project-select-top"
+          value={selectedProjectId}
+          onChange={(e) => setSelectedProjectId(e.target.value)}
+          className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+        >
+          <option value="">— Choose a project —</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </section>
+
+      {/* SDK Feature Toggles section */}
+      <section className="rounded-xl border border-gray-800 bg-gray-900 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-100">SDK Configuration</h2>
+            <p className="mt-0.5 text-xs text-gray-400">
+              Feature toggles applied to the tracker SDK at runtime. Changes take effect within ~60 seconds.
+            </p>
+          </div>
+          {savingSettings && (
+            <span className="text-xs text-gray-500">Saving…</span>
+          )}
+        </div>
+
+        {!selectedProjectId ? (
+          <p className="text-sm text-gray-400">Select a project above to manage its SDK settings.</p>
+        ) : loadingSettings ? (
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-800" />
+            ))}
+          </div>
+        ) : (
+          <ul className="divide-y divide-gray-800">
+            {(Object.keys(SDK_DEFAULTS) as (keyof SdkSettings)[]).map((key) => {
+              const { label, description } = SDK_TOGGLE_LABELS[key];
+              const enabled = sdkSettings[key];
+              return (
+                <li key={key} className="flex items-center justify-between py-4">
+                  <div className="min-w-0 pr-4">
+                    <p className="text-sm font-medium text-gray-100">{label}</p>
+                    <p className="text-xs text-gray-400">{description}</p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={enabled}
+                    aria-label={`Toggle ${label}`}
+                    onClick={() => handleToggle(key)}
+                    disabled={savingSettings}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                      enabled ? 'bg-blue-600' : 'bg-gray-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                        enabled ? 'translate-x-4' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       {/* API Keys section */}
       <section className="rounded-xl border border-gray-800 bg-gray-900 p-6">
         <h2 className="mb-4 text-lg font-semibold text-gray-100">API Keys</h2>
 
-        {/* Project selector */}
-        <div className="mb-4">
-          <label htmlFor="project-select" className="mb-1 block text-sm text-gray-400">
-            Select project
-          </label>
-          <select
-            id="project-select"
-            value={selectedProjectId}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
-            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
-          >
-            <option value="">— Choose a project —</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {!selectedProjectId && (
+          <p className="mb-4 text-sm text-gray-400">Select a project above to manage its API keys.</p>
+        )}
 
         {selectedProjectId && (
           <>

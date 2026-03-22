@@ -1,11 +1,74 @@
 import { getClickHouse, chDateParams } from '../clickhouse';
-import type { StatsOverview, TimeseriesPoint, TopPage, TopSource, BreakdownRow, DateRange } from '@analytics-platform/shared';
+import type {
+  StatsOverview,
+  TimeseriesPoint,
+  TopPage,
+  TopSource,
+  BreakdownRow,
+  CountryRow,
+  DateRange,
+  DashboardFilters,
+} from '@analytics-platform/shared';
+
+// ── Filter helpers ────────────────────────────────────────────
+
+/**
+ * Build additional WHERE clauses from optional dashboard filters.
+ * Returns { clauses: string[], params: Record<string, string> }
+ */
+function buildFilterClauses(filters?: DashboardFilters): {
+  clauses: string[];
+  params: Record<string, string>;
+} {
+  const clauses: string[] = [];
+  const params: Record<string, string> = {};
+
+  if (filters?.page) {
+    clauses.push('url = {filterPage: String}');
+    params.filterPage = filters.page;
+  }
+  if (filters?.country) {
+    clauses.push('country = {filterCountry: String}');
+    params.filterCountry = filters.country;
+  }
+  if (filters?.browser) {
+    clauses.push('browser = {filterBrowser: String}');
+    params.filterBrowser = filters.browser;
+  }
+  if (filters?.os) {
+    clauses.push('os = {filterOs: String}');
+    params.filterOs = filters.os;
+  }
+  if (filters?.device) {
+    clauses.push('device_type = {filterDevice: String}');
+    params.filterDevice = filters.device;
+  }
+  if (filters?.source) {
+    clauses.push('domain(referrer) = {filterSource: String}');
+    params.filterSource = filters.source;
+  }
+
+  return { clauses, params };
+}
+
+function filterWhere(filters?: DashboardFilters): {
+  sql: string;
+  params: Record<string, string>;
+} {
+  const { clauses, params } = buildFilterClauses(filters);
+  const sql = clauses.length > 0 ? '\n        AND ' + clauses.join('\n        AND ') : '';
+  return { sql, params };
+}
+
+// ── Queries ───────────────────────────────────────────────────
 
 export async function getStatsOverview(
   projectId: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  filters?: DashboardFilters
 ): Promise<StatsOverview> {
   const ch = getClickHouse();
+  const { sql: fSql, params: fParams } = filterWhere(filters);
 
   // Event-level metrics
   const eventResult = await ch.query({
@@ -16,9 +79,9 @@ export async function getStatsOverview(
       FROM analytics.events
       WHERE project_id = {projectId: UUID}
         AND timestamp >= {from: DateTime64(3)}
-        AND timestamp <= {to: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}${fSql}
     `,
-    query_params: { projectId, ...chDateParams(dateRange) },
+    query_params: { projectId, ...chDateParams(dateRange), ...fParams },
     format: 'JSONEachRow',
   });
 
@@ -37,11 +100,11 @@ export async function getStatsOverview(
         FROM analytics.events
         WHERE project_id = {projectId: UUID}
           AND timestamp >= {from: DateTime64(3)}
-          AND timestamp <= {to: DateTime64(3)}
+          AND timestamp <= {to: DateTime64(3)}${fSql}
         GROUP BY session_id
       )
     `,
-    query_params: { projectId, ...chDateParams(dateRange) },
+    query_params: { projectId, ...chDateParams(dateRange), ...fParams },
     format: 'JSONEachRow',
   });
 
@@ -61,9 +124,11 @@ export async function getStatsOverview(
 export async function getTimeseries(
   projectId: string,
   dateRange: DateRange,
-  interval: 'hour' | 'day' | 'week' | 'month' = 'day'
+  interval: 'hour' | 'day' | 'week' | 'month' = 'day',
+  filters?: DashboardFilters
 ): Promise<TimeseriesPoint[]> {
   const ch = getClickHouse();
+  const { sql: fSql, params: fParams } = filterWhere(filters);
 
   const intervalFn = {
     hour: 'toStartOfHour',
@@ -81,13 +146,14 @@ export async function getTimeseries(
       WHERE project_id = {projectId: UUID}
         AND type = 'pageview'
         AND timestamp >= {from: DateTime64(3)}
-        AND timestamp <= {to: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}${fSql}
       GROUP BY timestamp
       ORDER BY timestamp
     `,
     query_params: {
       projectId,
       ...chDateParams(dateRange),
+      ...fParams,
     },
     format: 'JSONEachRow',
   });
@@ -97,9 +163,11 @@ export async function getTimeseries(
 
 export async function getTopPages(
   projectId: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  filters?: DashboardFilters
 ): Promise<TopPage[]> {
   const ch = getClickHouse();
+  const { sql: fSql, params: fParams } = filterWhere(filters);
 
   const result = await ch.query({
     query: `
@@ -111,7 +179,7 @@ export async function getTopPages(
       WHERE project_id = {projectId: UUID}
         AND type = 'pageview'
         AND timestamp >= {from: DateTime64(3)}
-        AND timestamp <= {to: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}${fSql}
       GROUP BY url
       ORDER BY views DESC
       LIMIT 50
@@ -119,6 +187,7 @@ export async function getTopPages(
     query_params: {
       projectId,
       ...chDateParams(dateRange),
+      ...fParams,
     },
     format: 'JSONEachRow',
   });
@@ -128,9 +197,11 @@ export async function getTopPages(
 
 export async function getTopSources(
   projectId: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  filters?: DashboardFilters
 ): Promise<TopSource[]> {
   const ch = getClickHouse();
+  const { sql: fSql, params: fParams } = filterWhere(filters);
 
   const result = await ch.query({
     query: `
@@ -142,7 +213,7 @@ export async function getTopSources(
         AND type = 'pageview'
         AND referrer != ''
         AND timestamp >= {from: DateTime64(3)}
-        AND timestamp <= {to: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}${fSql}
       GROUP BY domain
       ORDER BY visitors DESC
       LIMIT 50
@@ -150,6 +221,7 @@ export async function getTopSources(
     query_params: {
       projectId,
       ...chDateParams(dateRange),
+      ...fParams,
     },
     format: 'JSONEachRow',
   });
@@ -159,9 +231,11 @@ export async function getTopSources(
 
 export async function getBrowserBreakdown(
   projectId: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  filters?: DashboardFilters
 ): Promise<BreakdownRow[]> {
   const ch = getClickHouse();
+  const { sql: fSql, params: fParams } = filterWhere(filters);
 
   const result = await ch.query({
     query: `
@@ -173,7 +247,7 @@ export async function getBrowserBreakdown(
         AND type = 'pageview'
         AND browser != ''
         AND timestamp >= {from: DateTime64(3)}
-        AND timestamp <= {to: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}${fSql}
       GROUP BY name
       ORDER BY visitors DESC
       LIMIT 50
@@ -181,6 +255,7 @@ export async function getBrowserBreakdown(
     query_params: {
       projectId,
       ...chDateParams(dateRange),
+      ...fParams,
     },
     format: 'JSONEachRow',
   });
@@ -190,9 +265,11 @@ export async function getBrowserBreakdown(
 
 export async function getOsBreakdown(
   projectId: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  filters?: DashboardFilters
 ): Promise<BreakdownRow[]> {
   const ch = getClickHouse();
+  const { sql: fSql, params: fParams } = filterWhere(filters);
 
   const result = await ch.query({
     query: `
@@ -204,7 +281,7 @@ export async function getOsBreakdown(
         AND type = 'pageview'
         AND os != ''
         AND timestamp >= {from: DateTime64(3)}
-        AND timestamp <= {to: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}${fSql}
       GROUP BY name
       ORDER BY visitors DESC
       LIMIT 50
@@ -212,6 +289,7 @@ export async function getOsBreakdown(
     query_params: {
       projectId,
       ...chDateParams(dateRange),
+      ...fParams,
     },
     format: 'JSONEachRow',
   });
@@ -221,9 +299,11 @@ export async function getOsBreakdown(
 
 export async function getDeviceBreakdown(
   projectId: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  filters?: DashboardFilters
 ): Promise<BreakdownRow[]> {
   const ch = getClickHouse();
+  const { sql: fSql, params: fParams } = filterWhere(filters);
 
   const result = await ch.query({
     query: `
@@ -235,7 +315,7 @@ export async function getDeviceBreakdown(
         AND type = 'pageview'
         AND device_type != ''
         AND timestamp >= {from: DateTime64(3)}
-        AND timestamp <= {to: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}${fSql}
       GROUP BY name
       ORDER BY visitors DESC
       LIMIT 50
@@ -243,9 +323,50 @@ export async function getDeviceBreakdown(
     query_params: {
       projectId,
       ...chDateParams(dateRange),
+      ...fParams,
     },
     format: 'JSONEachRow',
   });
 
   return result.json<BreakdownRow>();
+}
+
+export async function getCountryBreakdown(
+  projectId: string,
+  dateRange: DateRange,
+  filters?: DashboardFilters
+): Promise<CountryRow[]> {
+  const ch = getClickHouse();
+  const { sql: fSql, params: fParams } = filterWhere(filters);
+
+  const result = await ch.query({
+    query: `
+      SELECT
+        country,
+        country AS country_code,
+        uniqExact(ip_hash) AS visitors
+      FROM analytics.events
+      WHERE project_id = {projectId: UUID}
+        AND type = 'pageview'
+        AND country != ''
+        AND timestamp >= {from: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}${fSql}
+      GROUP BY country
+      ORDER BY visitors DESC
+      LIMIT 50
+    `,
+    query_params: {
+      projectId,
+      ...chDateParams(dateRange),
+      ...fParams,
+    },
+    format: 'JSONEachRow',
+  });
+
+  const rows = await result.json<{ country: string; country_code: string; visitors: number }>();
+  return rows.map((r) => ({
+    country: r.country,
+    countryCode: r.country_code,
+    visitors: r.visitors,
+  }));
 }

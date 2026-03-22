@@ -5,13 +5,14 @@ import type { TopSource } from '@analytics-platform/shared';
 interface Props {
   sources: TopSource[];
   loading: boolean;
+  onFilterClick?: (domain: string) => void;
 }
 
 function getFaviconUrl(domain: string): string {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=16`;
 }
 
-export function SourcesTable({ sources, loading }: Props) {
+export function SourcesTable({ sources, loading, onFilterClick }: Props) {
   if (loading) {
     return (
       <div className="flex h-48 items-center justify-center rounded-xl border border-gray-800 bg-gray-900">
@@ -44,7 +45,8 @@ export function SourcesTable({ sources, loading }: Props) {
               sources.map((source) => (
                 <tr
                   key={source.domain}
-                  className="border-b border-gray-800/50 hover:bg-gray-800/30"
+                  className={`border-b border-gray-800/50 hover:bg-gray-800/30 ${onFilterClick ? 'cursor-pointer' : ''}`}
+                  onClick={() => onFilterClick?.(source.domain)}
                 >
                   <td className="flex items-center gap-2 px-4 py-2 text-gray-300">
                     {/* eslint-disable-next-line @next/next/no-img-element */}

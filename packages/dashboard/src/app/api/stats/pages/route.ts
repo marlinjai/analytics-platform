@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTopPages } from '@/lib/queries/stats';
 import { auth } from '@/lib/auth';
 import { checkProjectMembership } from '@/lib/auth-check';
+import type { DashboardFilters } from '@analytics-platform/shared';
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -22,6 +23,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const pages = await getTopPages(projectId, { from, to });
+  const filters: DashboardFilters = {
+    page: params.get('page') ?? undefined,
+    country: params.get('country') ?? undefined,
+    browser: params.get('browser') ?? undefined,
+    os: params.get('os') ?? undefined,
+    device: params.get('device') ?? undefined,
+    source: params.get('source') ?? undefined,
+  };
+
+  const pages = await getTopPages(projectId, { from, to }, filters);
   return NextResponse.json({ pages });
 }

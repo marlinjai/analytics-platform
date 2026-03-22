@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOsBreakdown } from '@/lib/queries/stats';
+import { getCountryBreakdown } from '@/lib/queries/stats';
 import { auth } from '@/lib/auth';
 import { checkProjectMembership } from '@/lib/auth-check';
 import type { DashboardFilters } from '@analytics-platform/shared';
@@ -32,6 +32,6 @@ export async function GET(request: NextRequest) {
     source: params.get('source') ?? undefined,
   };
 
-  const os = await getOsBreakdown(projectId, { from, to }, filters);
-  return NextResponse.json({ os });
+  const countries = await getCountryBreakdown(projectId, { from, to }, filters);
+  return NextResponse.json({ countries });
 }

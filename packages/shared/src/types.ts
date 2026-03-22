@@ -111,6 +111,21 @@ export interface BreakdownRow {
   visitors: number;
 }
 
+export interface CountryRow {
+  country: string;
+  countryCode: string;
+  visitors: number;
+}
+
+export interface DashboardFilters {
+  page?: string;
+  country?: string;
+  browser?: string;
+  os?: string;
+  device?: string;
+  source?: string;
+}
+
 export interface HeatmapPoint {
   x: number;
   y: number;

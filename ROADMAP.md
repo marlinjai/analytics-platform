@@ -68,17 +68,17 @@
 
 ## Phase 6: Analytics Depth (in progress)
 - [x] Web analytics: UTM tracking, referrer parsing
-- [ ] Geographic data (GeoIP integration — MaxMind GeoLite2)
+- [x] Geographic data (GeoIP via ip-api.com with in-memory cache; country breakdown table + flag emojis)
 - [x] Device/browser/OS breakdowns (parse user agent server-side)
 - [x] Traffic sources table (referrers grouped by domain)
 - [ ] Funnel analysis — define step sequences, measure conversion
 - [ ] Scroll depth heatmap — gradient overlay showing drop-off
 - [ ] Rage click detection — highlight frustration points
 - [ ] Engagement zones — element-level click aggregation
-- [ ] Data export (CSV, JSON API)
+- [x] Data export (CSV and JSON via /api/stats/export; export button in dashboard header)
 - [ ] Custom date ranges with calendar picker
-- [ ] Dashboard filters (browser, OS, country, page)
-- [ ] Click-to-filter (click any table row to filter entire dashboard)
+- [x] Dashboard filters (browser, OS, country, page, source, device) — URL-encoded for shareable views
+- [x] Click-to-filter (click any table row to filter entire dashboard)
 
 ## Phase 7: Real-time & Scale
 - [ ] Real-time dashboard (WebSocket / SSE live counters)
