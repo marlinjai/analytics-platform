@@ -107,11 +107,32 @@ FROM analytics.events
 GROUP BY project_id, session_id
 `;
 
+/** Click heatmap aggregation per project + URL + selector (element-based). */
+export const CREATE_HEATMAP_SELECTORS_MV = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS analytics.heatmap_selectors_mv
+ENGINE = SummingMergeTree()
+PARTITION BY toYYYYMM(day)
+ORDER BY (project_id, url, device_type, selector, day)
+AS SELECT
+    project_id,
+    url,
+    device_type,
+    toDate(timestamp)              AS day,
+    selector,
+    count()                        AS click_count,
+    uniqExact(session_id)          AS session_count
+FROM analytics.events
+WHERE type = 'click'
+  AND selector != ''
+GROUP BY project_id, url, device_type, day, selector
+`;
+
 /** All DDL statements in execution order. */
 export const ALL_DDL = [
   CREATE_DATABASE,
   CREATE_EVENTS_TABLE,
   CREATE_PAGEVIEWS_MV,
   CREATE_HEATMAP_MV,
+  CREATE_HEATMAP_SELECTORS_MV,
   CREATE_SESSIONS_MV,
 ] as const;

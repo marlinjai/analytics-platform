@@ -72,10 +72,16 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === "LOAD_HEATMAP_RESULT") {
-      if (message.error) {
+      if ((message as { fallback?: boolean }).fallback) {
+        showStatus("Coordinate heatmap (element mode pending deploy)", false);
+      } else if (message.error) {
         showStatus(`Error: ${message.error}`, true);
+      } else {
+        const data = message.data as { type?: string; count?: number } | null;
+        if (data?.type === "elements") {
+          showStatus(`${data.count} elements highlighted`, false);
+        }
       }
-      // Heatmap canvas was rendered in main world by background script
       sendResponse({ ok: true });
       return;
     }
@@ -413,6 +419,12 @@ function activateMode(mode: OverlayMode): void {
 
   if (mode === "off" || !currentConfig) return;
 
+  // Detect canvas-only pages (Flutter CanvasKit, Unity WebGL, etc.)
+  const isCanvasOnly = detectCanvasOnlyPage();
+  if (mode === "clicks" && isCanvasOnly) {
+    showStatus("Canvas page — coordinate heatmap", false);
+  }
+
   // Ask background to fetch data and inject rendering
   chrome.runtime.sendMessage({
     type: "LOAD_OVERLAY_DATA",
@@ -426,7 +438,16 @@ function activateMode(mode: OverlayMode): void {
     url: location.href,
     pageWidth: Math.max(document.body.scrollWidth, document.documentElement.scrollWidth),
     pageHeight: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight),
+    isCanvasOnly,
   });
+}
+
+function detectCanvasOnlyPage(): boolean {
+  const body = document.body;
+  if (!body) return false;
+  if (body.children.length > 3) return false;
+  const nonCanvas = body.querySelectorAll(":scope > :not(canvas):not(script):not(style):not(link)");
+  return nonCanvas.length === 0 && body.querySelectorAll("canvas").length >= 1;
 }
 
 // ─── Overlay management ───────────────────────────────────────────────────────
@@ -450,6 +471,21 @@ function clearOverlayContent(): void {
   // Remove injected style
   const rageStyle = document.getElementById("lumitra-rage-style");
   if (rageStyle) rageStyle.remove();
+
+  // Remove element heat overlay
+  document.querySelectorAll("[data-lumitra-element-heat]").forEach((el) => {
+    const htmlEl = el as HTMLElement;
+    htmlEl.style.removeProperty("box-shadow");
+    htmlEl.style.removeProperty("outline");
+    el.removeAttribute("data-lumitra-element-heat");
+    el.removeAttribute("data-lumitra-sessions");
+  });
+  const elementStyle = document.getElementById("lumitra-element-style");
+  if (elementStyle) elementStyle.remove();
+
+  // Remove inspector tooltip and listener
+  const tooltip = document.getElementById("lumitra-inspector-tooltip");
+  if (tooltip) tooltip.remove();
 }
 
 function showStatus(text: string, isError: boolean): void {

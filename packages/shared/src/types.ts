@@ -132,6 +132,12 @@ export interface HeatmapPoint {
   count: number;
 }
 
+export interface SelectorHeatmapPoint {
+  selector: string;
+  count: number;
+  sessions: number;
+}
+
 export interface SessionSummary {
   sessionId: string;
   startedAt: string;

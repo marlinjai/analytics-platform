@@ -73,6 +73,10 @@ export const heatmapQuerySchema = z.object({
   deviceType: deviceTypeSchema.optional(),
 });
 
+export const selectorHeatmapQuerySchema = heatmapQuerySchema.extend({
+  limit: z.number().int().min(1).max(500).optional().default(100),
+});
+
 export const sessionListQuerySchema = z.object({
   projectId: z.string().uuid(),
   dateRange: dateRangeSchema,

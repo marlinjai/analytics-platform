@@ -33,6 +33,7 @@ export type BackgroundMessage =
       url: string;
       pageWidth: number;
       pageHeight: number;
+      isCanvasOnly?: boolean;
     };
 
 export type BackgroundResponse =
@@ -65,8 +66,8 @@ async function refreshTokenIfNeeded(): Promise<void> {
     const fresh = await fetchToolbarToken(auth.projectId);
     await setAuth({
       token: fresh.token,
-      projectId: fresh.projectId,
-      expiresAt: fresh.expiresAt,
+      projectId: auth.projectId,
+      expiresAt: new Date(fresh.expiresAt).getTime(),
     });
   } catch (err) {
     console.error("[Lumitra] Token refresh failed:", err);
@@ -103,8 +104,8 @@ async function handleMessage(
         const tokenData = await fetchToolbarToken(message.projectId);
         await setAuth({
           token: tokenData.token,
-          projectId: tokenData.projectId,
-          expiresAt: tokenData.expiresAt,
+          projectId: message.projectId,
+          expiresAt: new Date(tokenData.expiresAt).getTime(),
         });
         return { ok: true };
       } catch (err) {
@@ -195,13 +196,30 @@ async function handleOverlayDataRequest(msg: {
   url: string;
   pageWidth: number;
   pageHeight: number;
+  isCanvasOnly?: boolean;
 }): Promise<BackgroundResponse> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return { ok: false, error: "No active tab" };
 
   try {
     if (msg.mode === "clicks") {
-      return await handleClicksMode(tab.id, msg);
+      if (msg.isCanvasOnly) {
+        return await handleClicksCoordsMode(tab.id, msg);
+      }
+      // Try element-based first, fall back to coordinates if API unavailable
+      try {
+        return await handleElementsMode(tab.id, msg);
+      } catch (elemErr) {
+        console.warn("[Lumitra] Element mode unavailable, falling back to coordinates:", elemErr);
+        await sendToTab(tab.id, {
+          type: "LOAD_HEATMAP_RESULT",
+          mode: "clicks",
+          data: null,
+          error: null,
+          fallback: true,
+        });
+        return await handleClicksCoordsMode(tab.id, msg);
+      }
     } else if (msg.mode === "scroll") {
       return await handleScrollMode(tab.id, msg);
     } else if (msg.mode === "rage") {
@@ -221,7 +239,75 @@ async function handleOverlayDataRequest(msg: {
   }
 }
 
-async function handleClicksMode(
+// ─── Element-based click mode (primary, for DOM pages) ───────────────────────
+
+async function handleElementsMode(
+  tabId: number,
+  msg: {
+    projectId: string;
+    from: string;
+    to: string;
+    deviceType: string;
+    token: string;
+    dashboardOrigin: string;
+    url: string;
+  }
+): Promise<BackgroundResponse> {
+  const params = new URLSearchParams({
+    projectId: msg.projectId,
+    url: msg.url,
+    from: msg.from,
+    to: msg.to,
+    token: msg.token,
+  });
+  if (msg.deviceType && msg.deviceType !== "all") {
+    params.set("deviceType", msg.deviceType);
+  }
+
+  const res = await fetch(`${msg.dashboardOrigin}/api/heatmap/by-selector?${params}`);
+  if (!res.ok) throw new Error(`Selector heatmap API error: ${res.status}`);
+
+  const payload = await res.json();
+  const selectors: Array<{ selector: string; count: number; sessions: number }> =
+    (payload.selectors || []).map(
+      (d: { selector: string; count: number; sessions: number }) => ({
+        selector: String(d.selector || ""),
+        count: Number(d.count) || 0,
+        sessions: Number(d.sessions) || 0,
+      })
+    );
+
+  const maxCount = selectors.length > 0
+    ? Math.max(...selectors.map((s) => s.count))
+    : 1;
+
+  // Inject element heat overlay
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN" as chrome.scripting.ExecutionWorld,
+    func: renderElementHeatmapInMainWorld,
+    args: [selectors, maxCount],
+  });
+
+  // Inject element inspector (hover tooltips)
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN" as chrome.scripting.ExecutionWorld,
+    func: injectElementInspectorInMainWorld,
+  });
+
+  await sendToTab(tabId, {
+    type: "LOAD_HEATMAP_RESULT",
+    mode: "clicks",
+    data: { count: selectors.length, type: "elements" },
+  });
+
+  return { ok: true };
+}
+
+// ─── Coordinate-based click mode (fallback for canvas pages) ─────────────────
+
+async function handleClicksCoordsMode(
   tabId: number,
   msg: {
     projectId: string;
@@ -235,7 +321,6 @@ async function handleClicksMode(
     pageHeight: number;
   }
 ): Promise<BackgroundResponse> {
-  // Fetch heatmap data
   const params = new URLSearchParams({
     projectId: msg.projectId,
     url: msg.url,
@@ -251,29 +336,35 @@ async function handleClicksMode(
   if (!res.ok) throw new Error(`Heatmap API error: ${res.status}`);
 
   const payload = await res.json();
-  const points = payload.points || payload.data || [];
-  const max = payload.max ?? Math.max(...points.map((d: { value: number }) => d.value), 1);
+  const points = (payload.points || payload.data || []).map(
+    (d: { x: number; y: number; value: number }) => ({
+      x: Number(d.x) || 0,
+      y: Number(d.y) || 0,
+      value: Number(d.value) || 0,
+    })
+  );
+  const computedMax = points.length > 0
+    ? Math.max(...points.map((d: { value: number }) => d.value))
+    : 1;
+  const max = Number(payload.max) || computedMax || 1;
 
-  // First inject heatmap.js into main world
   await chrome.scripting.executeScript({
     target: { tabId },
     files: ["heatmap.min.js"],
     world: "MAIN" as chrome.scripting.ExecutionWorld,
   });
 
-  // Then inject rendering code into main world
   await chrome.scripting.executeScript({
     target: { tabId },
     world: "MAIN" as chrome.scripting.ExecutionWorld,
     func: renderHeatmapInMainWorld,
-    args: [points, max, msg.pageWidth, msg.pageHeight],
+    args: [points, max, msg.pageWidth || 1920, msg.pageHeight || 3000],
   });
 
-  // Notify content script
   await sendToTab(tabId, {
     type: "LOAD_HEATMAP_RESULT",
     mode: "clicks",
-    data: { count: points.length },
+    data: { count: points.length, type: "coords" },
   });
 
   return { ok: true };
@@ -323,7 +414,7 @@ async function handleScrollMode(
     target: { tabId },
     world: "MAIN" as chrome.scripting.ExecutionWorld,
     func: renderScrollOverlayInMainWorld,
-    args: [depths, msg.pageHeight],
+    args: [depths, msg.pageHeight || 3000],
   });
 
   await sendToTab(tabId, {
@@ -393,6 +484,106 @@ async function handleRageMode(
 
 // ─── Main-world rendering functions ───────────────────────────────────────────
 // These run in the page's main world via chrome.scripting.executeScript
+
+function renderElementHeatmapInMainWorld(
+  selectors: Array<{ selector: string; count: number; sessions: number }>,
+  maxCount: number
+): void {
+  // Clean up previous element heat
+  document.querySelectorAll("[data-lumitra-element-heat]").forEach((el) => {
+    const htmlEl = el as HTMLElement;
+    htmlEl.style.removeProperty("box-shadow");
+    htmlEl.style.removeProperty("outline");
+    el.removeAttribute("data-lumitra-element-heat");
+    el.removeAttribute("data-lumitra-sessions");
+  });
+
+  const existingStyle = document.getElementById("lumitra-element-style");
+  if (existingStyle) existingStyle.remove();
+
+  if (selectors.length === 0) return;
+
+  // Inject hover tooltip styles
+  const style = document.createElement("style");
+  style.id = "lumitra-element-style";
+  style.textContent = `
+    [data-lumitra-element-heat] {
+      transition: outline 0.2s !important;
+    }
+  `;
+  document.head.appendChild(style);
+
+  selectors.forEach(({ selector, count, sessions }) => {
+    try {
+      const elements = document.querySelectorAll(selector);
+      const intensity = Math.min(count / maxCount, 1);
+      // Hue: 60 (yellow) → 0 (red) based on intensity
+      const hue = Math.round((1 - intensity) * 60);
+      const alpha = (0.15 + intensity * 0.45).toFixed(2);
+      const outlineAlpha = (Number(alpha) + 0.2).toFixed(2);
+
+      elements.forEach((el) => {
+        const htmlEl = el as HTMLElement;
+        htmlEl.setAttribute("data-lumitra-element-heat", String(count));
+        htmlEl.setAttribute("data-lumitra-sessions", String(sessions));
+        htmlEl.style.outline = `2px solid hsla(${hue}, 100%, 50%, ${outlineAlpha})`;
+        htmlEl.style.boxShadow = `inset 0 0 0 1000px hsla(${hue}, 100%, 50%, ${alpha})`;
+      });
+    } catch {
+      // Invalid selector — skip
+    }
+  });
+}
+
+function injectElementInspectorInMainWorld(): void {
+  // Only one inspector at a time
+  const w = window as unknown as { __lumitraInspector?: {
+    handler: (e: MouseEvent) => void;
+    tooltip: HTMLElement;
+  }};
+  if (w.__lumitraInspector) return;
+
+  const tooltip = document.createElement("div");
+  tooltip.id = "lumitra-inspector-tooltip";
+  tooltip.style.cssText = [
+    "position:fixed",
+    "z-index:2147483647",
+    "background:rgba(3,7,18,0.94)",
+    "color:#f3f4f6",
+    "font-size:12px",
+    "font-family:system-ui,-apple-system,sans-serif",
+    "padding:6px 10px",
+    "border-radius:6px",
+    "pointer-events:none",
+    "opacity:0",
+    "transition:opacity 0.12s",
+    "white-space:nowrap",
+    "box-shadow:0 4px 12px rgba(0,0,0,0.4)",
+    "border:1px solid rgba(255,255,255,0.1)",
+  ].join(";");
+  document.body.appendChild(tooltip);
+
+  const handler = (e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const heatEl = target.closest("[data-lumitra-element-heat]") as HTMLElement | null;
+    if (heatEl) {
+      const clicks = heatEl.getAttribute("data-lumitra-element-heat") || "0";
+      const sessions = heatEl.getAttribute("data-lumitra-sessions") || "0";
+      const tag = heatEl.tagName.toLowerCase();
+      const text = (heatEl.textContent || "").trim().slice(0, 30);
+      const label = text ? `<${tag}> "${text}"` : `<${tag}>`;
+      tooltip.innerHTML = `<strong>${clicks}</strong> clicks · ${sessions} sessions<br><span style="color:#6b7280;font-size:11px">${label}</span>`;
+      tooltip.style.left = `${Math.min(e.clientX + 14, window.innerWidth - 220)}px`;
+      tooltip.style.top = `${Math.min(e.clientY + 14, window.innerHeight - 60)}px`;
+      tooltip.style.opacity = "1";
+    } else {
+      tooltip.style.opacity = "0";
+    }
+  };
+
+  document.addEventListener("mousemove", handler, { passive: true });
+  w.__lumitraInspector = { handler, tooltip };
+}
 
 function renderHeatmapInMainWorld(
   points: Array<{ x: number; y: number; value: number }>,
