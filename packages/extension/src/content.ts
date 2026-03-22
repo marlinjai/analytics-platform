@@ -78,8 +78,17 @@ chrome.runtime.onMessage.addListener(
         showStatus(`Error: ${message.error}`, true);
       } else {
         const data = message.data as { type?: string; count?: number } | null;
+        const mode = (message as { mode?: string }).mode;
         if (data?.type === "elements") {
           showStatus(`${data.count} elements highlighted`, false);
+        } else if (mode === "scroll") {
+          showStatus(data ? "Scroll depth loaded" : "No scroll data", false);
+        } else if (mode === "rage") {
+          showStatus(data?.count ? `${data.count} rage elements` : "No rage clicks", false);
+        } else if (mode === "clicks") {
+          showStatus(data?.count ? `${data.count} click points` : "No click data", false);
+        } else {
+          showStatus("", false);
         }
       }
       sendResponse({ ok: true });

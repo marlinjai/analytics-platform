@@ -269,13 +269,18 @@ async function handleElementsMode(
 
   const payload = await res.json();
   const selectors: Array<{ selector: string; count: number; sessions: number }> =
-    (payload.selectors || []).map(
-      (d: { selector: string; count: number; sessions: number }) => ({
+    (payload.selectors || [])
+      .map((d: { selector: string; count: number; sessions: number }) => ({
         selector: String(d.selector || ""),
         count: Number(d.count) || 0,
         sessions: Number(d.sessions) || 0,
-      })
-    );
+      }))
+      .filter((d: { selector: string }) =>
+        // Exclude Lumitra's own UI elements and bare html/body tags
+        !d.selector.includes("lumitra") &&
+        d.selector !== "html" &&
+        d.selector !== "body"
+      );
 
   const maxCount = selectors.length > 0
     ? Math.max(...selectors.map((s) => s.count))
