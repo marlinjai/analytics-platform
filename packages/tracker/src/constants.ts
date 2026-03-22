@@ -1,10 +1,4 @@
-export const DEVICE_BREAKPOINTS = {
-  mobile: 768,
-  tablet: 1024,
-  desktop: Infinity,
-} as const;
-
-export type DeviceType = keyof typeof DEVICE_BREAKPOINTS;
+export type DeviceType = 'mobile' | 'tablet' | 'desktop';
 
 export const MAX_BATCH_SIZE = 50;
 export const MAX_REPLAY_CHUNK_BYTES = 512 * 1024;

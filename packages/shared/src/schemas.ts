@@ -51,6 +51,11 @@ export const trackerEventSchema = z.object({
   screenHeight: z.number().int().positive().optional(),
   deviceType: deviceTypeSchema.optional(),
   userAgent: z.string().max(512).optional(),
+
+  // Viewport / input (P2+P3)
+  viewportWidth: z.number().int().positive().optional(),
+  viewportHeight: z.number().int().positive().optional(),
+  inputType: z.string().max(32).optional(),
 });
 
 export const eventBatchSchema = z

@@ -32,6 +32,11 @@ export interface TrackerEvent {
   screenHeight?: number;
   deviceType?: DeviceType;
   userAgent?: string;
+
+  // Viewport / input (P2+P3)
+  viewportWidth?: number;
+  viewportHeight?: number;
+  inputType?: string;
 }
 
 /** Server-enriched fields added during ingestion. */
@@ -41,6 +46,7 @@ export interface ServerEnrichedFields {
   receivedAt: number;
   browser?: string;
   os?: string;
+  deviceModel?: string;
 }
 
 /** Full event as stored in ClickHouse. */

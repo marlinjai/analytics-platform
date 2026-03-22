@@ -160,12 +160,18 @@ export function attachPageviewListener(cb: EventCallback): () => void {
 }
 
 export function attachClickListener(cb: EventCallback): () => void {
-  const handler = (e: MouseEvent) => {
+  const usePointer = typeof PointerEvent !== 'undefined';
+
+  const handler = (e: PointerEvent | MouseEvent) => {
+    // Only track primary button (left click / tap)
+    if (e.button !== 0) return;
+
     const target = e.target as Element | null;
     if (!target) return;
 
     const canvasOnly = isCanvasOnlyPage();
     const rect = target.getBoundingClientRect();
+    const pointerType = 'pointerType' in e ? (e as PointerEvent).pointerType : undefined;
 
     cb({
       type: 'click',
@@ -173,21 +179,22 @@ export function attachClickListener(cb: EventCallback): () => void {
       x: e.pageX,
       y: e.pageY,
       selector: canvasOnly ? '' : getStableSelector(target),
-      // Element-relative click offset + element dimensions
-      // Enables responsive heatmaps: (ox/ew, oy/eh) = proportional position
+      ...(pointerType && { inputType: pointerType }),
       ...(rect.width > 0 && !canvasOnly && {
         properties: {
           ox: Math.round(e.clientX - rect.left),
           oy: Math.round(e.clientY - rect.top),
           ew: Math.round(rect.width),
           eh: Math.round(rect.height),
+          ...(pointerType && { pt: pointerType }),
         },
       }),
     });
   };
 
-  document.addEventListener('click', handler, { capture: true });
-  return () => document.removeEventListener('click', handler, { capture: true });
+  const eventName = usePointer ? 'pointerup' : 'click';
+  document.addEventListener(eventName, handler as EventListener, { capture: true });
+  return () => document.removeEventListener(eventName, handler as EventListener, { capture: true });
 }
 
 export function attachScrollListener(cb: EventCallback): () => void {

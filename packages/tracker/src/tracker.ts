@@ -25,7 +25,17 @@ export class AnalyticsTracker {
 
     // Fire session_start if new
     if (isNew) {
-      this.track({ type: 'session_start', url: location.href });
+      this.track({
+        type: 'session_start',
+        url: location.href,
+        properties: {
+          maxTouchPoints: navigator.maxTouchPoints ?? 0,
+          pointerType: window.matchMedia('(pointer: coarse)').matches ? 'coarse' : 'fine',
+          dpr: window.devicePixelRatio ?? 1,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        },
+      });
     }
 
     // Pageview listener (always on)
@@ -58,7 +68,7 @@ export class AnalyticsTracker {
       timestamp: Date.now(),
       screenWidth,
       screenHeight,
-      deviceType: getDeviceType(window.innerWidth),
+      deviceType: getDeviceType(),
       userAgent: navigator.userAgent,
     };
     this.batcher.add(event);

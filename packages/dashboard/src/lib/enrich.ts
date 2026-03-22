@@ -60,6 +60,24 @@ export function parseUserAgent(ua: string): UAParsed {
   return { browser, os };
 }
 
+// ── Device Model Extraction ─────────────────────────────────
+
+function extractDeviceModel(ua: string): string {
+  // Android: extract model between "Android XX;" and ")"
+  const androidMatch = ua.match(/Android\s[\d.]+;\s*([^)]+)\)/);
+  if (androidMatch?.[1]) {
+    // Clean up: "SM-S921B Build/UP1A" -> "SM-S921B"
+    return androidMatch[1].replace(/\s*Build\/.*$/, '').trim().slice(0, 64);
+  }
+
+  // iOS: can't get model from UA, return generic
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/iPod/.test(ua)) return 'iPod';
+
+  return '';
+}
+
 // ── GeoIP ────────────────────────────────────────────────────
 
 interface GeoResult {
@@ -118,7 +136,9 @@ export async function enrichEvents(
   const { country } = await lookupCountry(ip);
 
   return events.map((event) => {
-    const { browser, os } = parseUserAgent(event.userAgent ?? '');
+    const ua = event.userAgent ?? '';
+    const { browser, os } = parseUserAgent(ua);
+    const deviceModel = extractDeviceModel(ua);
     return {
       ...event,
       eventId: crypto.randomUUID(),
@@ -127,6 +147,7 @@ export async function enrichEvents(
       receivedAt,
       browser,
       os,
+      deviceModel,
     };
   });
 }

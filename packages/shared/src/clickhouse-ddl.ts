@@ -38,6 +38,10 @@ CREATE TABLE IF NOT EXISTS analytics.events
     screen_height   Nullable(UInt16),
     device_type     LowCardinality(String) DEFAULT '',
     user_agent      String DEFAULT '',
+    device_model    LowCardinality(String) DEFAULT '',
+    input_type      LowCardinality(String) DEFAULT '',
+    viewport_width  Nullable(UInt16),
+    viewport_height Nullable(UInt16),
 
     -- Server-enriched
     ip_hash         String,
