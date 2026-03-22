@@ -20,8 +20,7 @@ export interface HeatmapResponse {
 
 export interface ToolbarTokenResponse {
   token: string;
-  expiresAt: number;
-  projectId: string;
+  expiresAt: string; // ISO date string from the API
 }
 
 /**
