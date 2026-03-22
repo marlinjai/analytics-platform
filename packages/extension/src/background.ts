@@ -281,7 +281,14 @@ async function handleElementsMode(
     ? Math.max(...selectors.map((s) => s.count))
     : 1;
 
-  // Inject element heat overlay
+  // Inject h337.js for radial gradient rendering
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["heatmap.min.js"],
+    world: "MAIN" as chrome.scripting.ExecutionWorld,
+  });
+
+  // Inject element-based heatmap (maps selectors → element positions → h337 blobs)
   await chrome.scripting.executeScript({
     target: { tabId },
     world: "MAIN" as chrome.scripting.ExecutionWorld,
@@ -489,11 +496,11 @@ function renderElementHeatmapInMainWorld(
   selectors: Array<{ selector: string; count: number; sessions: number }>,
   maxCount: number
 ): void {
-  // Clean up previous element heat
+  // Clean up previous
+  const existingContainer = document.getElementById("lumitra-heatmap-container");
+  if (existingContainer) existingContainer.remove();
+
   document.querySelectorAll("[data-lumitra-element-heat]").forEach((el) => {
-    const htmlEl = el as HTMLElement;
-    htmlEl.style.removeProperty("box-shadow");
-    htmlEl.style.removeProperty("outline");
     el.removeAttribute("data-lumitra-element-heat");
     el.removeAttribute("data-lumitra-sessions");
   });
@@ -503,36 +510,81 @@ function renderElementHeatmapInMainWorld(
 
   if (selectors.length === 0) return;
 
-  // Inject hover tooltip styles
-  const style = document.createElement("style");
-  style.id = "lumitra-element-style";
-  style.textContent = `
-    [data-lumitra-element-heat] {
-      transition: outline 0.2s !important;
-    }
-  `;
-  document.head.appendChild(style);
+  // Map selectors → element center positions → h337 data points
+  const points: Array<{ x: number; y: number; value: number }> = [];
 
   selectors.forEach(({ selector, count, sessions }) => {
     try {
       const elements = document.querySelectorAll(selector);
-      const intensity = Math.min(count / maxCount, 1);
-      // Hue: 60 (yellow) → 0 (red) based on intensity
-      const hue = Math.round((1 - intensity) * 60);
-      const alpha = (0.15 + intensity * 0.45).toFixed(2);
-      const outlineAlpha = (Number(alpha) + 0.2).toFixed(2);
-
       elements.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        // Skip elements that are hidden or zero-size
+        if (rect.width === 0 && rect.height === 0) return;
+        // Convert to page coordinates (not viewport)
+        const centerX = Math.round(rect.left + window.scrollX + rect.width / 2);
+        const centerY = Math.round(rect.top + window.scrollY + rect.height / 2);
+        points.push({ x: centerX, y: centerY, value: count });
+
+        // Tag element for inspector tooltip
         const htmlEl = el as HTMLElement;
         htmlEl.setAttribute("data-lumitra-element-heat", String(count));
         htmlEl.setAttribute("data-lumitra-sessions", String(sessions));
-        htmlEl.style.outline = `2px solid hsla(${hue}, 100%, 50%, ${outlineAlpha})`;
-        htmlEl.style.boxShadow = `inset 0 0 0 1000px hsla(${hue}, 100%, 50%, ${alpha})`;
       });
     } catch {
       // Invalid selector — skip
     }
   });
+
+  if (points.length === 0) return;
+
+  // Create full-page overlay container for h337
+  const pageWidth = Math.max(
+    document.body.scrollWidth,
+    document.documentElement.scrollWidth
+  );
+  const pageHeight = Math.max(
+    document.body.scrollHeight,
+    document.documentElement.scrollHeight
+  );
+
+  const container = document.createElement("div");
+  container.id = "lumitra-heatmap-container";
+  container.style.cssText = [
+    "position:absolute",
+    "top:0",
+    "left:0",
+    `width:${pageWidth}px`,
+    `height:${pageHeight}px`,
+    "pointer-events:none",
+    "z-index:2147483645",
+  ].join(";");
+  document.documentElement.appendChild(container);
+
+  // Render with h337
+  if (typeof (window as unknown as { h337: unknown }).h337 === "undefined") {
+    console.error("[Lumitra] h337 not available in main world");
+    return;
+  }
+
+  const h = (window as unknown as { h337: {
+    create(config: {
+      container: HTMLElement;
+      radius?: number;
+      maxOpacity?: number;
+      minOpacity?: number;
+      blur?: number;
+    }): { setData(d: { max: number; data: typeof points }): void };
+  } }).h337;
+
+  const instance = h.create({
+    container,
+    radius: 40,
+    maxOpacity: 0.6,
+    minOpacity: 0,
+    blur: 0.85,
+  });
+
+  instance.setData({ max: maxCount, data: points });
 }
 
 function injectElementInspectorInMainWorld(): void {
