@@ -167,6 +167,20 @@ function Popup() {
           if (data.authenticated) {
             await loadProjects();
             if (data.projectId) setSelectedProject(data.projectId);
+            // Auto-detect project from current tab URL
+            try {
+              const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+              if (tab?.url) {
+                const tabDomain = new URL(tab.url).hostname.replace(/^www\./, '');
+                const res = await fetch(`${DASHBOARD_ORIGIN}/api/projects`, { credentials: "include" });
+                if (res.ok) {
+                  const json = await res.json();
+                  const projs = (json.projects ?? json) as Project[];
+                  const match = projs.find(p => tabDomain.includes(p.domain) || p.domain.includes(tabDomain));
+                  if (match) setSelectedProject(match.id);
+                }
+              }
+            } catch { /* ignore auto-detect errors */ }
           }
         }
       } catch (err) {

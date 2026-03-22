@@ -3,7 +3,7 @@
   "name": "Lumitra Analytics",
   "version": "0.1.0",
   "description": "Heatmap overlay for Lumitra Analytics",
-  "permissions": ["activeTab", "storage", "alarms"],
+  "permissions": ["activeTab", "storage", "alarms", "scripting"],
   "host_permissions": ["https://analytics.lumitra.co/*"],
   "action": {
     "default_popup": "popup.html",

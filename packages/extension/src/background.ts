@@ -124,6 +124,19 @@ async function handleMessage(
       const freshAuth = await getAuth();
       if (!freshAuth) return { ok: false, error: "Auth expired" };
 
+      // Ensure content script is injected before sending message
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return { ok: false, error: "No active tab found" };
+
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ["content.js"],
+        });
+      } catch {
+        // Content script may already be injected — that's fine
+      }
+
       const forwarded = await sendToActiveTab({
         type: "LOAD_HEATMAP",
         projectId: message.projectId || freshAuth.projectId,
@@ -135,7 +148,7 @@ async function handleMessage(
       });
       return forwarded
         ? { ok: true }
-        : { ok: false, error: "No active tab found" };
+        : { ok: false, error: "Could not communicate with page" };
     }
 
     case "CLEAR_HEATMAP": {
