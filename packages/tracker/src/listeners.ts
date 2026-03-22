@@ -164,12 +164,25 @@ export function attachClickListener(cb: EventCallback): () => void {
     const target = e.target as Element | null;
     if (!target) return;
 
+    const canvasOnly = isCanvasOnlyPage();
+    const rect = target.getBoundingClientRect();
+
     cb({
       type: 'click',
       url: location.href,
       x: e.pageX,
       y: e.pageY,
-      selector: isCanvasOnlyPage() ? '' : getStableSelector(target),
+      selector: canvasOnly ? '' : getStableSelector(target),
+      // Element-relative click offset + element dimensions
+      // Enables responsive heatmaps: (ox/ew, oy/eh) = proportional position
+      ...(rect.width > 0 && !canvasOnly && {
+        properties: {
+          ox: Math.round(e.clientX - rect.left),
+          oy: Math.round(e.clientY - rect.top),
+          ew: Math.round(rect.width),
+          eh: Math.round(rect.height),
+        },
+      }),
     });
   };
 

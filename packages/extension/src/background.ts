@@ -264,44 +264,67 @@ async function handleElementsMode(
     params.set("deviceType", msg.deviceType);
   }
 
-  const res = await fetch(`${msg.dashboardOrigin}/api/heatmap/by-selector?${params}`);
-  if (!res.ok) throw new Error(`Selector heatmap API error: ${res.status}`);
+  // Fetch both: aggregated selector counts (for inspector) + individual click positions (for precise h337)
+  const [selectorRes, clicksRes] = await Promise.all([
+    fetch(`${msg.dashboardOrigin}/api/heatmap/by-selector?${params}`),
+    fetch(`${msg.dashboardOrigin}/api/heatmap/by-selector/clicks?${params}`).catch(() => null),
+  ]);
 
-  const payload = await res.json();
+  if (!selectorRes.ok) throw new Error(`Selector heatmap API error: ${selectorRes.status}`);
+
+  const selectorPayload = await selectorRes.json();
   const selectors: Array<{ selector: string; count: number; sessions: number }> =
-    (payload.selectors || [])
+    (selectorPayload.selectors || [])
       .map((d: { selector: string; count: number; sessions: number }) => ({
         selector: String(d.selector || ""),
         count: Number(d.count) || 0,
         sessions: Number(d.sessions) || 0,
       }))
       .filter((d: { selector: string }) =>
-        // Exclude Lumitra's own UI elements and bare html/body tags
         !d.selector.includes("lumitra") &&
         d.selector !== "html" &&
         d.selector !== "body"
       );
 
+  // Parse individual click positions (if available)
+  let clickPoints: Array<{ selector: string; ox: number; oy: number; ew: number; eh: number }> = [];
+  if (clicksRes?.ok) {
+    const clicksPayload = await clicksRes.json();
+    clickPoints = (clicksPayload.clicks || [])
+      .filter((d: { selector: string }) =>
+        !d.selector.includes("lumitra") &&
+        d.selector !== "html" &&
+        d.selector !== "body"
+      )
+      .map((d: { selector: string; ox: number; oy: number; ew: number; eh: number }) => ({
+        selector: String(d.selector || ""),
+        ox: Number(d.ox) || 0,
+        oy: Number(d.oy) || 0,
+        ew: Number(d.ew) || 0,
+        eh: Number(d.eh) || 0,
+      }));
+  }
+
   const maxCount = selectors.length > 0
     ? Math.max(...selectors.map((s) => s.count))
     : 1;
 
-  // Inject h337.js for radial gradient rendering
+  // Inject h337.js
   await chrome.scripting.executeScript({
     target: { tabId },
     files: ["heatmap.min.js"],
     world: "MAIN" as chrome.scripting.ExecutionWorld,
   });
 
-  // Inject element-based heatmap (maps selectors → element positions → h337 blobs)
+  // Render: use precise click positions if available, otherwise fall back to element centers
   await chrome.scripting.executeScript({
     target: { tabId },
     world: "MAIN" as chrome.scripting.ExecutionWorld,
     func: renderElementHeatmapInMainWorld,
-    args: [selectors, maxCount],
+    args: [selectors, maxCount, clickPoints],
   });
 
-  // Inject element inspector (hover tooltips)
+  // Inject element inspector
   await chrome.scripting.executeScript({
     target: { tabId },
     world: "MAIN" as chrome.scripting.ExecutionWorld,
@@ -499,7 +522,8 @@ async function handleRageMode(
 
 function renderElementHeatmapInMainWorld(
   selectors: Array<{ selector: string; count: number; sessions: number }>,
-  maxCount: number
+  maxCount: number,
+  clickPoints: Array<{ selector: string; ox: number; oy: number; ew: number; eh: number }>
 ): void {
   // Clean up previous
   const existingContainer = document.getElementById("lumitra-heatmap-container");
@@ -515,53 +539,91 @@ function renderElementHeatmapInMainWorld(
 
   if (selectors.length === 0) return;
 
-  // Map selectors → element positions → h337 data points
-  // Spread multiple points across larger elements for better coverage
-  const points: Array<{ x: number; y: number; value: number; radius?: number }> = [];
-  let maxRadius = 0;
+  // Build a set of selectors that have precise click positions
+  const preciseSelectorSet = new Set(clickPoints.map((c) => c.selector));
+  const hasPreciseData = clickPoints.length > 0;
 
+  const points: Array<{ x: number; y: number; value: number }> = [];
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+
+  // Tag elements for inspector tooltip
   selectors.forEach(({ selector, count, sessions }) => {
     try {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach((el) => {
-        const rect = el.getBoundingClientRect();
-        if (rect.width === 0 && rect.height === 0) return;
-
-        const scrollX = window.scrollX;
-        const scrollY = window.scrollY;
-        const baseX = rect.left + scrollX;
-        const baseY = rect.top + scrollY;
-        const centerX = Math.round(baseX + rect.width / 2);
-        const centerY = Math.round(baseY + rect.height / 2);
-
-        // Radius proportional to element size (covers the element area)
-        const elRadius = Math.max(Math.round(Math.max(rect.width, rect.height) / 2), 30);
-        if (elRadius > maxRadius) maxRadius = elRadius;
-
-        // Place center point
-        points.push({ x: centerX, y: centerY, value: count, radius: elRadius });
-
-        // For larger elements, add corner points to spread the heat
-        if (rect.width > 80 || rect.height > 80) {
-          const inset = Math.min(rect.width, rect.height) * 0.25;
-          const cornerValue = Math.max(Math.round(count * 0.4), 1);
-          points.push(
-            { x: Math.round(baseX + inset), y: Math.round(baseY + inset), value: cornerValue, radius: elRadius },
-            { x: Math.round(baseX + rect.width - inset), y: Math.round(baseY + inset), value: cornerValue, radius: elRadius },
-            { x: Math.round(baseX + inset), y: Math.round(baseY + rect.height - inset), value: cornerValue, radius: elRadius },
-            { x: Math.round(baseX + rect.width - inset), y: Math.round(baseY + rect.height - inset), value: cornerValue, radius: elRadius },
-          );
-        }
-
-        // Tag element for inspector tooltip
+      document.querySelectorAll(selector).forEach((el) => {
         const htmlEl = el as HTMLElement;
         htmlEl.setAttribute("data-lumitra-element-heat", String(count));
         htmlEl.setAttribute("data-lumitra-sessions", String(sessions));
       });
-    } catch {
-      // Invalid selector — skip
-    }
+    } catch { /* skip */ }
   });
+
+  if (hasPreciseData) {
+    // ── Precise mode: use element-relative click offsets ─────────────────
+    // For each recorded click, find the element, get its current rect,
+    // apply proportional offset → precise responsive position
+    clickPoints.forEach(({ selector, ox, oy, ew, eh }) => {
+      try {
+        const el = document.querySelector(selector);
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+
+        // Proportional position within element (responsive across viewports)
+        const ratioX = ew > 0 ? ox / ew : 0.5;
+        const ratioY = eh > 0 ? oy / eh : 0.5;
+
+        const pageX = Math.round(rect.left + scrollX + rect.width * ratioX);
+        const pageY = Math.round(rect.top + scrollY + rect.height * ratioY);
+
+        points.push({ x: pageX, y: pageY, value: 1 });
+      } catch { /* invalid selector */ }
+    });
+
+    // For selectors WITHOUT precise data, fall back to element center
+    selectors.forEach(({ selector, count }) => {
+      if (preciseSelectorSet.has(selector)) return;
+      try {
+        document.querySelectorAll(selector).forEach((el) => {
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) return;
+          points.push({
+            x: Math.round(rect.left + scrollX + rect.width / 2),
+            y: Math.round(rect.top + scrollY + rect.height / 2),
+            value: count,
+          });
+        });
+      } catch { /* skip */ }
+    });
+  } else {
+    // ── Fallback: element center mode (for old data without offsets) ─────
+    selectors.forEach(({ selector, count }) => {
+      try {
+        document.querySelectorAll(selector).forEach((el) => {
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) return;
+          const baseX = rect.left + scrollX;
+          const baseY = rect.top + scrollY;
+          points.push({
+            x: Math.round(baseX + rect.width / 2),
+            y: Math.round(baseY + rect.height / 2),
+            value: count,
+          });
+          // Spread for large elements
+          if (rect.width > 80 || rect.height > 80) {
+            const inset = Math.min(rect.width, rect.height) * 0.25;
+            const cv = Math.max(Math.round(count * 0.4), 1);
+            points.push(
+              { x: Math.round(baseX + inset), y: Math.round(baseY + inset), value: cv },
+              { x: Math.round(baseX + rect.width - inset), y: Math.round(baseY + inset), value: cv },
+              { x: Math.round(baseX + inset), y: Math.round(baseY + rect.height - inset), value: cv },
+              { x: Math.round(baseX + rect.width - inset), y: Math.round(baseY + rect.height - inset), value: cv },
+            );
+          }
+        });
+      } catch { /* skip */ }
+    });
+  }
 
   if (points.length === 0) return;
 
@@ -604,17 +666,21 @@ function renderElementHeatmapInMainWorld(
     }): { setData(d: { max: number; data: Array<{ x: number; y: number; value: number; radius?: number }> }): void };
   } }).h337;
 
-  const radius = Math.max(maxRadius, 50);
-
   const instance = h.create({
     container,
-    radius,
+    radius: 40,
     maxOpacity: 0.75,
     minOpacity: 0.05,
     blur: 0.8,
   });
 
-  instance.setData({ max: maxCount, data: points });
+  // For precise mode, overlapping points at similar positions auto-intensify
+  // For fallback mode, maxCount from aggregated data drives intensity
+  const effectiveMax = hasPreciseData
+    ? Math.max(Math.round(points.length / 5), 2)
+    : maxCount;
+
+  instance.setData({ max: effectiveMax, data: points });
 }
 
 function injectElementInspectorInMainWorld(): void {
