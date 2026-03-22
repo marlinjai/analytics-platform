@@ -184,7 +184,8 @@ function Popup() {
         credentials: "include",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as Project[];
+      const json = await res.json();
+      const data = (json.projects ?? json) as Project[];
       setProjects(data);
       if (data.length > 0 && !selectedProject) {
         setSelectedProject(data[0].id);
@@ -211,7 +212,8 @@ function Popup() {
           credentials: "include",
         });
         if (!res.ok) throw new Error("Not logged in to dashboard");
-        const data = (await res.json()) as Project[];
+        const json = await res.json();
+      const data = (json.projects ?? json) as Project[];
         setProjects(data);
         const projectId = data[0]?.id;
         if (!projectId) throw new Error("No projects found");
