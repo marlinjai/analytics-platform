@@ -405,7 +405,7 @@ export default function SettingsPage() {
   }
 
   // Derive the current user's role in the selected project
-  const currentUserRole = members.find((m) => m.id === session?.user?.id)?.role ?? null;
+  const currentUserRole = members.find((m) => m.id === currentUserId)?.role ?? null;
   const isOwner = currentUserRole === 'owner';
   const isOwnerOrAdmin = isOwner || currentUserRole === 'admin';
 
@@ -551,7 +551,7 @@ export default function SettingsPage() {
               ) : (
                 <ul className="divide-y divide-gray-800">
                   {members.map((member) => {
-                    const isSelf = member.id === session?.user?.id;
+                    const isSelf = member.id === currentUserId;
                     return (
                       <li key={member.id} className="flex items-center justify-between py-3">
                         <div className="min-w-0">
