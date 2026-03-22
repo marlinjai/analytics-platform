@@ -28,11 +28,14 @@ mkdirSync(resolve(DIST, "icons"), { recursive: true });
 
 const sharedOptions = {
   bundle: true,
-  minify: process.env.NODE_ENV === "production",
-  sourcemap: process.env.NODE_ENV !== "production",
+  minify: true,
+  sourcemap: true,
   target: ["chrome120"],
   platform: "browser",
   logLevel: "info",
+  define: {
+    "process.env.NODE_ENV": '"production"',
+  },
 };
 
 // ─── Background service worker ────────────────────────────────────────────────
