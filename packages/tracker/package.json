@@ -1,6 +1,6 @@
 {
   "name": "@marlinjai/analytics-tracker",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Lightweight browser analytics tracker — pageviews, clicks, heatmaps, session replay",
   "type": "module",
   "exports": {
