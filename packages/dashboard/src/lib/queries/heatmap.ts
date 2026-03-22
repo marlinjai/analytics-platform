@@ -1,6 +1,34 @@
 import { getClickHouse, chDateParams } from '../clickhouse';
 import type { HeatmapPoint, SelectorHeatmapPoint, DateRange, DeviceType } from '@analytics-platform/shared';
 
+/**
+ * Generate all URL variants for matching (with/without www, http/https).
+ * e.g. "https://lolastories.com/en" → [
+ *   "https://lolastories.com/en",
+ *   "https://www.lolastories.com/en",
+ *   "http://lolastories.com/en",
+ *   "http://www.lolastories.com/en",
+ * ]
+ */
+function urlVariants(url: string): string[] {
+  try {
+    const parsed = new URL(url);
+    const hostNoWww = parsed.hostname.replace(/^www\./, '');
+    const hostWithWww = parsed.hostname.startsWith('www.')
+      ? parsed.hostname
+      : `www.${parsed.hostname}`;
+    const rest = parsed.pathname + parsed.search + parsed.hash;
+    return [
+      `https://${hostNoWww}${rest}`,
+      `https://${hostWithWww}${rest}`,
+      `http://${hostNoWww}${rest}`,
+      `http://${hostWithWww}${rest}`,
+    ];
+  } catch {
+    return [url];
+  }
+}
+
 export async function getHeatmapData(
   projectId: string,
   url: string,
@@ -8,6 +36,7 @@ export async function getHeatmapData(
   deviceType?: DeviceType
 ): Promise<HeatmapPoint[]> {
   const ch = getClickHouse();
+  const urls = urlVariants(url);
 
   const deviceFilter = deviceType
     ? 'AND device_type = {deviceType: String}'
@@ -21,7 +50,7 @@ export async function getHeatmapData(
         sum(click_count) AS count
       FROM analytics.heatmap_clicks_mv
       WHERE project_id = {projectId: UUID}
-        AND url = {url: String}
+        AND url IN ({url0: String}, {url1: String}, {url2: String}, {url3: String})
         AND day >= toDate({from: String})
         AND day <= toDate({to: String})
         ${deviceFilter}
@@ -30,7 +59,10 @@ export async function getHeatmapData(
     `,
     query_params: {
       projectId,
-      url,
+      url0: urls[0],
+      url1: urls[1],
+      url2: urls[2],
+      url3: urls[3],
       ...chDateParams(dateRange),
       ...(deviceType && { deviceType }),
     },
@@ -48,6 +80,7 @@ export async function getHeatmapBySelector(
   limit = 100
 ): Promise<SelectorHeatmapPoint[]> {
   const ch = getClickHouse();
+  const urls = urlVariants(url);
 
   const deviceFilter = deviceType
     ? 'AND device_type = {deviceType: String}'
@@ -61,7 +94,7 @@ export async function getHeatmapBySelector(
         sum(session_count) AS sessions
       FROM analytics.heatmap_selectors_mv
       WHERE project_id = {projectId: UUID}
-        AND url = {url: String}
+        AND url IN ({url0: String}, {url1: String}, {url2: String}, {url3: String})
         AND day >= toDate({from: String})
         AND day <= toDate({to: String})
         ${deviceFilter}
@@ -71,7 +104,10 @@ export async function getHeatmapBySelector(
     `,
     query_params: {
       projectId,
-      url,
+      url0: urls[0],
+      url1: urls[1],
+      url2: urls[2],
+      url3: urls[3],
       ...chDateParams(dateRange),
       ...(deviceType && { deviceType }),
       limit,
