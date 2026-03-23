@@ -791,6 +791,8 @@ function renderElementHeatmapInMainWorld(
     return;
   }
 
+  type H337Point = { x: number; y: number; value: number; radius?: number };
+  type H337Instance = { setData(d: { max: number; data: H337Point[] }): void };
   const h = (window as unknown as { h337: {
     create(config: {
       container: HTMLElement;
@@ -798,12 +800,10 @@ function renderElementHeatmapInMainWorld(
       maxOpacity?: number;
       minOpacity?: number;
       blur?: number;
-    }): { setData(d: { max: number; data: Array<{ x: number; y: number; value: number; radius?: number }> }): void };
+    }): H337Instance;
   } }).h337;
 
   const isLowData = allPoints.length < 15;
-  const effectiveRadius = isLowData ? Math.max(visual.radius, 55) : visual.radius;
-  const effectiveMinOpacity = isLowData ? 0.15 : 0.05;
   const effectiveMax = hasPreciseData
     ? (allPoints.length < 10 ? 1 : Math.max(Math.round(allPoints.length / 8), 2))
     : maxCount;
@@ -814,7 +814,8 @@ function renderElementHeatmapInMainWorld(
     posType: "absolute" | "fixed",
     w: number,
     hgt: number,
-    pts: typeof allPoints
+    pts: H337Point[],
+    vis: { radius: number; opacity: number; blur: number }
   ): void {
     const el = document.createElement("div");
     el.id = id;
@@ -829,12 +830,15 @@ function renderElementHeatmapInMainWorld(
     ].join(";");
     document.body.appendChild(el);
 
+    const effectiveRadius = isLowData ? Math.max(vis.radius, 55) : vis.radius;
+    const effectiveMinOpacity = isLowData ? 0.15 : 0.05;
+
     const inst = h.create({
       container: el,
       radius: effectiveRadius,
-      maxOpacity: visual.opacity,
+      maxOpacity: vis.opacity,
       minOpacity: effectiveMinOpacity,
-      blur: visual.blur,
+      blur: vis.blur,
     });
 
     // h337.create() overrides position to 'relative' — restore it
@@ -845,17 +849,77 @@ function renderElementHeatmapInMainWorld(
     inst.setData({ max: effectiveMax, data: pts });
   }
 
-  // Layer 1: scrollable elements (position: absolute, full page size)
-  if (scrollPoints.length > 0) {
-    const pageWidth = Math.max(document.body.scrollWidth, document.documentElement.scrollWidth);
-    const pageHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-    createHeatmapLayer("lumitra-heatmap-container", "absolute", pageWidth, pageHeight, scrollPoints);
+  // ── Cache data for real-time slider updates ──
+  const lumitraCache = (window as unknown as {
+    __lumitraHeatmapCache?: {
+      scrollPoints: H337Point[];
+      fixedPoints: H337Point[];
+      isLowData: boolean;
+      effectiveMax: number;
+      hasPreciseData: boolean;
+    };
+  });
+  lumitraCache.__lumitraHeatmapCache = {
+    scrollPoints,
+    fixedPoints,
+    isLowData,
+    effectiveMax,
+    hasPreciseData,
+  };
+
+  // ── Render initial layers ──
+  function renderLayers(vis: { radius: number; opacity: number; blur: number }): void {
+    // Remove existing heatmap layers (but not element outlines)
+    const existingScroll = document.getElementById("lumitra-heatmap-container");
+    if (existingScroll) existingScroll.remove();
+    const existingFixedLayer = document.getElementById("lumitra-heatmap-fixed");
+    if (existingFixedLayer) existingFixedLayer.remove();
+
+    if (scrollPoints.length > 0) {
+      const pageWidth = Math.max(document.body.scrollWidth, document.documentElement.scrollWidth);
+      const pageHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+      createHeatmapLayer("lumitra-heatmap-container", "absolute", pageWidth, pageHeight, scrollPoints, vis);
+    }
+    if (fixedPoints.length > 0) {
+      createHeatmapLayer("lumitra-heatmap-fixed", "fixed", window.innerWidth, window.innerHeight, fixedPoints, vis);
+    }
   }
 
-  // Layer 2: fixed/sticky elements (position: fixed, viewport size)
-  if (fixedPoints.length > 0) {
-    createHeatmapLayer("lumitra-heatmap-fixed", "fixed", window.innerWidth, window.innerHeight, fixedPoints);
+  renderLayers(visual);
+
+  // ── Listen for real-time visual updates from content script ──
+  // Uses window.postMessage for zero-latency cross-world communication
+  const existingListener = (window as unknown as { __lumitraVisualListener?: (e: MessageEvent) => void });
+  if (existingListener.__lumitraVisualListener) {
+    window.removeEventListener("message", existingListener.__lumitraVisualListener);
   }
+
+  function onVisualUpdate(e: MessageEvent): void {
+    if (e.data?.type !== "lumitra-update-visual") return;
+    const newVisual = e.data.settings as { radius: number; opacity: number; blur: number };
+    if (!newVisual) return;
+
+    const cache = (window as unknown as { __lumitraHeatmapCache?: typeof lumitraCache.__lumitraHeatmapCache }).__lumitraHeatmapCache;
+    if (!cache) return;
+
+    // Re-render heatmap layers with new visual settings (no API call)
+    const existingScroll = document.getElementById("lumitra-heatmap-container");
+    if (existingScroll) existingScroll.remove();
+    const existingFixedLayer = document.getElementById("lumitra-heatmap-fixed");
+    if (existingFixedLayer) existingFixedLayer.remove();
+
+    if (cache.scrollPoints.length > 0) {
+      const pageWidth = Math.max(document.body.scrollWidth, document.documentElement.scrollWidth);
+      const pageHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+      createHeatmapLayer("lumitra-heatmap-container", "absolute", pageWidth, pageHeight, cache.scrollPoints, newVisual);
+    }
+    if (cache.fixedPoints.length > 0) {
+      createHeatmapLayer("lumitra-heatmap-fixed", "fixed", window.innerWidth, window.innerHeight, cache.fixedPoints, newVisual);
+    }
+  }
+
+  existingListener.__lumitraVisualListener = onVisualUpdate;
+  window.addEventListener("message", onVisualUpdate);
 }
 
 function injectElementInspectorInMainWorld(): void {

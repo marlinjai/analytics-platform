@@ -729,17 +729,17 @@ function renderWidget(config: ShowOverlayMessage): void {
       valSpan.className = "slider-value";
       valSpan.textContent = key === "radius" ? String(visualSettings[key]) : Number(visualSettings[key]).toFixed(1);
 
-      input.addEventListener("change", () => {
+      input.addEventListener("input", () => {
         const val = parseFloat(input.value);
         visualSettings[key] = val;
         valSpan.textContent = key === "radius" ? String(val) : val.toFixed(1);
-        chrome.runtime.sendMessage({ type: "SAVE_VISUAL_SETTINGS", settings: visualSettings });
-        activateMode("clicks");
+        // Real-time update: postMessage to MAIN world (instant, no API call)
+        window.postMessage({ type: "lumitra-update-visual", settings: { ...visualSettings } }, "*");
       });
 
-      input.addEventListener("input", () => {
-        const val = parseFloat(input.value);
-        valSpan.textContent = key === "radius" ? String(val) : val.toFixed(1);
+      input.addEventListener("change", () => {
+        // Persist final value on release
+        chrome.runtime.sendMessage({ type: "SAVE_VISUAL_SETTINGS", settings: visualSettings });
       });
 
       row.appendChild(lbl);
