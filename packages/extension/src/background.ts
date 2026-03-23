@@ -286,6 +286,28 @@ async function handleMessage(
       return { ok: true };
     }
 
+    case "SHOW_CLICK_ZONES": {
+      const [czTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!czTab?.id) return { ok: false, error: "No active tab" };
+      await chrome.scripting.executeScript({
+        target: { tabId: czTab.id },
+        world: "MAIN" as chrome.scripting.ExecutionWorld,
+        func: renderClickZonesInMainWorld,
+      });
+      return { ok: true };
+    }
+
+    case "HIDE_CLICK_ZONES": {
+      const [hzTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!hzTab?.id) return { ok: false, error: "No active tab" };
+      await chrome.scripting.executeScript({
+        target: { tabId: hzTab.id },
+        world: "MAIN" as chrome.scripting.ExecutionWorld,
+        func: removeClickZonesInMainWorld,
+      });
+      return { ok: true };
+    }
+
     default:
       return { ok: false, error: "Unknown message type" };
   }
@@ -1196,5 +1218,184 @@ async function sendToTab(tabId: number, message: object): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+// ─── Click Zones: diagnostic overlay showing all trackable elements ──────────
+
+function renderClickZonesInMainWorld(): void {
+  // Remove existing
+  removeClickZonesInMainWorld();
+
+  // Interactive element selectors that the tracker would capture clicks on
+  const INTERACTIVE = "a, button, input, select, textarea, [role='button'], [role='link'], [role='tab'], [onclick], [data-testid], [data-analytics], label, summary, details";
+
+  // All interactive elements
+  const interactive = new Set<Element>(document.querySelectorAll(INTERACTIVE));
+
+  // Also grab any element with a cursor:pointer style
+  const allEls = document.querySelectorAll("body *");
+  allEls.forEach((el) => {
+    try {
+      const style = getComputedStyle(el);
+      if (style.cursor === "pointer") interactive.add(el);
+    } catch { /* skip */ }
+  });
+
+  // Filter out lumitra's own elements and hidden/invisible elements
+  const elements = Array.from(interactive).filter((el) => {
+    if ((el as HTMLElement).closest?.("#lumitra-widget-host, #lumitra-overlay-host")) return false;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return false;
+    const style = getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+    return true;
+  });
+
+  // Inject style
+  const style = document.createElement("style");
+  style.id = "lumitra-click-zones-style";
+  style.textContent = `
+    [data-lumitra-zone] {
+      position: relative;
+    }
+    [data-lumitra-zone]::after {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border: 2px solid var(--lumitra-zone-color, rgba(59,130,246,0.6));
+      border-radius: 4px;
+      pointer-events: none;
+      z-index: 2147483640;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    [data-lumitra-zone]:hover::after {
+      border-color: var(--lumitra-zone-color-hover, rgba(59,130,246,1));
+      box-shadow: 0 0 12px var(--lumitra-zone-color, rgba(59,130,246,0.4));
+    }
+    #lumitra-zone-tooltip {
+      position: fixed;
+      z-index: 2147483647;
+      background: rgba(12,12,20,0.92);
+      backdrop-filter: blur(16px);
+      color: #e8e8ed;
+      font-size: 11px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, monospace;
+      padding: 8px 12px;
+      border-radius: 8px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s;
+      white-space: pre-line;
+      max-width: 400px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.08);
+      line-height: 1.5;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Categorize elements by area
+  const viewportArea = window.innerWidth * window.innerHeight;
+
+  elements.forEach((el) => {
+    const htmlEl = el as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    const area = rect.width * rect.height;
+    const ratio = area / viewportArea;
+
+    // Color by size: small=blue (good), medium=amber (ok), large=red (problematic)
+    let color: string;
+    let colorHover: string;
+    let sizeLabel: string;
+    if (ratio > 0.25) {
+      color = "rgba(239,68,68,0.5)";     // red — too large, will create giant blobs
+      colorHover = "rgba(239,68,68,1)";
+      sizeLabel = "LARGE — will create oversized heatmap blob";
+    } else if (ratio > 0.08) {
+      color = "rgba(245,158,11,0.5)";     // amber — medium
+      colorHover = "rgba(245,158,11,1)";
+      sizeLabel = "MEDIUM";
+    } else {
+      color = "rgba(59,130,246,0.5)";     // blue — good size
+      colorHover = "rgba(59,130,246,1)";
+      sizeLabel = "GOOD";
+    }
+
+    htmlEl.setAttribute("data-lumitra-zone", "1");
+    htmlEl.style.setProperty("--lumitra-zone-color", color);
+    htmlEl.style.setProperty("--lumitra-zone-color-hover", colorHover);
+
+    // Build a selector preview (simplified version of tracker logic)
+    const tag = el.tagName.toLowerCase();
+    let selector = tag;
+    if (el.id) selector = `${tag}#${el.id}`;
+    else if (el.className && typeof el.className === "string") {
+      const cls = el.className.trim().split(/\s+/).slice(0, 3).join(".");
+      if (cls) selector = `${tag}.${cls}`;
+    }
+
+    htmlEl.setAttribute("data-lumitra-zone-selector", selector);
+    htmlEl.setAttribute("data-lumitra-zone-size", `${Math.round(rect.width)}x${Math.round(rect.height)}`);
+    htmlEl.setAttribute("data-lumitra-zone-label", sizeLabel);
+  });
+
+  // Tooltip
+  const tooltip = document.createElement("div");
+  tooltip.id = "lumitra-zone-tooltip";
+  document.body.appendChild(tooltip);
+
+  const handler = (e: MouseEvent) => {
+    const target = (e.target as HTMLElement).closest?.("[data-lumitra-zone]") as HTMLElement | null;
+    if (target) {
+      const sel = target.getAttribute("data-lumitra-zone-selector") || "?";
+      const size = target.getAttribute("data-lumitra-zone-size") || "?";
+      const label = target.getAttribute("data-lumitra-zone-label") || "";
+      const tag = target.tagName.toLowerCase();
+      const text = (target.textContent || "").trim().slice(0, 40);
+      const textLine = text ? `Text: "${text}"` : "";
+
+      tooltip.innerHTML = [
+        `<span style="color:${label === "GOOD" ? "#60a5fa" : label === "MEDIUM" ? "#fbbf24" : "#f87171"};font-weight:600">${label}</span>`,
+        `<span style="color:#9ca3af">Selector:</span> <span style="color:#c9a84c">${sel}</span>`,
+        `<span style="color:#9ca3af">Element:</span> &lt;${tag}&gt;  ${size}px`,
+        textLine ? `<span style="color:#9ca3af">${textLine}</span>` : "",
+      ].filter(Boolean).join("\n");
+
+      tooltip.style.left = `${Math.min(e.clientX + 14, window.innerWidth - 420)}px`;
+      tooltip.style.top = `${Math.min(e.clientY + 14, window.innerHeight - 100)}px`;
+      tooltip.style.opacity = "1";
+    } else {
+      tooltip.style.opacity = "0";
+    }
+  };
+
+  document.addEventListener("mousemove", handler, { passive: true });
+
+  // Store cleanup ref
+  (window as unknown as { __lumitraZones?: { handler: typeof handler } }).__lumitraZones = { handler };
+}
+
+function removeClickZonesInMainWorld(): void {
+  const style = document.getElementById("lumitra-click-zones-style");
+  if (style) style.remove();
+
+  const tooltip = document.getElementById("lumitra-zone-tooltip");
+  if (tooltip) tooltip.remove();
+
+  document.querySelectorAll("[data-lumitra-zone]").forEach((el) => {
+    const htmlEl = el as HTMLElement;
+    htmlEl.removeAttribute("data-lumitra-zone");
+    htmlEl.removeAttribute("data-lumitra-zone-selector");
+    htmlEl.removeAttribute("data-lumitra-zone-size");
+    htmlEl.removeAttribute("data-lumitra-zone-label");
+    htmlEl.style.removeProperty("--lumitra-zone-color");
+    htmlEl.style.removeProperty("--lumitra-zone-color-hover");
+  });
+
+  const w = window as unknown as { __lumitraZones?: { handler: (e: MouseEvent) => void } };
+  if (w.__lumitraZones) {
+    document.removeEventListener("mousemove", w.__lumitraZones.handler);
+    w.__lumitraZones = undefined;
   }
 }

@@ -80,6 +80,7 @@ let currentConfig: ShowOverlayMessage | null = null;
 let currentUrl = location.href;
 let minimized = false;
 let visualSettings = { radius: 40, opacity: 0.75, blur: 0.8 };
+let clickZonesActive = false;
 
 // ── Experiment filter state ──────────────────────────────────────────────────
 let experiments: Experiment[] = [];
@@ -600,6 +601,57 @@ const WIDGET_STYLES = `
     background: rgba(255,255,255,0.06);
     margin: 12px 0;
   }
+
+  /* ── Click Zones Toggle ── */
+  .zones-btn {
+    width: 100%;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.5);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .zones-btn:hover {
+    background: rgba(59,130,246,0.1);
+    border-color: rgba(59,130,246,0.3);
+    color: rgba(255,255,255,0.7);
+  }
+  .zones-btn.active {
+    background: rgba(59,130,246,0.15);
+    border-color: rgba(59,130,246,0.4);
+    color: #60a5fa;
+    box-shadow: 0 0 12px rgba(59,130,246,0.1);
+  }
+  .zones-legend {
+    display: flex;
+    gap: 10px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 10px;
+    justify-content: center;
+  }
+  .zones-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .zones-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
 `;
 
 // ─── Widget rendering ──────────────────────────────────────────────────────────
@@ -686,6 +738,40 @@ function renderWidget(config: ShowOverlayMessage): void {
     tabs.appendChild(tab);
   });
   widget.appendChild(tabs);
+
+  // ── Click Zones diagnostic toggle ──
+  const zonesBtn = document.createElement("button");
+  zonesBtn.className = clickZonesActive ? "zones-btn active" : "zones-btn";
+  zonesBtn.innerHTML = clickZonesActive
+    ? "&#x25C9; Click Zones Active"
+    : "&#x25CE; Show Click Zones";
+  zonesBtn.title = "Outline all clickable elements to see what the tracker captures";
+  zonesBtn.addEventListener("click", () => {
+    clickZonesActive = !clickZonesActive;
+    chrome.runtime.sendMessage({ type: clickZonesActive ? "SHOW_CLICK_ZONES" : "HIDE_CLICK_ZONES" });
+    if (currentConfig) renderWidget(currentConfig);
+  });
+  widget.appendChild(zonesBtn);
+
+  if (clickZonesActive) {
+    const legend = document.createElement("div");
+    legend.className = "zones-legend";
+    [
+      { color: "#3b82f6", label: "Good" },
+      { color: "#f59e0b", label: "Medium" },
+      { color: "#ef4444", label: "Too large" },
+    ].forEach(({ color, label }) => {
+      const item = document.createElement("span");
+      item.className = "zones-legend-item";
+      const dot = document.createElement("span");
+      dot.className = "zones-dot";
+      dot.style.background = color;
+      item.appendChild(dot);
+      item.appendChild(document.createTextNode(label));
+      legend.appendChild(item);
+    });
+    widget.appendChild(legend);
+  }
 
   // ── Heatmap Controls (always visible when in clicks mode) ──
   if (currentMode === "clicks") {
@@ -1046,6 +1132,11 @@ function destroyEverything(): void {
   if (overlayHost) {
     overlayHost.remove();
     overlayHost = null;
+  }
+
+  if (clickZonesActive) {
+    chrome.runtime.sendMessage({ type: "HIDE_CLICK_ZONES" });
+    clickZonesActive = false;
   }
 
   currentMode = "off";
