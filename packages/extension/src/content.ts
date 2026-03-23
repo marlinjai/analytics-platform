@@ -773,70 +773,7 @@ function renderWidget(config: ShowOverlayMessage): void {
     widget.appendChild(legend);
   }
 
-  // ── Heatmap Controls (always visible when in clicks mode) ──
-  if (currentMode === "clicks") {
-    const section = document.createElement("div");
-    section.className = "controls-section";
-
-    const label = document.createElement("div");
-    label.className = "controls-label";
-    label.textContent = "Heatmap";
-    section.appendChild(label);
-
-    const panel = document.createElement("div");
-    panel.className = "controls-panel";
-
-    const sliders: { label: string; key: keyof typeof visualSettings; min: number; max: number; step: number }[] = [
-      { label: "Radius", key: "radius", min: 15, max: 120, step: 5 },
-      { label: "Opacity", key: "opacity", min: 0.1, max: 1.0, step: 0.05 },
-      { label: "Blur", key: "blur", min: 0.3, max: 1.0, step: 0.05 },
-    ];
-
-    sliders.forEach(({ label: sliderLabel, key, min, max, step }) => {
-      const row = document.createElement("div");
-      row.className = "slider-row";
-
-      const lbl = document.createElement("label");
-      lbl.textContent = sliderLabel;
-
-      const track = document.createElement("div");
-      track.className = "slider-track";
-
-      const input = document.createElement("input");
-      input.type = "range";
-      input.min = String(min);
-      input.max = String(max);
-      input.step = String(step);
-      input.value = String(visualSettings[key]);
-
-      track.appendChild(input);
-
-      const valSpan = document.createElement("span");
-      valSpan.className = "slider-value";
-      valSpan.textContent = key === "radius" ? String(visualSettings[key]) : Number(visualSettings[key]).toFixed(1);
-
-      input.addEventListener("input", () => {
-        const val = parseFloat(input.value);
-        visualSettings[key] = val;
-        valSpan.textContent = key === "radius" ? String(val) : val.toFixed(1);
-        // Real-time update: postMessage to MAIN world (instant, no API call)
-        window.postMessage({ type: "lumitra-update-visual", settings: { ...visualSettings } }, "*");
-      });
-
-      input.addEventListener("change", () => {
-        // Persist final value on release
-        chrome.runtime.sendMessage({ type: "SAVE_VISUAL_SETTINGS", settings: visualSettings });
-      });
-
-      row.appendChild(lbl);
-      row.appendChild(track);
-      row.appendChild(valSpan);
-      panel.appendChild(row);
-    });
-
-    section.appendChild(panel);
-    widget.appendChild(section);
-  }
+  // Heatmap settings sliders removed — rendering uses per-element sizing
 
   // ── Info row ──
   const infoRow = document.createElement("div");
