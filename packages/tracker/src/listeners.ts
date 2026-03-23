@@ -169,6 +169,11 @@ export function attachClickListener(cb: EventCallback): () => void {
     let target = e.target as Element | null;
     if (!target) return;
 
+    // Skip clicks on the Lumitra extension widget and bare html/body
+    const tag = target.tagName.toLowerCase();
+    if (tag === 'html' || tag === 'body') return;
+    if ((target as HTMLElement).closest?.('#lumitra-widget-host, #lumitra-overlay-host, #lumitra-heatmap-container, #lumitra-heatmap-fixed')) return;
+
     const canvasOnly = isCanvasOnlyPage();
 
     // Always resolve to the deepest element at the click coordinates.

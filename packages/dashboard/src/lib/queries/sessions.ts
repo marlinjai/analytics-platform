@@ -28,6 +28,7 @@ export async function getSessionList(
         AND timestamp <= {to: DateTime64(3)}
         ${cursorFilter}
       GROUP BY session_id
+      HAVING duration > 0
       ORDER BY startedAt DESC
       LIMIT {limit: UInt32}
     `,

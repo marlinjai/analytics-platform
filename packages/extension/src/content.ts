@@ -80,7 +80,6 @@ let currentConfig: ShowOverlayMessage | null = null;
 let currentUrl = location.href;
 let minimized = false;
 let visualSettings = { radius: 40, opacity: 0.75, blur: 0.8 };
-let clickZonesActive = false;
 
 // ── Experiment filter state ──────────────────────────────────────────────────
 let experiments: Experiment[] = [];
@@ -739,42 +738,6 @@ function renderWidget(config: ShowOverlayMessage): void {
   });
   widget.appendChild(tabs);
 
-  // ── Click Zones diagnostic toggle ──
-  const zonesBtn = document.createElement("button");
-  zonesBtn.className = clickZonesActive ? "zones-btn active" : "zones-btn";
-  zonesBtn.innerHTML = clickZonesActive
-    ? "&#x25C9; Click Zones Active"
-    : "&#x25CE; Show Click Zones";
-  zonesBtn.title = "Outline all clickable elements to see what the tracker captures";
-  zonesBtn.addEventListener("click", () => {
-    clickZonesActive = !clickZonesActive;
-    chrome.runtime.sendMessage({ type: clickZonesActive ? "SHOW_CLICK_ZONES" : "HIDE_CLICK_ZONES" });
-    if (currentConfig) renderWidget(currentConfig);
-  });
-  widget.appendChild(zonesBtn);
-
-  if (clickZonesActive) {
-    const legend = document.createElement("div");
-    legend.className = "zones-legend";
-    [
-      { color: "#3b82f6", label: "Good" },
-      { color: "#f59e0b", label: "Medium" },
-      { color: "#ef4444", label: "Too large" },
-    ].forEach(({ color, label }) => {
-      const item = document.createElement("span");
-      item.className = "zones-legend-item";
-      const dot = document.createElement("span");
-      dot.className = "zones-dot";
-      dot.style.background = color;
-      item.appendChild(dot);
-      item.appendChild(document.createTextNode(label));
-      legend.appendChild(item);
-    });
-    widget.appendChild(legend);
-  }
-
-  // Heatmap settings sliders removed — rendering uses per-element sizing
-
   // ── Info row ──
   const infoRow = document.createElement("div");
   infoRow.className = "info-row";
@@ -1069,11 +1032,6 @@ function destroyEverything(): void {
   if (overlayHost) {
     overlayHost.remove();
     overlayHost = null;
-  }
-
-  if (clickZonesActive) {
-    chrome.runtime.sendMessage({ type: "HIDE_CLICK_ZONES" });
-    clickZonesActive = false;
   }
 
   currentMode = "off";
