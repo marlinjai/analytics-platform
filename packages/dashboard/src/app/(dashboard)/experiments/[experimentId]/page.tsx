@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CodeSnippet } from '@/components/ui/CodeSnippet';
+import { useCurrentProjectId } from '@/components/layout/ProjectSwitcher';
 import {
   LineChart,
   Line,
@@ -637,62 +638,30 @@ export default function ExperimentDetailPage() {
   const [showDeclareWinner, setShowDeclareWinner] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Fetch experiment details
-  const fetchExperiment = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/projects/current/experiments/${experimentId}`);
-      if (!res.ok) {
-        // Try to get project_id from experiments list; fall back to iterating
-        setLoading(false);
-        return;
-      }
-      const data = await res.json();
-      setExperiment(data.experiment ?? data);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }, [experimentId]);
+  const projectId = useCurrentProjectId();
 
-  // We need the project_id to make API calls. Since the experiment detail
-  // API returns it, we first try a project-agnostic approach, then fall back
-  // to discovering the project by listing projects and finding the experiment.
-  const [projectId, setProjectId] = useState<string | null>(null);
-
-  const discoverExperiment = useCallback(async () => {
+  const fetchExperimentByProject = useCallback(async () => {
+    if (!projectId) return;
     setLoading(true);
     try {
-      // First get projects list
-      const projRes = await fetch('/api/projects');
-      const projData = await projRes.json();
-      const projects = projData.projects ?? [];
+      const res = await fetch(
+        `/api/projects/${projectId}/experiments/${experimentId}`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setExperiment(data.experiment ?? data);
 
-      // Try each project to find this experiment
-      for (const project of projects) {
-        const res = await fetch(
-          `/api/projects/${project.id}/experiments/${experimentId}`,
-        );
-        if (res.ok) {
-          const data = await res.json();
-          const exp = data.experiment ?? data;
-          setExperiment(exp);
-          setProjectId(exp.project_id ?? project.id);
-
-          // Fetch goals
-          try {
-            const goalsRes = await fetch(
-              `/api/projects/${project.id}/experiments/${experimentId}/goals`,
-            );
-            if (goalsRes.ok) {
-              const goalsData = await goalsRes.json();
-              setGoals(goalsData.goals ?? []);
-            }
-          } catch {
-            // ignore
+        // Fetch goals
+        try {
+          const goalsRes = await fetch(
+            `/api/projects/${projectId}/experiments/${experimentId}/goals`,
+          );
+          if (goalsRes.ok) {
+            const goalsData = await goalsRes.json();
+            setGoals(goalsData.goals ?? []);
           }
-
-          break;
+        } catch {
+          // ignore
         }
       }
     } catch {
@@ -700,11 +669,11 @@ export default function ExperimentDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [experimentId]);
+  }, [projectId, experimentId]);
 
   useEffect(() => {
-    discoverExperiment();
-  }, [discoverExperiment]);
+    fetchExperimentByProject();
+  }, [fetchExperimentByProject]);
 
   // Fetch results when experiment is running or completed
   useEffect(() => {

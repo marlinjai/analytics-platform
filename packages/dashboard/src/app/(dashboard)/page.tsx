@@ -20,7 +20,7 @@ import { SourcesTable } from '@/components/charts/SourcesTable';
 import { TechBreakdown } from '@/components/charts/TechBreakdown';
 import { CountriesTable } from '@/components/charts/CountriesTable';
 import { DateRangePicker } from '@/components/layout/DateRangePicker';
-import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
+import { useCurrentProjectId } from '@/components/layout/ProjectSwitcher';
 import { FilterPills } from '@/components/layout/FilterPills';
 import { Onboarding } from '@/components/empty-states/Onboarding';
 import { NoData } from '@/components/empty-states/NoData';
@@ -175,8 +175,19 @@ function OverviewPageInner() {
     return new Date().toISOString();
   });
 
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const projectId = useCurrentProjectId();
   const [hasProjects, setHasProjects] = useState<boolean | null>(null);
+
+  // Check whether any projects exist (for onboarding empty state)
+  useEffect(() => {
+    fetch('/api/projects')
+      .then((r) => r.json())
+      .then((data) => {
+        const list = data.projects ?? [];
+        setHasProjects(list.length > 0);
+      })
+      .catch(() => setHasProjects(false));
+  }, []);
 
   // Filters — initialise from URL
   const [filters, setFilters] = useState<DashboardFilters>(() => {
@@ -342,7 +353,8 @@ function OverviewPageInner() {
     return (
       <Onboarding
         onReady={(id) => {
-          setProjectId(id);
+          localStorage.setItem('ap_current_project', id);
+          window.dispatchEvent(new CustomEvent('ap-project-changed', { detail: id }));
           setHasProjects(true);
         }}
       />
@@ -356,17 +368,7 @@ function OverviewPageInner() {
   return (
     <div className="space-y-6">
       {/* Header row */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="w-full max-w-xs">
-          <ProjectSwitcher
-            currentProjectId={projectId}
-            onSelect={(id) => {
-              setProjectId(id);
-              setHasProjects(true);
-            }}
-            onEmpty={() => setHasProjects(false)}
-          />
-        </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
         <div className="flex flex-wrap items-center gap-3">
           <AutoRefreshToggle
             enabled={autoRefresh}

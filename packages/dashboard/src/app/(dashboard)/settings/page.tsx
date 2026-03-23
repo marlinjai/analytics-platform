@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useCurrentProjectId } from '@/components/layout/ProjectSwitcher';
 import { SkeletonProjectList, SkeletonKeyList } from '@/components/ui/Skeleton';
 
 // ---------------------------------------------------------------------------
@@ -264,7 +265,7 @@ export default function SettingsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const selectedProjectId = useCurrentProjectId() ?? '';
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loadingKeys, setLoadingKeys] = useState(false);
 
@@ -475,7 +476,8 @@ export default function SettingsPage() {
     if (res.ok || res.status === 204) {
       setProjects((prev) => prev.filter((p) => p.id !== project.id));
       if (selectedProjectId === project.id) {
-        setSelectedProjectId('');
+        try { localStorage.removeItem('ap_current_project'); } catch {}
+        window.dispatchEvent(new CustomEvent('ap-project-changed', { detail: '' }));
         setKeys([]);
       }
     }
@@ -610,27 +612,6 @@ export default function SettingsPage() {
             ))}
           </ul>
         )}
-      </section>
-
-      {/* Shared project selector */}
-      <section className="rounded-xl border border-gray-800 bg-gray-900 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-gray-100">Selected Project</h2>
-        <label htmlFor="project-select-top" className="mb-1 block text-sm text-gray-400">
-          Choose a project to manage its settings and API keys
-        </label>
-        <select
-          id="project-select-top"
-          value={selectedProjectId}
-          onChange={(e) => setSelectedProjectId(e.target.value)}
-          className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
-        >
-          <option value="">— Choose a project —</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
       </section>
 
       {/* SDK Feature Toggles section */}

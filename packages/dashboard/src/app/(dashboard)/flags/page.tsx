@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
+import { useCurrentProjectId } from '@/components/layout/ProjectSwitcher';
 import { CodeSnippet } from '@/components/ui/CodeSnippet';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -443,7 +443,7 @@ export default function FlagsPage() {
 }
 
 function FlagsPageInner() {
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const projectId = useCurrentProjectId();
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -476,13 +476,6 @@ function FlagsPageInner() {
 
   return (
     <div className="space-y-6">
-      {/* Controls */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="w-full max-w-xs">
-          <ProjectSwitcher currentProjectId={projectId} onSelect={setProjectId} />
-        </div>
-      </div>
-
       {/* Heading */}
       <div className="flex items-center justify-between">
         <div>

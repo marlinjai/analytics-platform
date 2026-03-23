@@ -6,7 +6,7 @@ import { SkeletonUrlList } from '@/components/ui/Skeleton';
 import { UrlSelector } from '@/components/heatmap/UrlSelector';
 import { DeviceToggle } from '@/components/heatmap/DeviceToggle';
 import { DateRangePicker } from '@/components/layout/DateRangePicker';
-import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
+import { useCurrentProjectId } from '@/components/layout/ProjectSwitcher';
 import { ScrollDepthChart } from '@/components/charts/ScrollDepthChart';
 import { RageClicksTable } from '@/components/charts/RageClicksTable';
 import { EngagementZonesTable } from '@/components/charts/EngagementZonesTable';
@@ -17,7 +17,7 @@ export default function HeatmapPage() {
 }
 
 function HeatmapPageInner() {
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const projectId = useCurrentProjectId();
   const [from, setFrom] = useState(() => new Date(Date.now() - 7 * 86400000).toISOString());
   const [to, setTo] = useState(() => new Date().toISOString());
   const [urls, setUrls] = useState<string[]>([]);
@@ -81,11 +81,8 @@ function HeatmapPageInner() {
 
   return (
     <div className="space-y-6">
-      {/* Project & date controls */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="w-full max-w-xs">
-          <ProjectSwitcher currentProjectId={projectId} onSelect={setProjectId} />
-        </div>
+      {/* Date controls */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
         <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
       </div>
 

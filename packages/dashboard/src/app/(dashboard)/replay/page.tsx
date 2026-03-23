@@ -4,14 +4,14 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import type { SessionSummary } from '@analytics-platform/shared';
 import { SessionList } from '@/components/replay/SessionList';
 import { DateRangePicker } from '@/components/layout/DateRangePicker';
-import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
+import { useCurrentProjectId } from '@/components/layout/ProjectSwitcher';
 
 export default function ReplayListPage() {
   return <Suspense><ReplayListPageInner /></Suspense>;
 }
 
 function ReplayListPageInner() {
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const projectId = useCurrentProjectId();
   const [from, setFrom] = useState(() => new Date(Date.now() - 7 * 86400000).toISOString());
   const [to, setTo] = useState(() => new Date().toISOString());
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -48,10 +48,7 @@ function ReplayListPageInner() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="w-full max-w-xs">
-          <ProjectSwitcher currentProjectId={projectId} onSelect={setProjectId} />
-        </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
         <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
       </div>
 

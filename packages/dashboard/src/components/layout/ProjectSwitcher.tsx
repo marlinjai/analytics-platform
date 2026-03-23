@@ -1,16 +1,54 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useSyncExternalStore } from 'react';
 import type { Project } from '@analytics-platform/shared';
 
-interface Props {
-  currentProjectId: string | null;
-  onSelect: (projectId: string) => void;
-  onEmpty?: () => void;
+// ── Shared project state via localStorage ────────────────────────────────────
+
+const STORAGE_KEY = 'ap_current_project';
+const EVENT_NAME = 'ap-project-changed';
+
+function getStoredProjectId(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
 }
 
-export function ProjectSwitcher({ currentProjectId, onSelect, onEmpty }: Props) {
+function setStoredProjectId(id: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, id);
+  } catch {}
+  window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: id }));
+}
+
+/** Subscribe to project changes from any component. */
+export function useCurrentProjectId(): string | null {
+  return useSyncExternalStore(
+    (cb) => {
+      const onStorage = (e: StorageEvent) => { if (e.key === STORAGE_KEY) cb(); };
+      const onCustom = () => cb();
+      window.addEventListener('storage', onStorage);
+      window.addEventListener(EVENT_NAME, onCustom);
+      return () => {
+        window.removeEventListener('storage', onStorage);
+        window.removeEventListener(EVENT_NAME, onCustom);
+      };
+    },
+    getStoredProjectId,
+    () => null, // server snapshot
+  );
+}
+
+// ── ProjectSwitcher component ────────────────────────────────────────────────
+
+export function ProjectSwitcher() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const currentProjectId = useCurrentProjectId();
+
+  // Create dialog state
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState('');
   const [domain, setDomain] = useState('');
@@ -22,15 +60,19 @@ export function ProjectSwitcher({ currentProjectId, onSelect, onEmpty }: Props) 
     fetch('/api/projects')
       .then((r) => r.json())
       .then((data) => {
-        setProjects(data.projects ?? []);
-        if (data.projects?.length === 0) {
-          onEmpty?.();
-        } else if (!currentProjectId && data.projects?.length > 0) {
-          onSelect(data.projects[0].id);
+        const list: Project[] = data.projects ?? [];
+        setProjects(list);
+        setLoaded(true);
+        if (list.length > 0 && !getStoredProjectId()) {
+          setStoredProjectId(list[0]!.id);
         }
       })
-      .catch(() => {});
-  }, [currentProjectId, onSelect, onEmpty]);
+      .catch(() => setLoaded(true));
+  }, []);
+
+  function handleSelect(id: string) {
+    setStoredProjectId(id);
+  }
 
   function openDialog() {
     setShowCreate(true);
@@ -62,7 +104,7 @@ export function ProjectSwitcher({ currentProjectId, onSelect, onEmpty }: Props) 
       }
       const data = await res.json();
       setProjects((prev) => [data.project, ...prev]);
-      onSelect(data.project.id);
+      setStoredProjectId(data.project.id);
       closeDialog();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -71,11 +113,13 @@ export function ProjectSwitcher({ currentProjectId, onSelect, onEmpty }: Props) 
     }
   }
 
+  if (!loaded) return null;
+
   return (
     <div className="flex gap-2">
       <select
         value={currentProjectId ?? ''}
-        onChange={(e) => onSelect(e.target.value)}
+        onChange={(e) => handleSelect(e.target.value)}
         className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
       >
         {projects.map((p) => (
