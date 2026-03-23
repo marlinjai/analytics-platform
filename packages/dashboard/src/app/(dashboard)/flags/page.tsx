@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
+import { CodeSnippet } from '@/components/ui/CodeSnippet';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -158,12 +159,20 @@ function CreateFlagForm({
           <p className="mb-3 text-xs text-gray-400">
             Use this in your application code to check the flag:
           </p>
-          <pre className="overflow-x-auto rounded bg-gray-800 px-3 py-2 text-xs text-gray-300">
-{`const isEnabled = await tracker.getFlag('${createdFlag.key}');
-if (isEnabled) {
-  // new feature code
-}`}
-          </pre>
+          <CodeSnippet
+            tabs={[
+              {
+                label: 'React',
+                language: 'jsx',
+                code: `import { useLumitraFlag } from '@marlinjai/analytics-react';\n\nfunction MyComponent() {\n  const enabled = useLumitraFlag('${createdFlag.key}');\n\n  if (!enabled) return null;\n\n  return <>{/* New feature */}</>;\n}`,
+              },
+              {
+                label: 'Vanilla JS',
+                language: 'js',
+                code: `import { getTracker } from '@marlinjai/analytics-tracker';\n\nconst tracker = getTracker();\nawait tracker.ready();\nconst enabled = tracker.getFlag('${createdFlag.key}');\n\nif (enabled) {\n  // new feature code\n}`,
+              },
+            ]}
+          />
         </div>
       </div>
     );

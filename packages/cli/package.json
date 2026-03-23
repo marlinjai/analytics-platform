@@ -1,0 +1,20 @@
+{
+  "name": "@marlinjai/analytics-cli",
+  "version": "1.0.0",
+  "description": "CLI for setting up Lumitra Analytics in your project",
+  "type": "module",
+  "bin": {
+    "lumitra": "dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --target node18 --minify --clean"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "^5.7.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

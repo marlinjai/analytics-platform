@@ -6,18 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-23
+
+### Added
+- **A/B testing & experimentation framework** — full experiment lifecycle: create, configure variants, add goals, start/stop, declare winners
+- **Feature flags** — boolean flags with percentage-based rollout, targeting rules, and multi-variant support
+- **Bayesian statistics engine** — zero-dependency Monte Carlo sampling from Beta posteriors for experiment analysis (probability to be best, lift vs control, 95% credible intervals)
+- **Experiment goals** — pageview, custom event, and click-based conversion tracking with primary goal designation
+- **Per-variant heatmaps** — ClickHouse materialized views for variant-filtered coordinate and selector heatmaps
+- **React SDK** (`@marlinjai/analytics-react`) — `useLumitraVariant`, `useLumitraFlag`, `useLumitraTrack`, `useLumitraIdentify` hooks + `<LumitraVariant>` component
+- **CLI** (`@marlinjai/analytics-cli`) — `lumitra init` command with framework detection, Claude Code skill file generator, and env var scaffolding
+- **Unified API authentication** (`auth-api.ts`) — single middleware supporting both NextAuth sessions and X-API-Key header with role-based access control
+- **Experiment dashboard UI** — detail page with variant results, conversion charts (Recharts), goal management, start/stop controls
+- **Feature flags page** — list, create, toggle, update rollout percentage, delete flags
+- **Settings page** — project settings with danger zone (data reset)
+- **CodeSnippet component** — syntax-highlighted, copyable integration code blocks
+- **Remote config extended** — `GET /api/projects/{id}/config` now serves active experiments and enabled feature flags to the tracker SDK
+- **Tracker experiment support** — `ExperimentManager` with deterministic MurmurHash3 variant assignment, sticky sessionStorage, `getVariant()`, `getFlag()`, `identify()` APIs
+- **Experiment API routes** — full CRUD + start/stop/results/goals endpoints with Zod validation
+- **Feature flags API routes** — CRUD with toggle, rollout percentage, variant management
+- **ClickHouse migrations** (006) — `experiment_id` and `variant` columns on events table + 3 materialized views
+- **Consent-aware replay** — `enableReplay()` / `disableReplay()` methods on tracker for dynamic cookie consent integration
+- **Replay privacy defaults** — rrweb recording now masks all inputs, passwords, emails, and phone fields by default; configurable via `ReplayPrivacy` options
+- **`ReplayPrivacy` config type** — `maskAllInputs`, `maskAllText`, `blockSelector`, `maskTextSelector` options
+- **Test data seed script** — `scripts/seed-test-events.sh` for local ClickHouse validation
+
 ### Changed
 - **Median session duration** — overview stats now use `median()` instead of `avg()` to prevent outlier sessions (tabs left open) from skewing the number
 - **Stats card label** — "Avg Duration" renamed to "Median Duration"
 
 ### Fixed
-- **Session replay blank content** — replay player showed blank white page because CSS from the recorded origin couldn't be loaded cross-origin; rrweb now inlines stylesheets, fonts, and images into the snapshot data
-
-### Added
-- **Consent-aware replay** — `enableReplay()` / `disableReplay()` methods on tracker for dynamic cookie consent integration
-- **Replay privacy defaults** — rrweb recording now masks all inputs, passwords, emails, and phone fields by default; configurable via `ReplayPrivacy` options
-- **`ReplayPrivacy` config type** — `maskAllInputs`, `maskAllText`, `blockSelector`, `maskTextSelector` options
-- **Test data seed script** — `scripts/seed-test-events.sh` for local ClickHouse validation
+- **Session replay blank content** — added `inlineStylesheet`, `collectFonts`, `inlineImages` to rrweb recording options to fix cross-origin CSS in replay player
 
 ## [0.5.0] - 2026-03-22
 

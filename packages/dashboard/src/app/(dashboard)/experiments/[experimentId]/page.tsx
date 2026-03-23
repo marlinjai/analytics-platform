@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { CodeSnippet } from '@/components/ui/CodeSnippet';
 import {
   LineChart,
   Line,
@@ -543,6 +544,84 @@ function VariantHeatmapLink({
   );
 }
 
+// ── Integration Code Section ────────────────────────────────────────────────
+
+function IntegrationCodeSection({ experiment }: { experiment: Experiment }) {
+  const [open, setOpen] = useState(true);
+
+  const variantCases = experiment.variants
+    .map((v, i) => {
+      if (i === 0) return `    case '${v.key}':\n      return <>{/* Control */}</>;`;
+      return `    case '${v.key}':\n      return <>{/* Variant ${i} */}</>;`;
+    })
+    .join('\n');
+
+  const reactCode = `import { useLumitraVariant } from '@marlinjai/analytics-react';
+
+function MyComponent() {
+  const variant = useLumitraVariant('${experiment.key}');
+
+  switch (variant) {
+${variantCases}
+    default:
+      return <>{/* Fallback */}</>;
+  }
+}`;
+
+  const vanillaCode = `import { getTracker } from '@marlinjai/analytics-tracker';
+
+const tracker = getTracker();
+await tracker.ready();
+const variant = tracker.getVariant('${experiment.key}');
+
+switch (variant) {
+${experiment.variants.map((v) => `  case '${v.key}':\n    // render ${v.key}\n    break;`).join('\n')}
+}`;
+
+  const curlCode = `# Get experiment variant assignment for a visitor
+curl -X POST https://analytics.lumitra.co/api/collect \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "type": "experiment_exposure",
+    "experiment_key": "${experiment.key}",
+    "visitor_id": "<visitor-id>"
+  }'`;
+
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between"
+      >
+        <h3 className="text-sm font-medium text-gray-300">Integration Code</h3>
+        <svg
+          className={`h-4 w-4 text-gray-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-gray-400">
+            Use this code in your application to render the correct variant for each user.
+          </p>
+          <CodeSnippet
+            tabs={[
+              { label: 'React', language: 'jsx', code: reactCode },
+              { label: 'Vanilla JS', language: 'js', code: vanillaCode },
+              { label: 'cURL', language: 'bash', code: curlCode },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function ExperimentDetailPage() {
@@ -895,6 +974,11 @@ export default function ExperimentDetailPage() {
 
               {/* Per-variant heatmap links */}
               <VariantHeatmapLink experiment={experiment} />
+
+              {/* Integration Code — also shown for running experiments */}
+              {(experiment.status === 'running') && (
+                <IntegrationCodeSection experiment={experiment} />
+              )}
             </>
           ) : (
             <div className="flex h-48 items-center justify-center rounded-xl border border-gray-800 bg-gray-900">
@@ -953,20 +1037,8 @@ export default function ExperimentDetailPage() {
           {/* Goals */}
           <GoalsSection goals={goals} />
 
-          {/* Integration snippet */}
-          <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
-            <h3 className="mb-2 text-sm font-medium text-gray-300">Integration Snippet</h3>
-            <p className="mb-3 text-xs text-gray-400">
-              Use this code in your application to render the correct variant:
-            </p>
-            <pre className="overflow-x-auto rounded bg-gray-800 px-3 py-2 text-xs text-gray-300">
-{`const variant = await tracker.getVariant('${experiment.key}');
-
-switch (variant) {
-${experiment.variants.map((v) => `  case '${v.key}':\n    // render ${v.key} variant\n    break;`).join('\n')}
-}`}
-            </pre>
-          </div>
+          {/* Integration Code */}
+          <IntegrationCodeSection experiment={experiment} />
         </>
       )}
 

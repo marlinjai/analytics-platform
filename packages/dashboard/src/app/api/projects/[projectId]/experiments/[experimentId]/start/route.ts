@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
 
 type Params = { params: Promise<{ projectId: string; experimentId: string }> };
 
-export async function POST(_request: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request.headers.get('origin')) });
+}
 
+export async function POST(request: NextRequest, { params }: Params) {
   const { projectId, experimentId } = await params;
-
-  if (!(await checkProjectMembership(session.user.id, projectId, ['owner', 'admin']))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authResult = await authenticateRequest(request, projectId, ['owner', 'admin']);
+  if (!authResult.authenticated) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
   const db = getDb();

@@ -30,6 +30,15 @@ importers:
         specifier: ^3.0.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(yaml@2.8.2)
 
+  packages/cli:
+    devDependencies:
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.8)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/dashboard:
     dependencies:
       '@analytics-platform/shared':
@@ -122,6 +131,24 @@ importers:
         version: 0.25.12
       typescript:
         specifier: ^5.7.3
+        version: 5.9.3
+
+  packages/react:
+    devDependencies:
+      '@marlinjai/analytics-tracker':
+        specifier: workspace:*
+        version: link:../tracker
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.4
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.8)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.7.0
         version: 5.9.3
 
   packages/shared:

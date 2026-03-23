@@ -88,6 +88,169 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
+// ── Developer Tools Section ────────────────────────────────────────────────
+
+function DeveloperToolsSection({ projectId }: { projectId: string }) {
+  const [copiedApi, setCopiedApi] = useState(false);
+  const [copiedInstall, setCopiedInstall] = useState(false);
+
+  const endpoint = 'https://analytics.lumitra.co';
+
+  const apiSnippet = `curl -X GET ${endpoint}/api/projects/${projectId}/experiments \\
+  -H "X-API-Key: <your-api-key>"`;
+
+  const installSnippet = 'npx @marlinjai/analytics-cli init';
+
+  async function copyApiSnippet() {
+    await navigator.clipboard.writeText(apiSnippet);
+    setCopiedApi(true);
+    setTimeout(() => setCopiedApi(false), 2000);
+  }
+
+  async function copyInstallSnippet() {
+    await navigator.clipboard.writeText(installSnippet);
+    setCopiedInstall(true);
+    setTimeout(() => setCopiedInstall(false), 2000);
+  }
+
+  function handleDownloadSkill() {
+    const skillContent = `---
+name: lumitra
+description: Create and manage A/B tests, feature flags, and experiments via Lumitra Analytics API
+---
+
+# Lumitra Analytics
+
+## Setup
+Project ID: ${projectId}
+Endpoint: ${endpoint}
+
+Read API key from environment: LUMITRA_API_KEY
+
+## Authentication
+X-API-Key: {your-api-key-here}
+
+## API Reference
+
+### Experiments
+GET    ${endpoint}/api/projects/${projectId}/experiments
+POST   ${endpoint}/api/projects/${projectId}/experiments
+POST   ${endpoint}/api/projects/${projectId}/experiments/{id}/goals
+POST   ${endpoint}/api/projects/${projectId}/experiments/{id}/start
+POST   ${endpoint}/api/projects/${projectId}/experiments/{id}/stop
+GET    ${endpoint}/api/projects/${projectId}/experiments/{id}/results
+
+### Feature Flags
+GET    ${endpoint}/api/projects/${projectId}/flags
+POST   ${endpoint}/api/projects/${projectId}/flags
+PATCH  ${endpoint}/api/projects/${projectId}/flags/{id}
+DELETE ${endpoint}/api/projects/${projectId}/flags/{id}
+
+### Create Experiment
+POST body: { key, name, hypothesis, variants: [{key, weight}], targeting: {} }
+
+### Create Flag
+POST body: { key, name, enabled, rollout_percentage }
+
+### Integration Code
+
+React:
+import { useLumitraVariant } from '@marlinjai/analytics-react';
+const variant = useLumitraVariant('experiment-key');
+
+Vanilla JS:
+const variant = tracker.getVariant('experiment-key');
+
+When creating experiments, generate integration code and edit the relevant component.
+When checking results, call the results endpoint and report the Bayesian analysis.
+`;
+
+    const blob = new Blob([skillContent], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lumitra.md';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <section className="rounded-xl border border-gray-800 bg-gray-900 p-6">
+      <div className="mb-1">
+        <h2 className="text-lg font-semibold text-gray-100">Developer Tools</h2>
+        <p className="mt-0.5 text-xs text-gray-400">
+          Programmatic access, CLI tools, and AI-agent integrations for your project.
+        </p>
+      </div>
+
+      <div className="mt-5 space-y-6">
+        {/* API Key Usage */}
+        <div>
+          <h3 className="mb-2 text-sm font-medium text-gray-300">API Key Usage</h3>
+          <p className="mb-3 text-xs text-gray-400">
+            Use your API key to access experiments and flags programmatically.
+          </p>
+          <div className="relative rounded-lg border border-gray-800 bg-gray-950 overflow-hidden">
+            <pre className="overflow-x-auto px-4 py-3 text-xs leading-relaxed text-gray-300">
+              <code>{apiSnippet}</code>
+            </pre>
+            <button
+              onClick={copyApiSnippet}
+              className="absolute right-2 top-2 rounded bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600 transition"
+            >
+              {copiedApi ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+        </div>
+
+        {/* Claude Code Skill download */}
+        <div className="rounded-lg border border-gray-800 bg-gray-800/30 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-medium text-gray-200">Claude Code Skill</h3>
+              <p className="mt-1 text-xs text-gray-400">
+                Download a pre-configured skill file for Claude Code. It includes your project ID,
+                all API endpoints, and integration patterns so the AI agent can create and manage
+                experiments on your behalf.
+              </p>
+            </div>
+            <button
+              onClick={handleDownloadSkill}
+              className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download Skill
+            </button>
+          </div>
+        </div>
+
+        {/* Quick install */}
+        <div>
+          <h3 className="mb-2 text-sm font-medium text-gray-300">Quick Install</h3>
+          <p className="mb-3 text-xs text-gray-400">
+            Set up the Lumitra SDK in your project with a single command.
+          </p>
+          <div className="relative rounded-lg border border-gray-800 bg-gray-950 overflow-hidden">
+            <pre className="overflow-x-auto px-4 py-3 text-xs leading-relaxed text-gray-300">
+              <code>{installSnippet}</code>
+            </pre>
+            <button
+              onClick={copyInstallSnippet}
+              className="absolute right-2 top-2 rounded bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600 transition"
+            >
+              {copiedInstall ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -850,6 +1013,11 @@ export default function SettingsPage() {
           </>
         )}
       </section>
+
+      {/* ── Developer Tools ── */}
+      {selectedProjectId && (
+        <DeveloperToolsSection projectId={selectedProjectId} />
+      )}
 
       {/* ── Danger Zone ── */}
       {selectedProjectId && (

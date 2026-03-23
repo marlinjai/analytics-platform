@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { getClickHouse } from '@/lib/clickhouse';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
 import { analyzeExperiment, type VariantData } from '@/lib/experiment-stats';
 
 type Params = { params: Promise<{ projectId: string; experimentId: string }> };
 
-export async function GET(_request: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request.headers.get('origin')) });
+}
 
+export async function GET(request: NextRequest, { params }: Params) {
   const { projectId, experimentId } = await params;
-
-  if (!(await checkProjectMembership(session.user.id, projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authResult = await authenticateRequest(request, projectId);
+  if (!authResult.authenticated) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
   const db = getDb();

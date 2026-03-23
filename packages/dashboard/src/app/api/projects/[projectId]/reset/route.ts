@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { checkProjectMembership } from '@/lib/auth-check';
 import { getClickHouse } from '@/lib/clickhouse';
+import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
 
 type Params = { params: Promise<{ projectId: string }> };
 
@@ -11,16 +10,15 @@ type Params = { params: Promise<{ projectId: string }> };
  * Deletes ALL analytics events for a project from ClickHouse.
  * Requires owner role. This is irreversible.
  */
-export async function DELETE(_request: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request.headers.get('origin')) });
+}
 
+export async function DELETE(request: NextRequest, { params }: Params) {
   const { projectId } = await params;
-
-  if (!(await checkProjectMembership(session.user.id, projectId, ['owner']))) {
-    return NextResponse.json({ error: 'Forbidden — owner only' }, { status: 403 });
+  const authResult = await authenticateRequest(request, projectId, ['owner']);
+  if (!authResult.authenticated) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
   const ch = getClickHouse();
