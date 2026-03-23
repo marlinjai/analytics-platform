@@ -1226,17 +1226,16 @@ async function sendToTab(tabId: number, message: object): Promise<boolean> {
 function renderClickZonesInMainWorld(): void {
   removeClickZonesInMainWorld();
 
-  // Get ALL visible DOM elements — the tracker captures clicks on any of them
+  // Find leaf elements — deepest visible DOM nodes that would actually receive clicks.
+  // A "leaf" here means: no visible child element covers its area.
+  const SKIP_TAGS = new Set(["script", "style", "link", "meta", "noscript", "br", "hr", "head"]);
   const allEls = document.querySelectorAll("body *");
-  const elements: Element[] = [];
+  const candidates: Element[] = [];
 
   allEls.forEach((el) => {
     try {
-      // Skip lumitra's own elements
       if ((el as HTMLElement).closest?.("#lumitra-widget-host, #lumitra-overlay-host, #lumitra-zone-container")) return;
-      // Skip script/style/meta
-      const tag = el.tagName.toLowerCase();
-      if (["script", "style", "link", "meta", "noscript", "br", "hr"].includes(tag)) return;
+      if (SKIP_TAGS.has(el.tagName.toLowerCase())) return;
 
       const rect = el.getBoundingClientRect();
       if (rect.width < 8 || rect.height < 8) return;
@@ -1244,8 +1243,39 @@ function renderClickZonesInMainWorld(): void {
       const style = getComputedStyle(el);
       if (style.display === "none" || style.visibility === "hidden") return;
 
-      elements.push(el);
+      candidates.push(el);
     } catch { /* skip */ }
+  });
+
+  // Filter to leaf-like elements: elements that don't have a visible child
+  // covering most of their area. This removes containers like <section>, <main>, etc.
+  const elements = candidates.filter((el) => {
+    // Always include interactive elements regardless of size
+    const tag = el.tagName.toLowerCase();
+    if (["a", "button", "input", "select", "textarea", "img", "video", "svg"].includes(tag)) return true;
+    if (el.getAttribute("role") === "button" || el.getAttribute("role") === "link") return true;
+
+    // Check if this element has visible children — if so, it's a container, skip it
+    const children = el.children;
+    if (children.length === 0) return true; // no children = leaf
+
+    const rect = el.getBoundingClientRect();
+    const area = rect.width * rect.height;
+
+    // If any single child covers >70% of this element's area, this is just a wrapper
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i]!;
+      if (SKIP_TAGS.has(child.tagName.toLowerCase())) continue;
+      const cRect = child.getBoundingClientRect();
+      const cArea = cRect.width * cRect.height;
+      if (cArea > area * 0.7) return false; // child fills parent — parent is a wrapper
+    }
+
+    // If element is very large (>15% viewport) and has children, skip it
+    const vpArea = window.innerWidth * window.innerHeight;
+    if (area / vpArea > 0.15 && children.length > 0) return false;
+
+    return true;
   });
 
   // Create container for all overlays

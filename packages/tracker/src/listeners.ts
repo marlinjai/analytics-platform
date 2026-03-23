@@ -166,10 +166,22 @@ export function attachClickListener(cb: EventCallback): () => void {
     // Only track primary button (left click / tap)
     if (e.button !== 0) return;
 
-    const target = e.target as Element | null;
+    let target = e.target as Element | null;
     if (!target) return;
 
     const canvasOnly = isCanvasOnlyPage();
+
+    // Always resolve to the deepest element at the click coordinates.
+    // event.target can be a container if the click landed on padding/background.
+    // elementFromPoint returns the topmost visible element at that exact pixel,
+    // which is typically the deepest leaf in the DOM tree.
+    if (!canvasOnly) {
+      const deepest = document.elementFromPoint(e.clientX, e.clientY);
+      if (deepest && deepest !== target) {
+        target = deepest;
+      }
+    }
+
     const rect = target.getBoundingClientRect();
     const pointerType = 'pointerType' in e ? (e as PointerEvent).pointerType : undefined;
 
