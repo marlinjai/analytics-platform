@@ -1,7 +1,7 @@
 /**
  * Content script — injected on all pages.
  *
- * Creates a Clarity-style floating widget (Shadow DOM) with mode tabs:
+ * Creates a modern floating widget (Shadow DOM) with mode tabs:
  *   Clicks | Scroll | Rage | Off
  *
  * The heatmap rendering is done via chrome.scripting.executeScript in the
@@ -11,9 +11,29 @@
  * This content script only manages the widget UI and overlay containers.
  */
 
+// ─── Guard: prevent duplicate initialization ─────────────────────────────────
+const _w = window as unknown as { __lumitraContentInit?: boolean };
+if (_w.__lumitraContentInit) {
+  // Already initialized — skip duplicate
+} else {
+_w.__lumitraContentInit = true;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type OverlayMode = "clicks" | "scroll" | "rage" | "off";
+
+interface ExperimentVariant {
+  key: string;
+  weight: number;
+}
+
+interface Experiment {
+  id: string;
+  key: string;
+  name: string;
+  status: string;
+  variants: ExperimentVariant[];
+}
 
 interface LoadHeatmapMessage {
   type: "LOAD_HEATMAP_RESULT";
@@ -41,7 +61,14 @@ interface HeatmapRenderedMessage {
   type: "HEATMAP_RENDERED";
 }
 
-type ContentMessage = ShowOverlayMessage | ClearOverlayMessage | LoadHeatmapMessage | HeatmapRenderedMessage;
+interface ExperimentsLoadedMessage {
+  type: "EXPERIMENTS_LOADED";
+  experiments: Experiment[];
+  selectedExperimentId: string | null;
+  selectedVariant: string;
+}
+
+type ContentMessage = ShowOverlayMessage | ClearOverlayMessage | LoadHeatmapMessage | HeatmapRenderedMessage | ExperimentsLoadedMessage;
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -53,6 +80,11 @@ let currentConfig: ShowOverlayMessage | null = null;
 let currentUrl = location.href;
 let minimized = false;
 let visualSettings = { radius: 40, opacity: 0.75, blur: 0.8 };
+
+// ── Experiment filter state ──────────────────────────────────────────────────
+let experiments: Experiment[] = [];
+let selectedExperimentId: string | null = null;
+let selectedVariant: string = "all";
 
 // ─── Message listener ─────────────────────────────────────────────────────────
 
@@ -101,6 +133,16 @@ chrome.runtime.onMessage.addListener(
       sendResponse({ ok: true });
       return;
     }
+
+    if (message.type === "EXPERIMENTS_LOADED") {
+      const msg = message as ExperimentsLoadedMessage;
+      experiments = msg.experiments;
+      selectedExperimentId = msg.selectedExperimentId;
+      selectedVariant = msg.selectedVariant;
+      if (currentConfig) renderWidget(currentConfig);
+      sendResponse({ ok: true });
+      return;
+    }
   }
 );
 
@@ -108,6 +150,32 @@ chrome.runtime.onMessage.addListener(
 
 function showWidget(config: ShowOverlayMessage): void {
   if (widgetHost) return; // already showing
+
+  // Fetch experiments for this project (non-blocking)
+  chrome.runtime.sendMessage(
+    { type: "FETCH_EXPERIMENTS", projectId: config.projectId },
+    (res: { ok: boolean; data?: { experiments: Experiment[] } }) => {
+      if (res?.ok && res.data?.experiments) {
+        experiments = res.data.experiments;
+        chrome.runtime.sendMessage(
+          { type: "GET_EXPERIMENT_FILTER" },
+          (filterRes: { ok: boolean; data?: { experimentId: string | null; variant: string } }) => {
+            if (filterRes?.ok && filterRes.data) {
+              const matchesExperiment = experiments.some((e) => e.id === filterRes.data!.experimentId);
+              if (matchesExperiment) {
+                selectedExperimentId = filterRes.data.experimentId;
+                selectedVariant = filterRes.data.variant;
+              } else {
+                selectedExperimentId = null;
+                selectedVariant = "all";
+              }
+            }
+            if (currentConfig) renderWidget(currentConfig);
+          }
+        );
+      }
+    }
+  );
 
   // Create widget host with Shadow DOM
   widgetHost = document.createElement("div");
@@ -119,12 +187,12 @@ function showWidget(config: ShowOverlayMessage): void {
   overlayHost = document.createElement("div");
   overlayHost.id = "lumitra-overlay-host";
   overlayHost.style.cssText = [
-    "position:absolute",
-    "top:0",
-    "left:0",
+    "position:absolute!important",
+    "top:0!important",
+    "left:0!important",
     "width:100%",
-    "pointer-events:none",
-    "z-index:2147483646",
+    "pointer-events:none!important",
+    "z-index:2147483646!important",
   ].join(";");
 
   document.documentElement.appendChild(overlayHost);
@@ -133,209 +201,416 @@ function showWidget(config: ShowOverlayMessage): void {
   renderWidget(config);
 }
 
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const WIDGET_STYLES = `
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 20px rgba(201,168,76,0.15); }
+    50%      { box-shadow: 0 0 30px rgba(201,168,76,0.25); }
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+
+  :host { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  .widget {
+    background: rgba(12, 12, 20, 0.72);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 16px;
+    width: 320px;
+    color: #e8e8ed;
+    font-size: 13px;
+    cursor: default;
+    user-select: none;
+    backdrop-filter: blur(24px) saturate(1.5);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04) inset,
+      0 24px 48px -12px rgba(0,0,0,0.5),
+      0 0 40px rgba(201,168,76,0.06);
+    animation: fadeIn 0.25s ease-out;
+  }
+
+  .widget.variant-active {
+    border-color: rgba(201,168,76,0.2);
+    box-shadow:
+      0 0 0 1px rgba(201,168,76,0.08) inset,
+      0 24px 48px -12px rgba(0,0,0,0.5),
+      0 0 40px rgba(201,168,76,0.12);
+  }
+
+  .widget.minimized {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    animation: pulseGlow 3s ease-in-out infinite;
+    border-color: rgba(201,168,76,0.2);
+  }
+
+  .widget.minimized:hover {
+    border-color: rgba(201,168,76,0.4);
+    transform: scale(1.08);
+    transition: all 0.2s ease;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .logo {
+    width: 22px;
+    height: 22px;
+    background: linear-gradient(135deg, #c9a84c 0%, #e8d48b 50%, #c9a84c 100%);
+    background-size: 200% auto;
+    border-radius: 6px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(201,168,76,0.3);
+  }
+
+  .title {
+    font-weight: 600;
+    font-size: 14px;
+    background: linear-gradient(135deg, #f0f0f5, #c0c0c8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    flex: 1;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 2px;
+  }
+
+  .icon-btn {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.3);
+    cursor: pointer;
+    font-size: 13px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+  }
+
+  .icon-btn:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.08);
+  }
+
+  /* ── Mode Tabs ── */
+  .tabs {
+    display: flex;
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+    margin-bottom: 14px;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 7px 6px;
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.35);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: 8px;
+    font-family: inherit;
+  }
+
+  .tab:hover {
+    color: rgba(255,255,255,0.6);
+    background: rgba(255,255,255,0.04);
+  }
+
+  .tab.active {
+    background: linear-gradient(135deg, #c9a84c, #b8933f);
+    color: #0c0c14;
+    box-shadow: 0 2px 8px rgba(201,168,76,0.3);
+  }
+
+  .tab.active-rage {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(239,68,68,0.3);
+  }
+
+  /* ── Info Row ── */
+  .info-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+
+  .info-chip {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dash-link {
+    color: #c9a84c;
+    text-decoration: none;
+    font-size: 11px;
+    margin-left: auto;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+  }
+
+  .dash-link:hover { opacity: 1; text-decoration: underline; }
+
+  /* ── Slider Controls (always visible) ── */
+  .controls-section {
+    margin-bottom: 12px;
+  }
+
+  .controls-label {
+    font-size: 10px;
+    color: rgba(255,255,255,0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .controls-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+  }
+
+  .slider-row label {
+    width: 50px;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .slider-track {
+    flex: 1;
+    position: relative;
+    height: 24px;
+    display: flex;
+    align-items: center;
+  }
+
+  .slider-row input[type="range"] {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #e2c675, #c9a84c);
+    cursor: pointer;
+    box-shadow: 0 1px 6px rgba(201,168,76,0.4), 0 0 12px rgba(201,168,76,0.15);
+    border: 2px solid rgba(255,255,255,0.1);
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+  }
+
+  .slider-row input[type="range"]::-webkit-slider-thumb:hover {
+    box-shadow: 0 1px 8px rgba(201,168,76,0.6), 0 0 20px rgba(201,168,76,0.25);
+    transform: scale(1.15);
+  }
+
+  .slider-row input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #e2c675, #c9a84c);
+    cursor: pointer;
+    box-shadow: 0 1px 6px rgba(201,168,76,0.4);
+    border: 2px solid rgba(255,255,255,0.1);
+  }
+
+  .slider-row input[type="range"]::-moz-range-track {
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    border: none;
+  }
+
+  .slider-value {
+    width: 32px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    font-weight: 500;
+  }
+
+  /* ── Experiment Section ── */
+  .experiment-section {
+    padding-top: 12px;
+    margin-top: 2px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 12px;
+  }
+
+  .experiment-label {
+    font-size: 10px;
+    color: rgba(255,255,255,0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .experiment-select {
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    color: #e8e8ed;
+    padding: 7px 10px;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+    font-family: inherit;
+    margin-bottom: 6px;
+    transition: border-color 0.15s;
+  }
+
+  .experiment-select:hover {
+    border-color: rgba(255,255,255,0.15);
+  }
+
+  .experiment-select:focus {
+    border-color: rgba(201,168,76,0.4);
+  }
+
+  .experiment-select option {
+    background: #1a1a2e;
+    color: #e8e8ed;
+  }
+
+  .variant-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(201,168,76,0.1);
+    border: 1px solid rgba(201,168,76,0.2);
+    color: #e2c675;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 6px;
+    margin-top: 4px;
+    letter-spacing: 0.02em;
+  }
+
+  .variant-badge .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #c9a84c;
+    box-shadow: 0 0 6px rgba(201,168,76,0.5);
+  }
+
+  /* ── Status ── */
+  .status {
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    min-height: 16px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .status.error { color: #f87171; }
+
+  .status:empty {
+    padding-top: 0;
+    border-top: none;
+    min-height: 0;
+  }
+
+  /* ── Drag Handle ── */
+  .drag-handle {
+    cursor: grab;
+    flex: 1;
+  }
+  .drag-handle:active { cursor: grabbing; }
+
+  /* ── Mini logo ── */
+  .mini-logo {
+    width: 26px;
+    height: 26px;
+    background: linear-gradient(135deg, #c9a84c 0%, #e8d48b 50%, #c9a84c 100%);
+    border-radius: 50%;
+    box-shadow: 0 0 12px rgba(201,168,76,0.3);
+  }
+
+  /* ── Divider ── */
+  .divider {
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 12px 0;
+  }
+`;
+
+// ─── Widget rendering ──────────────────────────────────────────────────────────
+
 function renderWidget(config: ShowOverlayMessage): void {
   if (!widgetShadow) return;
 
   widgetShadow.innerHTML = "";
 
   const style = document.createElement("style");
-  style.textContent = `
-    :host { all: initial; font-family: system-ui, -apple-system, sans-serif; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    .widget {
-      background: rgba(3,7,18,0.94);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      padding: 10px 14px;
-      min-width: 280px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
-      color: #f3f4f6;
-      font-size: 13px;
-      cursor: default;
-      user-select: none;
-      backdrop-filter: blur(12px);
-    }
-
-    .widget.minimized {
-      min-width: auto;
-      padding: 0;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-    }
-
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-
-    .logo {
-      width: 20px;
-      height: 20px;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      border-radius: 5px;
-      flex-shrink: 0;
-    }
-
-    .title {
-      font-weight: 600;
-      font-size: 13px;
-      flex: 1;
-    }
-
-    .header-actions {
-      display: flex;
-      gap: 4px;
-    }
-
-    .icon-btn {
-      background: none;
-      border: none;
-      color: #6b7280;
-      cursor: pointer;
-      font-size: 14px;
-      padding: 2px 4px;
-      line-height: 1;
-      border-radius: 4px;
-    }
-
-    .icon-btn:hover { color: #f3f4f6; background: rgba(255,255,255,0.08); }
-
-    .tabs {
-      display: flex;
-      background: rgba(255,255,255,0.06);
-      border-radius: 8px;
-      overflow: hidden;
-      margin-bottom: 8px;
-    }
-
-    .tab {
-      flex: 1;
-      padding: 6px 8px;
-      background: transparent;
-      border: none;
-      color: #6b7280;
-      font-size: 11px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.15s;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-    }
-
-    .tab:hover { color: #d1d5db; }
-    .tab.active { background: #4f46e5; color: #fff; font-weight: 600; }
-    .tab.active-rage { background: #dc2626; color: #fff; font-weight: 600; }
-
-    .info-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 11px;
-      color: #6b7280;
-    }
-
-    .info-chip {
-      background: rgba(255,255,255,0.06);
-      padding: 2px 6px;
-      border-radius: 4px;
-    }
-
-    .status {
-      font-size: 11px;
-      color: #6b7280;
-      margin-top: 6px;
-      min-height: 16px;
-    }
-
-    .status.error { color: #f87171; }
-
-    .dash-link {
-      color: #818cf8;
-      text-decoration: none;
-      font-size: 11px;
-    }
-
-    .dash-link:hover { text-decoration: underline; }
-
-    .controls-toggle {
-      background: none;
-      border: none;
-      color: #6b7280;
-      font-size: 11px;
-      cursor: pointer;
-      padding: 4px 0;
-      width: 100%;
-      text-align: left;
-    }
-    .controls-toggle:hover { color: #d1d5db; }
-
-    .controls-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-top: 4px;
-    }
-
-    .slider-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 11px;
-      color: #9ca3af;
-    }
-
-    .slider-row label {
-      width: 52px;
-      flex-shrink: 0;
-    }
-
-    .slider-row input[type="range"] {
-      flex: 1;
-      height: 4px;
-      -webkit-appearance: none;
-      appearance: none;
-      background: rgba(255,255,255,0.1);
-      border-radius: 2px;
-      outline: none;
-    }
-
-    .slider-row input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: #6366f1;
-      cursor: pointer;
-    }
-
-    .slider-row .slider-value {
-      width: 28px;
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .mini-logo {
-      width: 24px;
-      height: 24px;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      border-radius: 50%;
-    }
-
-    .drag-handle {
-      cursor: grab;
-      flex: 1;
-    }
-
-    .drag-handle:active { cursor: grabbing; }
-  `;
+  style.textContent = WIDGET_STYLES;
   widgetShadow.appendChild(style);
 
   if (minimized) {
@@ -344,9 +619,9 @@ function renderWidget(config: ShowOverlayMessage): void {
   }
 
   const widget = document.createElement("div");
-  widget.className = "widget";
+  widget.className = selectedExperimentId && selectedVariant !== "all" ? "widget variant-active" : "widget";
 
-  // Header
+  // ── Header ──
   const header = document.createElement("div");
   header.className = "header";
 
@@ -365,7 +640,7 @@ function renderWidget(config: ShowOverlayMessage): void {
 
   const minimizeBtn = document.createElement("button");
   minimizeBtn.className = "icon-btn";
-  minimizeBtn.textContent = "—";
+  minimizeBtn.innerHTML = "&#x2013;";
   minimizeBtn.title = "Minimize";
   minimizeBtn.addEventListener("click", () => {
     minimized = true;
@@ -374,7 +649,7 @@ function renderWidget(config: ShowOverlayMessage): void {
 
   const closeBtn = document.createElement("button");
   closeBtn.className = "icon-btn";
-  closeBtn.textContent = "✕";
+  closeBtn.innerHTML = "&#x2715;";
   closeBtn.title = "Close";
   closeBtn.addEventListener("click", () => {
     destroyEverything();
@@ -389,7 +664,7 @@ function renderWidget(config: ShowOverlayMessage): void {
   header.appendChild(actions);
   widget.appendChild(header);
 
-  // Mode tabs
+  // ── Mode tabs ──
   const tabs = document.createElement("div");
   tabs.className = "tabs";
 
@@ -412,13 +687,80 @@ function renderWidget(config: ShowOverlayMessage): void {
   });
   widget.appendChild(tabs);
 
-  // Info row
+  // ── Heatmap Controls (always visible when in clicks mode) ──
+  if (currentMode === "clicks") {
+    const section = document.createElement("div");
+    section.className = "controls-section";
+
+    const label = document.createElement("div");
+    label.className = "controls-label";
+    label.textContent = "Heatmap";
+    section.appendChild(label);
+
+    const panel = document.createElement("div");
+    panel.className = "controls-panel";
+
+    const sliders: { label: string; key: keyof typeof visualSettings; min: number; max: number; step: number }[] = [
+      { label: "Radius", key: "radius", min: 15, max: 120, step: 5 },
+      { label: "Opacity", key: "opacity", min: 0.1, max: 1.0, step: 0.05 },
+      { label: "Blur", key: "blur", min: 0.3, max: 1.0, step: 0.05 },
+    ];
+
+    sliders.forEach(({ label: sliderLabel, key, min, max, step }) => {
+      const row = document.createElement("div");
+      row.className = "slider-row";
+
+      const lbl = document.createElement("label");
+      lbl.textContent = sliderLabel;
+
+      const track = document.createElement("div");
+      track.className = "slider-track";
+
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(min);
+      input.max = String(max);
+      input.step = String(step);
+      input.value = String(visualSettings[key]);
+
+      track.appendChild(input);
+
+      const valSpan = document.createElement("span");
+      valSpan.className = "slider-value";
+      valSpan.textContent = key === "radius" ? String(visualSettings[key]) : Number(visualSettings[key]).toFixed(1);
+
+      input.addEventListener("change", () => {
+        const val = parseFloat(input.value);
+        visualSettings[key] = val;
+        valSpan.textContent = key === "radius" ? String(val) : val.toFixed(1);
+        chrome.runtime.sendMessage({ type: "SAVE_VISUAL_SETTINGS", settings: visualSettings });
+        activateMode("clicks");
+      });
+
+      input.addEventListener("input", () => {
+        const val = parseFloat(input.value);
+        valSpan.textContent = key === "radius" ? String(val) : val.toFixed(1);
+      });
+
+      row.appendChild(lbl);
+      row.appendChild(track);
+      row.appendChild(valSpan);
+      panel.appendChild(row);
+    });
+
+    section.appendChild(panel);
+    widget.appendChild(section);
+  }
+
+  // ── Info row ──
   const infoRow = document.createElement("div");
   infoRow.className = "info-row";
 
   const dateChip = document.createElement("span");
   dateChip.className = "info-chip";
-  dateChip.textContent = `${config.from} → ${config.to}`;
+  const fromDate = config.from.split("T")[0] || config.from;
+  const toDate = config.to.split("T")[0] || config.to;
+  dateChip.textContent = `${fromDate} → ${toDate}`;
 
   const deviceChip = document.createElement("span");
   deviceChip.className = "info-chip";
@@ -442,76 +784,106 @@ function renderWidget(config: ShowOverlayMessage): void {
   infoRow.appendChild(dashLink);
   widget.appendChild(infoRow);
 
-  // Visual controls (collapsible, only for clicks mode)
-  if (currentMode === "clicks") {
-    const toggle = document.createElement("button");
-    toggle.className = "controls-toggle";
-    toggle.textContent = "▸ Heatmap settings";
-    let controlsOpen = false;
+  // ── Experiment/Variant filter ──
+  if (experiments.length > 0) {
+    const expSection = document.createElement("div");
+    expSection.className = "experiment-section";
 
-    const panel = document.createElement("div");
-    panel.className = "controls-panel";
-    panel.style.display = "none";
+    const expLabel = document.createElement("div");
+    expLabel.className = "experiment-label";
+    expLabel.textContent = "Experiment";
 
-    toggle.addEventListener("click", () => {
-      controlsOpen = !controlsOpen;
-      panel.style.display = controlsOpen ? "flex" : "none";
-      toggle.textContent = controlsOpen ? "▾ Heatmap settings" : "▸ Heatmap settings";
+    const expSelect = document.createElement("select");
+    expSelect.className = "experiment-select";
+
+    const noneOpt = document.createElement("option");
+    noneOpt.value = "";
+    noneOpt.textContent = "All traffic (no filter)";
+    expSelect.appendChild(noneOpt);
+
+    experiments.forEach((exp) => {
+      const opt = document.createElement("option");
+      opt.value = exp.id;
+      opt.textContent = exp.name || exp.key;
+      expSelect.appendChild(opt);
+    });
+    expSelect.value = selectedExperimentId || "";
+
+    expSelect.addEventListener("change", () => {
+      const newId = expSelect.value || null;
+      selectedExperimentId = newId;
+      selectedVariant = "all";
+      chrome.runtime.sendMessage({
+        type: "SET_EXPERIMENT_FILTER",
+        experimentId: newId,
+        variant: "all",
+      });
+      if (currentConfig) renderWidget(currentConfig);
+      if (currentMode !== "off") activateMode(currentMode);
     });
 
-    const sliders: { label: string; key: keyof typeof visualSettings; min: number; max: number; step: number }[] = [
-      { label: "Radius", key: "radius", min: 15, max: 120, step: 5 },
-      { label: "Opacity", key: "opacity", min: 0.1, max: 1.0, step: 0.05 },
-      { label: "Blur", key: "blur", min: 0.3, max: 1.0, step: 0.05 },
-    ];
+    expSection.appendChild(expLabel);
+    expSection.appendChild(expSelect);
 
-    sliders.forEach(({ label, key, min, max, step }) => {
-      const row = document.createElement("div");
-      row.className = "slider-row";
+    // Variant sub-filter
+    if (selectedExperimentId) {
+      const activeExp = experiments.find((e) => e.id === selectedExperimentId);
+      if (activeExp && activeExp.variants.length > 0) {
+        const varLabel = document.createElement("div");
+        varLabel.className = "experiment-label";
+        varLabel.textContent = "Variant";
 
-      const lbl = document.createElement("label");
-      lbl.textContent = label;
+        const varSelect = document.createElement("select");
+        varSelect.className = "experiment-select";
 
-      const input = document.createElement("input");
-      input.type = "range";
-      input.min = String(min);
-      input.max = String(max);
-      input.step = String(step);
-      input.value = String(visualSettings[key]);
+        const allOpt = document.createElement("option");
+        allOpt.value = "all";
+        allOpt.textContent = "All variants";
+        varSelect.appendChild(allOpt);
 
-      const valSpan = document.createElement("span");
-      valSpan.className = "slider-value";
-      valSpan.textContent = String(visualSettings[key]);
+        activeExp.variants.forEach((v) => {
+          const opt = document.createElement("option");
+          opt.value = v.key;
+          opt.textContent = v.key;
+          varSelect.appendChild(opt);
+        });
+        varSelect.value = selectedVariant;
 
-      input.addEventListener("change", () => {
-        const val = parseFloat(input.value);
-        visualSettings[key] = val;
-        valSpan.textContent = key === "radius" ? String(val) : val.toFixed(2);
-        // Save to storage and re-render
-        chrome.runtime.sendMessage({ type: "SAVE_VISUAL_SETTINGS", settings: visualSettings });
-        activateMode("clicks");
-      });
+        varSelect.addEventListener("change", () => {
+          selectedVariant = varSelect.value;
+          chrome.runtime.sendMessage({
+            type: "SET_EXPERIMENT_FILTER",
+            experimentId: selectedExperimentId,
+            variant: selectedVariant,
+          });
+          if (currentConfig) renderWidget(currentConfig);
+          if (currentMode !== "off") activateMode(currentMode);
+        });
 
-      input.addEventListener("input", () => {
-        const val = parseFloat(input.value);
-        valSpan.textContent = key === "radius" ? String(val) : val.toFixed(2);
-      });
+        expSection.appendChild(varLabel);
+        expSection.appendChild(varSelect);
+      }
+    }
 
-      row.appendChild(lbl);
-      row.appendChild(input);
-      row.appendChild(valSpan);
-      panel.appendChild(row);
-    });
+    // Variant badge
+    if (selectedExperimentId && selectedVariant !== "all") {
+      const badge = document.createElement("div");
+      badge.className = "variant-badge";
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      badge.appendChild(dot);
+      badge.appendChild(document.createTextNode(`Viewing: ${selectedVariant}`));
+      expSection.appendChild(badge);
+    }
 
-    widget.appendChild(toggle);
-    widget.appendChild(panel);
+    widget.appendChild(expSection);
   }
 
-  // Status
+  // ── Status ──
   const status = document.createElement("div");
   status.className = "status";
   status.id = "lumitra-status";
-  status.textContent = currentMode === "off" ? "" : "Loading…";
+  status.textContent = currentMode === "off" ? "" : "Loading\u2026";
   widget.appendChild(status);
 
   widgetShadow.appendChild(widget);
@@ -554,7 +926,7 @@ function activateMode(mode: OverlayMode): void {
   // Detect canvas-only pages (Flutter CanvasKit, Unity WebGL, etc.)
   const isCanvasOnly = detectCanvasOnlyPage();
   if (mode === "clicks" && isCanvasOnly) {
-    showStatus("Canvas page — coordinate heatmap", false);
+    showStatus("Canvas page \u2014 coordinate heatmap", false);
   }
 
   // Ask background to fetch data and inject rendering
@@ -572,6 +944,8 @@ function activateMode(mode: OverlayMode): void {
     pageHeight: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight),
     isCanvasOnly,
     visualSettings,
+    experimentId: selectedExperimentId,
+    variant: selectedVariant,
   });
 }
 
@@ -586,26 +960,23 @@ function detectCanvasOnlyPage(): boolean {
 // ─── Overlay management ───────────────────────────────────────────────────────
 
 function clearOverlayContent(): void {
-  // Remove any main-world heatmap canvas
   const existing = document.getElementById("lumitra-heatmap-container");
   if (existing) existing.remove();
+  const existingFixed = document.getElementById("lumitra-heatmap-fixed");
+  if (existingFixed) existingFixed.remove();
 
-  // Remove scroll gradient
   const scrollStrip = document.getElementById("lumitra-scroll-strip");
   if (scrollStrip) scrollStrip.remove();
 
-  // Remove rage highlights
   document.querySelectorAll("[data-lumitra-rage]").forEach((el) => {
     (el as HTMLElement).style.outline = "";
     (el as HTMLElement).style.animation = "";
     el.removeAttribute("data-lumitra-rage");
   });
 
-  // Remove injected style
   const rageStyle = document.getElementById("lumitra-rage-style");
   if (rageStyle) rageStyle.remove();
 
-  // Remove element heat overlay
   document.querySelectorAll("[data-lumitra-element-heat]").forEach((el) => {
     const htmlEl = el as HTMLElement;
     htmlEl.style.removeProperty("box-shadow");
@@ -616,7 +987,6 @@ function clearOverlayContent(): void {
   const elementStyle = document.getElementById("lumitra-element-style");
   if (elementStyle) elementStyle.remove();
 
-  // Remove inspector tooltip and listener
   const tooltip = document.getElementById("lumitra-inspector-tooltip");
   if (tooltip) tooltip.remove();
 }
@@ -681,6 +1051,9 @@ function destroyEverything(): void {
   currentMode = "off";
   currentConfig = null;
   minimized = false;
+  experiments = [];
+  selectedExperimentId = null;
+  selectedVariant = "all";
 }
 
 // ─── SPA navigation handling ──────────────────────────────────────────────────
@@ -689,7 +1062,6 @@ function onNavigation(): void {
   if (location.href !== currentUrl) {
     currentUrl = location.href;
     clearOverlayContent();
-    // Re-request data for new URL if active
     if (currentMode !== "off" && currentConfig) {
       activateMode(currentMode);
     }
@@ -712,3 +1084,5 @@ window.addEventListener("popstate", onNavigation);
   patchMethod("pushState");
   patchMethod("replaceState");
 })();
+
+} // end guard: __lumitraContentInit
