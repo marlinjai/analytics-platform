@@ -90,7 +90,7 @@ export async function getStatsOverview(
     query: `
       SELECT
         uniqExact(session_id) AS sessions,
-        avg(session_duration) AS avg_session_duration,
+        median(session_duration) AS avg_session_duration,
         countIf(session_pageviews = 1) / greatest(count(), 1) AS bounce_rate
       FROM (
         SELECT

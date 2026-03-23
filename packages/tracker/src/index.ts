@@ -1,6 +1,17 @@
 import type { TrackerEvent } from './constants';
 import { AnalyticsTracker } from './tracker.js';
 
+export interface ReplayPrivacy {
+  /** Mask all input field values in replay. Default: true. */
+  maskAllInputs?: boolean;
+  /** Mask all text content in replay. Default: false. */
+  maskAllText?: boolean;
+  /** CSS selector for elements to block entirely from replay. */
+  blockSelector?: string;
+  /** CSS selector for elements whose text should be masked. */
+  maskTextSelector?: string;
+}
+
 export interface TrackerConfig {
   /** Project ID (UUID). */
   projectId: string;
@@ -18,6 +29,8 @@ export interface TrackerConfig {
   flushInterval?: number;
   /** Debug mode — logs events to console. Default: false. */
   debug?: boolean;
+  /** Privacy options for session replay. */
+  replayPrivacy?: ReplayPrivacy;
 }
 
 let instance: AnalyticsTracker | null = null;
@@ -33,13 +46,9 @@ export function init(config: TrackerConfig): AnalyticsTracker {
 
   instance = new AnalyticsTracker(config);
 
-  // Lazy-load replay if enabled
+  // Enable replay if explicitly requested (caller is responsible for consent)
   if (config.replay) {
-    import('./replay.js')
-      .then((mod) => mod.initReplay(instance!))
-      .catch(() => {
-        if (config.debug) console.warn('[analytics] rrweb not available, replay disabled');
-      });
+    instance.enableReplay();
   }
 
   return instance;
@@ -60,5 +69,21 @@ export function destroy(): void {
   instance = null;
 }
 
+/**
+ * Enable replay on the current tracker instance (call after cookie consent).
+ */
+export function enableReplay(): void {
+  instance?.enableReplay();
+}
+
+/**
+ * Disable replay on the current tracker instance (call if user revokes consent).
+ */
+export function disableReplay(): void {
+  instance?.disableReplay();
+}
+
 export type { TrackerEvent, TrackerConfig as AnalyticsConfig };
 export { AnalyticsTracker };
+export { ExperimentManager } from './experiment.js';
+export type { ExperimentDefinition, FlagDefinition, RemoteConfig } from './experiment.js';

@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Median session duration** — overview stats now use `median()` instead of `avg()` to prevent outlier sessions (tabs left open) from skewing the number
+- **Stats card label** — "Avg Duration" renamed to "Median Duration"
+
+### Added
+- **Consent-aware replay** — `enableReplay()` / `disableReplay()` methods on tracker for dynamic cookie consent integration
+- **Replay privacy defaults** — rrweb recording now masks all inputs, passwords, emails, and phone fields by default; configurable via `ReplayPrivacy` options
+- **`ReplayPrivacy` config type** — `maskAllInputs`, `maskAllText`, `blockSelector`, `maskTextSelector` options
+- **Test data seed script** — `scripts/seed-test-events.sh` for local ClickHouse validation
+
 ## [0.5.0] - 2026-03-22
 
 ### Added

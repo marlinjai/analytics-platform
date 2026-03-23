@@ -1,12 +1,17 @@
 import type { AnalyticsTracker } from './tracker.js';
+import type { ReplayPrivacy } from './index.js';
 import { MAX_REPLAY_CHUNK_BYTES } from './constants';
 
 const CHUNK_FLUSH_INTERVAL = 10_000; // 10 seconds
 
 let replayTimer: ReturnType<typeof setInterval> | null = null;
 let chunkBuffer: unknown[] = [];
+let stopRecording: (() => void) | null = null;
 
-export async function initReplay(tracker: AnalyticsTracker): Promise<void> {
+export async function initReplay(
+  tracker: AnalyticsTracker,
+  privacy?: ReplayPrivacy,
+): Promise<void> {
   let rrweb: typeof import('rrweb');
   try {
     rrweb = await import('rrweb');
@@ -14,7 +19,19 @@ export async function initReplay(tracker: AnalyticsTracker): Promise<void> {
     return; // rrweb not installed, graceful no-op
   }
 
-  rrweb.record({
+  stopRecording = rrweb.record({
+    // Privacy defaults: always mask inputs unless explicitly disabled
+    maskAllInputs: privacy?.maskAllInputs !== false,
+    maskAllText: privacy?.maskAllText ?? false,
+    ...(privacy?.blockSelector && { blockSelector: privacy.blockSelector }),
+    ...(privacy?.maskTextSelector && { maskTextSelector: privacy.maskTextSelector }),
+    // Block password fields and sensitive attributes by default
+    blockClass: 'ap-block',
+    maskInputOptions: {
+      password: true,
+      email: true,
+      tel: true,
+    },
     emit(event) {
       chunkBuffer.push(event);
 
@@ -24,7 +41,7 @@ export async function initReplay(tracker: AnalyticsTracker): Promise<void> {
         flushChunk(tracker);
       }
     },
-  });
+  }) ?? null;
 
   replayTimer = setInterval(() => flushChunk(tracker), CHUNK_FLUSH_INTERVAL);
 }
@@ -41,6 +58,10 @@ function flushChunk(tracker: AnalyticsTracker): void {
 }
 
 export function stopReplay(): void {
+  if (stopRecording) {
+    stopRecording();
+    stopRecording = null;
+  }
   if (replayTimer) {
     clearInterval(replayTimer);
     replayTimer = null;

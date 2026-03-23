@@ -20,7 +20,7 @@ const cards = [
   { key: 'pageviews' as const, label: 'Pageviews', format: formatNumber },
   { key: 'visitors' as const, label: 'Visitors', format: formatNumber },
   { key: 'sessions' as const, label: 'Sessions', format: formatNumber },
-  { key: 'avgSessionDuration' as const, label: 'Avg Duration', format: formatDuration },
+  { key: 'avgSessionDuration' as const, label: 'Median Duration', format: formatDuration },
   { key: 'bounceRate' as const, label: 'Bounce Rate', format: (n: number) => `${Math.round(n * 100)}%` },
 ];
 
