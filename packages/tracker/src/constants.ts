@@ -24,4 +24,6 @@ export interface TrackerEvent {
   screenHeight?: number;
   deviceType?: string;
   userAgent?: string;
+  experimentId?: string;
+  variant?: string;
 }
