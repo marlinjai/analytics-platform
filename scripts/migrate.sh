@@ -43,12 +43,15 @@ record_migration() {
 }
 
 # ── Collect and sort migration files ─────────────────────────────────────────
-mapfile -t POSTGRES_FILES < <(
-  ls "${MIGRATIONS_DIR}"/*-postgres.sql 2>/dev/null | sort
-)
-mapfile -t CLICKHOUSE_FILES < <(
-  ls "${MIGRATIONS_DIR}"/*-clickhouse.sql 2>/dev/null | sort
-)
+POSTGRES_FILES=()
+while IFS= read -r f; do
+  POSTGRES_FILES+=("$f")
+done < <(ls "${MIGRATIONS_DIR}"/*-postgres.sql 2>/dev/null | sort)
+
+CLICKHOUSE_FILES=()
+while IFS= read -r f; do
+  CLICKHOUSE_FILES+=("$f")
+done < <(ls "${MIGRATIONS_DIR}"/*-clickhouse.sql 2>/dev/null | sort)
 
 APPLIED_COUNT=0
 SKIPPED_COUNT=0
