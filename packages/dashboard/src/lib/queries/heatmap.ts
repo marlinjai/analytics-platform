@@ -33,13 +33,21 @@ export async function getHeatmapData(
   projectId: string,
   url: string,
   dateRange: DateRange,
-  deviceType?: DeviceType
+  deviceType?: DeviceType,
+  experimentId?: string,
+  variant?: string,
 ): Promise<HeatmapPoint[]> {
   const ch = getClickHouse();
   const urls = urlVariants(url);
 
   const deviceFilter = deviceType
     ? 'AND device_type = {deviceType: String}'
+    : '';
+  const experimentFilter = experimentId
+    ? 'AND experiment_id = {experimentId: String}'
+    : '';
+  const variantFilter = variant
+    ? 'AND variant = {variant: String}'
     : '';
 
   const result = await ch.query({
@@ -54,6 +62,8 @@ export async function getHeatmapData(
         AND day >= toDate({from: String})
         AND day <= toDate({to: String})
         ${deviceFilter}
+        ${experimentFilter}
+        ${variantFilter}
       GROUP BY x_bucket, y_bucket
       ORDER BY count DESC
     `,
@@ -65,6 +75,8 @@ export async function getHeatmapData(
       url3: urls[3],
       ...chDateParams(dateRange),
       ...(deviceType && { deviceType }),
+      ...(experimentId && { experimentId }),
+      ...(variant && { variant }),
     },
     format: 'JSONEachRow',
   });
@@ -77,13 +89,21 @@ export async function getHeatmapBySelector(
   url: string,
   dateRange: DateRange,
   deviceType?: DeviceType,
-  limit = 100
+  limit = 100,
+  experimentId?: string,
+  variant?: string,
 ): Promise<SelectorHeatmapPoint[]> {
   const ch = getClickHouse();
   const urls = urlVariants(url);
 
   const deviceFilter = deviceType
     ? 'AND device_type = {deviceType: String}'
+    : '';
+  const experimentFilter = experimentId
+    ? 'AND experiment_id = {experimentId: String}'
+    : '';
+  const variantFilter = variant
+    ? 'AND variant = {variant: String}'
     : '';
 
   const result = await ch.query({
@@ -98,6 +118,8 @@ export async function getHeatmapBySelector(
         AND day >= toDate({from: String})
         AND day <= toDate({to: String})
         ${deviceFilter}
+        ${experimentFilter}
+        ${variantFilter}
       GROUP BY selector
       ORDER BY count DESC
       LIMIT {limit: UInt32}
@@ -110,6 +132,8 @@ export async function getHeatmapBySelector(
       url3: urls[3],
       ...chDateParams(dateRange),
       ...(deviceType && { deviceType }),
+      ...(experimentId && { experimentId }),
+      ...(variant && { variant }),
       limit,
     },
     format: 'JSONEachRow',
@@ -140,13 +164,21 @@ export async function getElementClickPoints(
   url: string,
   dateRange: DateRange,
   deviceType?: DeviceType,
-  limit = 500
+  limit = 500,
+  experimentId?: string,
+  variant?: string,
 ): Promise<ElementClickPoint[]> {
   const ch = getClickHouse();
   const urls = urlVariants(url);
 
   const deviceFilter = deviceType
     ? 'AND device_type = {deviceType: String}'
+    : '';
+  const experimentFilter = experimentId
+    ? 'AND experiment_id = {experimentId: String}'
+    : '';
+  const variantFilter = variant
+    ? 'AND variant = {variant: String}'
     : '';
 
   const result = await ch.query({
@@ -166,6 +198,8 @@ export async function getElementClickPoints(
         AND timestamp <= {to: DateTime64(3)}
         AND JSONHas(properties, 'ox')
         ${deviceFilter}
+        ${experimentFilter}
+        ${variantFilter}
       ORDER BY timestamp DESC
       LIMIT {limit: UInt32}
     `,
@@ -177,6 +211,8 @@ export async function getElementClickPoints(
       url3: urls[3],
       ...chDateParams(dateRange),
       ...(deviceType && { deviceType }),
+      ...(experimentId && { experimentId }),
+      ...(variant && { variant }),
       limit,
     },
     format: 'JSONEachRow',

@@ -65,12 +65,17 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const experimentId = params.experiment_id || undefined;
+  const variant = params.variant || undefined;
+
   const clicks = await getElementClickPoints(
     projectId,
     url,
     dateRange,
     deviceType,
     limit,
+    experimentId,
+    variant,
   );
 
   return NextResponse.json(

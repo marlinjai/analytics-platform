@@ -67,7 +67,10 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const points = await getHeatmapData(projectId, url, dateRange, deviceType);
+  const experimentId = params.experiment_id || undefined;
+  const variant = params.variant || undefined;
+
+  const points = await getHeatmapData(projectId, url, dateRange, deviceType, experimentId, variant);
 
   return NextResponse.json(
     { points },

@@ -47,7 +47,32 @@ export async function GET(_request: NextRequest, { params }: Params) {
     }
   }
 
-  return NextResponse.json({ config }, {
+  // Load active feature flags
+  const flagRows = await db`
+    SELECT key, enabled, rollout_percentage, variants
+    FROM feature_flags
+    WHERE project_id = ${projectId} AND enabled = true
+  `;
+  const flags = flagRows.map((f) => ({
+    key: f.key,
+    enabled: f.enabled,
+    rolloutPercentage: f.rollout_percentage,
+    variants: f.variants ?? null,
+  }));
+
+  // Load running experiments
+  const experimentRows = await db`
+    SELECT id, key, variants
+    FROM experiments
+    WHERE project_id = ${projectId} AND status = 'running'
+  `;
+  const experiments = experimentRows.map((e) => ({
+    id: e.id,
+    key: e.key,
+    variants: e.variants,
+  }));
+
+  return NextResponse.json({ config, flags, experiments }, {
     headers: {
       // Allow tracker to cache for up to 60 s
       'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',

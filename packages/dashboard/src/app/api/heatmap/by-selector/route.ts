@@ -67,12 +67,17 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const experimentId = params.experiment_id || undefined;
+  const variant = params.variant || undefined;
+
   const selectors = await getHeatmapBySelector(
     projectId,
     url,
     dateRange,
     deviceType,
     limit,
+    experimentId,
+    variant,
   );
 
   return NextResponse.json(
