@@ -32,6 +32,9 @@ export async function initReplay(
       email: true,
       tel: true,
     },
+    inlineStylesheet: true,    // Inline all CSS into snapshot (fixes cross-origin stylesheet issue)
+    collectFonts: true,        // Capture web fonts
+    inlineImages: true,        // Inline images as data URIs
     emit(event) {
       chunkBuffer.push(event);
 

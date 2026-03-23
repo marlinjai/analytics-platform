@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Median session duration** — overview stats now use `median()` instead of `avg()` to prevent outlier sessions (tabs left open) from skewing the number
 - **Stats card label** — "Avg Duration" renamed to "Median Duration"
 
+### Fixed
+- **Session replay blank content** — replay player showed blank white page because CSS from the recorded origin couldn't be loaded cross-origin; rrweb now inlines stylesheets, fonts, and images into the snapshot data
+
 ### Added
 - **Consent-aware replay** — `enableReplay()` / `disableReplay()` methods on tracker for dynamic cookie consent integration
 - **Replay privacy defaults** — rrweb recording now masks all inputs, passwords, emails, and phone fields by default; configurable via `ReplayPrivacy` options
