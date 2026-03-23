@@ -40,6 +40,21 @@ export type {
   Membership,
 } from './types.js';
 
+// Experiment & Feature Flag Types
+export type {
+  FeatureFlag,
+  FlagVariant,
+  Experiment,
+  ExperimentVariant,
+  ExperimentTargeting,
+  ExperimentGoal,
+  VariantResult,
+  ExperimentResults,
+  RemoteConfig,
+  RemoteExperiment,
+  RemoteFlag,
+} from './types/experiments.js';
+
 // Schemas
 export {
   eventTypeSchema,
