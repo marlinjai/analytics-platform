@@ -16,9 +16,10 @@ interface Props {
   loading: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
+  projectId?: string | null;
 }
 
-export function SessionList({ sessions, loading, hasMore, onLoadMore }: Props) {
+export function SessionList({ sessions, loading, hasMore, onLoadMore, projectId }: Props) {
   if (loading && sessions.length === 0) {
     return <SkeletonSessionList rows={6} />;
   }
@@ -49,7 +50,7 @@ export function SessionList({ sessions, loading, hasMore, onLoadMore }: Props) {
             <tr key={s.sessionId} className="border-b border-gray-800/50 hover:bg-gray-800/30">
               <td className="px-4 py-3">
                 <Link
-                  href={`/replay/${s.sessionId}`}
+                  href={`/replay/${s.sessionId}${projectId ? `?projectId=${projectId}` : ''}`}
                   className="text-blue-400 hover:text-blue-300"
                 >
                   {s.sessionId.slice(0, 8)}...

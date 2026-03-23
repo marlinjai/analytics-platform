@@ -60,6 +60,7 @@ function ReplayListPageInner() {
         loading={loading}
         hasMore={hasMore}
         onLoadMore={() => fetchSessions(true)}
+        projectId={projectId}
       />
     </div>
   );
