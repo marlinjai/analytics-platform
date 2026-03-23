@@ -923,12 +923,20 @@ function renderElementHeatmapInMainWorld(
 }
 
 function injectElementInspectorInMainWorld(): void {
-  // Only one inspector at a time
   const w = window as unknown as { __lumitraInspector?: {
     handler: (e: MouseEvent) => void;
     tooltip: HTMLElement;
   }};
-  if (w.__lumitraInspector) return;
+
+  // If inspector was previously injected but tooltip was removed (e.g. by clearOverlayContent),
+  // clean up the old listener and re-create everything
+  if (w.__lumitraInspector) {
+    const existing = document.getElementById("lumitra-inspector-tooltip");
+    if (existing) return; // tooltip still exists, nothing to do
+    // Tooltip was removed — tear down old listener and re-inject
+    document.removeEventListener("mousemove", w.__lumitraInspector.handler);
+    w.__lumitraInspector = undefined;
+  }
 
   const tooltip = document.createElement("div");
   tooltip.id = "lumitra-inspector-tooltip";
