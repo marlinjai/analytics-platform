@@ -25,10 +25,12 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
 
   const ch = getClickHouse();
 
-  // Delete all events for this project
-  await ch.command({
-    query: `ALTER TABLE analytics.events DELETE WHERE project_id = '${projectId}'`,
-  });
+  // Delete all events + materialized view data for this project
+  await Promise.all([
+    ch.command({ query: `ALTER TABLE analytics.events DELETE WHERE project_id = '${projectId}'` }),
+    ch.command({ query: `ALTER TABLE analytics.heatmap_clicks_mv DELETE WHERE project_id = '${projectId}'` }),
+    ch.command({ query: `ALTER TABLE analytics.heatmap_selectors_mv DELETE WHERE project_id = '${projectId}'` }),
+  ]);
 
   return NextResponse.json({
     ok: true,
