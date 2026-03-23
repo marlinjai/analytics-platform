@@ -4,6 +4,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Analytics Platform',
   description: 'Self-hosted analytics, heatmaps, and session replay',
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({

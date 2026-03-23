@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /replay/
+Disallow: /api/
+Disallow: /login
+Disallow: /accept-invite
