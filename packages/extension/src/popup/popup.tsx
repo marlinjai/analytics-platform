@@ -40,7 +40,6 @@ const styles = {
   logo: {
     width: "24px",
     height: "24px",
-    background: "linear-gradient(135deg, #c9a84c, #e2c675)",
     borderRadius: "6px",
     flexShrink: 0 as const,
   },
@@ -92,22 +91,25 @@ const styles = {
   primaryBtn: (disabled: boolean) => ({
     width: "100%",
     padding: "9px 16px",
-    background: disabled ? "rgba(201,168,76,0.4)" : "#c9a84c",
+    background: disabled
+      ? "rgba(201,168,76,0.3)"
+      : "linear-gradient(135deg, #c9a84c, #e2c675, #d4b85c)",
     border: "none",
     borderRadius: "8px",
-    color: disabled ? "rgba(255,255,255,0.4)" : "#fff",
+    color: disabled ? "rgba(255,255,255,0.4)" : "#1a1a1a",
     fontSize: "14px",
     fontWeight: 600 as const,
     cursor: disabled ? "not-allowed" : "pointer",
-    transition: "background 0.15s",
+    transition: "opacity 0.15s",
+    boxShadow: disabled ? "none" : "0 2px 8px rgba(201,168,76,0.3)",
   }),
   secondaryBtn: {
     width: "100%",
     padding: "8px 16px",
     background: "transparent",
-    border: "1px solid rgba(255,255,255,0.1)",
+    border: "1px solid rgba(201,168,76,0.3)",
     borderRadius: "8px",
-    color: "#9ca3af",
+    color: "#c9a84c",
     fontSize: "13px",
     cursor: "pointer",
   },
@@ -336,7 +338,7 @@ function Popup() {
     <div style={styles.container}>
       {/* Header */}
       <div style={styles.header}>
-        <div style={styles.logo} />
+        <img src="icons/icon-32.png" alt="Lumitra" style={styles.logo} />
         <div>
           <div style={styles.title}>Lumitra Analytics</div>
           <div style={styles.subtitle}>Heatmap Overlay</div>
