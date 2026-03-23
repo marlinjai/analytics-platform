@@ -1,9 +1,9 @@
 import { createRoot } from "react-dom/client";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { BackgroundMessage, BackgroundResponse } from "../background.js";
-import type { Project } from "../lib/api.js";
+import type { Project, Experiment } from "../lib/api.js";
 import { dateRangeDates, DASHBOARD_ORIGIN } from "../lib/api.js";
-import type { HeatmapSettings } from "../lib/storage.js";
+import type { HeatmapSettings, ExperimentFilter } from "../lib/storage.js";
 
 function sendMessage(msg: BackgroundMessage): Promise<BackgroundResponse> {
   return chrome.runtime.sendMessage(msg) as Promise<BackgroundResponse>;
@@ -41,7 +41,7 @@ const s = {
   logo: {
     width: "28px",
     height: "28px",
-    background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+    background: "linear-gradient(135deg, #c9a84c, #e2c675)",
     borderRadius: "7px",
     flexShrink: 0 as const,
   },
@@ -83,9 +83,9 @@ const s = {
   seg: (active: boolean) => ({
     flex: 1,
     padding: "6px 4px",
-    background: active ? "#4f46e5" : "transparent",
+    background: active ? "#c9a84c" : "transparent",
     border: "none",
-    color: active ? "#fff" : "#9ca3af",
+    color: active ? "#1a1a1a" : "#9ca3af",
     fontSize: "12px",
     fontWeight: active ? 600 : 400,
     cursor: "pointer",
@@ -93,7 +93,7 @@ const s = {
   btn: (disabled: boolean) => ({
     width: "100%",
     padding: "9px 16px",
-    background: disabled ? "rgba(79,70,229,0.4)" : "#4f46e5",
+    background: disabled ? "rgba(201,168,76,0.4)" : "#c9a84c",
     border: "none",
     borderRadius: "8px",
     color: disabled ? "rgba(255,255,255,0.4)" : "#fff",
@@ -173,7 +173,7 @@ const s = {
     borderRadius: "6px",
   },
   link: {
-    color: "#818cf8",
+    color: "#c9a84c",
     fontSize: "12px",
     textDecoration: "none",
     textAlign: "center" as const,
@@ -203,7 +203,8 @@ function SidePanel() {
   const [initializing, setInitializing] = useState(true);
   const [zones, setZones] = useState<SelectorData[]>([]);
   const [currentUrl, setCurrentUrl] = useState("");
-  const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [expFilter, setExpFilter] = useState<ExperimentFilter>({ experimentId: null, variant: "all" });
 
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -252,6 +253,27 @@ function SidePanel() {
     return () => chrome.tabs.onUpdated.removeListener(listener);
   }, []);
 
+  // ── Fetch experiments when project changes ──────────────────────────────────
+  useEffect(() => {
+    if (!auth.authenticated || !selectedProject) {
+      setExperiments([]);
+      return;
+    }
+    (async () => {
+      const res = await sendMessage({ type: "FETCH_EXPERIMENTS", projectId: selectedProject } as BackgroundMessage);
+      if (res.ok && (res.data as { experiments?: Experiment[] })?.experiments) {
+        setExperiments((res.data as { experiments: Experiment[] }).experiments);
+      } else {
+        setExperiments([]);
+      }
+      // Load persisted filter
+      const filterRes = await sendMessage({ type: "GET_EXPERIMENT_FILTER" } as BackgroundMessage);
+      if (filterRes.ok && filterRes.data) {
+        setExpFilter(filterRes.data as ExperimentFilter);
+      }
+    })();
+  }, [auth.authenticated, selectedProject]);
+
   // ── Fetch engagement zones when URL/settings change ───────────────────────
   useEffect(() => {
     if (!auth.authenticated || !selectedProject || !currentUrl) {
@@ -266,6 +288,10 @@ function SidePanel() {
       to,
     });
     if (deviceType !== "all") params.set("deviceType", deviceType);
+    if (expFilter.experimentId && expFilter.variant !== "all") {
+      params.set("experiment_id", expFilter.experimentId);
+      params.set("variant", expFilter.variant);
+    }
 
     fetch(`${DASHBOARD_ORIGIN}/api/heatmap/by-selector?${params}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
@@ -279,7 +305,7 @@ function SidePanel() {
         }
       })
       .catch(() => {});
-  }, [auth.authenticated, selectedProject, currentUrl, dateRange, deviceType]);
+  }, [auth.authenticated, selectedProject, currentUrl, dateRange, deviceType, expFilter]);
 
   // ── Connect ──────────────────────────────────────────────────────────────
   const handleConnect = () => chrome.tabs.create({ url: `${DASHBOARD_ORIGIN}/login` });
@@ -422,6 +448,76 @@ function SidePanel() {
                 ))}
               </div>
             </div>
+
+            {/* Experiment filter */}
+            {experiments.length > 0 && (
+              <div style={{ marginBottom: "12px" }}>
+                <div style={s.sectionTitle}>Experiment</div>
+                <select
+                  style={{ ...s.select, marginBottom: "6px" }}
+                  value={expFilter.experimentId || ""}
+                  onChange={(e) => {
+                    const newFilter: ExperimentFilter = {
+                      experimentId: e.target.value || null,
+                      variant: "all",
+                    };
+                    setExpFilter(newFilter);
+                    sendMessage({ type: "SET_EXPERIMENT_FILTER", experimentId: newFilter.experimentId, variant: "all" } as BackgroundMessage);
+                  }}
+                >
+                  <option value="">All traffic (no filter)</option>
+                  {experiments.map((exp) => (
+                    <option key={exp.id} value={exp.id}>{exp.name || exp.key}</option>
+                  ))}
+                </select>
+
+                {expFilter.experimentId && (() => {
+                  const activeExp = experiments.find((e) => e.id === expFilter.experimentId);
+                  if (!activeExp || activeExp.variants.length === 0) return null;
+                  return (
+                    <>
+                      <div style={{ ...s.sectionTitle, marginTop: "4px" }}>Variant</div>
+                      <select
+                        style={s.select}
+                        value={expFilter.variant}
+                        onChange={(e) => {
+                          const newFilter: ExperimentFilter = {
+                            experimentId: expFilter.experimentId,
+                            variant: e.target.value,
+                          };
+                          setExpFilter(newFilter);
+                          sendMessage({ type: "SET_EXPERIMENT_FILTER", experimentId: newFilter.experimentId, variant: newFilter.variant } as BackgroundMessage);
+                        }}
+                      >
+                        <option value="all">All variants</option>
+                        {activeExp.variants.map((v) => (
+                          <option key={v.key} value={v.key}>{v.key}</option>
+                        ))}
+                      </select>
+                    </>
+                  );
+                })()}
+
+                {expFilter.experimentId && expFilter.variant !== "all" && (
+                  <div style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    background: "rgba(201,168,76,0.15)",
+                    border: "1px solid rgba(201,168,76,0.3)",
+                    color: "#e2c675",
+                    fontSize: "11px",
+                    fontWeight: 500,
+                    padding: "3px 8px",
+                    borderRadius: "4px",
+                    marginTop: "6px",
+                  }}>
+                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#c9a84c" }} />
+                    Viewing: {expFilter.variant}
+                  </div>
+                )}
+              </div>
+            )}
 
             <button style={s.btn(loading || !selectedProject)} onClick={handleToggle} disabled={loading || !selectedProject}>
               {loading ? "Loading..." : overlayVisible ? "Hide Heatmap" : "Show Heatmap"}

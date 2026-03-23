@@ -40,7 +40,7 @@ const styles = {
   logo: {
     width: "24px",
     height: "24px",
-    background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+    background: "linear-gradient(135deg, #c9a84c, #e2c675)",
     borderRadius: "6px",
     flexShrink: 0 as const,
   },
@@ -81,9 +81,9 @@ const styles = {
   segmentBtn: (active: boolean) => ({
     flex: 1,
     padding: "6px 4px",
-    background: active ? "#4f46e5" : "transparent",
+    background: active ? "#c9a84c" : "transparent",
     border: "none",
-    color: active ? "#fff" : "#9ca3af",
+    color: active ? "#1a1a1a" : "#9ca3af",
     fontSize: "12px",
     fontWeight: active ? 600 : 400,
     cursor: "pointer",
@@ -92,7 +92,7 @@ const styles = {
   primaryBtn: (disabled: boolean) => ({
     width: "100%",
     padding: "9px 16px",
-    background: disabled ? "rgba(79,70,229,0.4)" : "#4f46e5",
+    background: disabled ? "rgba(201,168,76,0.4)" : "#c9a84c",
     border: "none",
     borderRadius: "8px",
     color: disabled ? "rgba(255,255,255,0.4)" : "#fff",
@@ -134,7 +134,7 @@ const styles = {
     borderRadius: "6px",
   },
   dashLink: {
-    color: "#818cf8",
+    color: "#c9a84c",
     fontSize: "12px",
     textDecoration: "none",
     textAlign: "center" as const,

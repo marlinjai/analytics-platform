@@ -23,6 +23,43 @@ export interface ToolbarTokenResponse {
   expiresAt: string; // ISO date string from the API
 }
 
+// ─── Experiment types ──────────────────────────────────────────────────────────
+
+export interface ExperimentVariant {
+  key: string;
+  weight: number;
+}
+
+export interface Experiment {
+  id: string;
+  key: string;
+  name: string;
+  status: "draft" | "running" | "paused" | "completed";
+  variants: ExperimentVariant[];
+}
+
+/**
+ * Fetch active experiments for a project.
+ * Uses session cookie (credentials: include).
+ */
+export async function fetchExperiments(
+  projectId: string,
+  status: string = "running"
+): Promise<Experiment[]> {
+  const params = new URLSearchParams({ status });
+  const res = await fetch(
+    `${DASHBOARD_ORIGIN}/api/projects/${projectId}/experiments?${params}`,
+    { credentials: "include" }
+  );
+  if (!res.ok) {
+    // API may not be deployed yet — return empty gracefully
+    if (res.status === 404) return [];
+    throw new Error(`Failed to fetch experiments: ${res.status}`);
+  }
+  const json = await res.json();
+  return (json.experiments ?? json ?? []) as Experiment[];
+}
+
 /**
  * Fetch the list of projects the user has access to.
  * Uses session cookie (credentials: include).

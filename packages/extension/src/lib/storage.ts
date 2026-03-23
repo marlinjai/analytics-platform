@@ -16,10 +16,16 @@ export interface HeatmapVisualSettings {
   blur: number;      // 0.3-1.0, default 0.8
 }
 
+export interface ExperimentFilter {
+  experimentId: string | null;
+  variant: string; // "all" or a specific variant key
+}
+
 const STORAGE_KEYS = {
   AUTH: "lumitra_auth",
   SETTINGS: "lumitra_settings",
   VISUAL: "lumitra_visual",
+  EXPERIMENT_FILTER: "lumitra_experiment_filter",
 } as const;
 
 const DEFAULT_VISUAL: HeatmapVisualSettings = {
@@ -100,6 +106,32 @@ export async function setVisualSettings(
   return new Promise((resolve) => {
     chrome.storage.local.set(
       { [STORAGE_KEYS.VISUAL]: { ...current, ...settings } },
+      resolve
+    );
+  });
+}
+
+const DEFAULT_EXPERIMENT_FILTER: ExperimentFilter = {
+  experimentId: null,
+  variant: "all",
+};
+
+export async function getExperimentFilter(): Promise<ExperimentFilter> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(STORAGE_KEYS.EXPERIMENT_FILTER, (result) => {
+      const filter = result[STORAGE_KEYS.EXPERIMENT_FILTER] as ExperimentFilter | undefined;
+      resolve(filter ?? DEFAULT_EXPERIMENT_FILTER);
+    });
+  });
+}
+
+export async function setExperimentFilter(
+  filter: Partial<ExperimentFilter>
+): Promise<void> {
+  const current = await getExperimentFilter();
+  return new Promise((resolve) => {
+    chrome.storage.local.set(
+      { [STORAGE_KEYS.EXPERIMENT_FILTER]: { ...current, ...filter } },
       resolve
     );
   });

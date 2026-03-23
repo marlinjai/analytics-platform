@@ -8,8 +8,9 @@
  * - Fetch overlay data (heatmap, scroll, rage) and inject rendering into MAIN world
  */
 
-import { DASHBOARD_ORIGIN, fetchToolbarToken } from "./lib/api.js";
-import { getAuth, setAuth, clearAuth, isAuthenticated } from "./lib/storage.js";
+import { DASHBOARD_ORIGIN, fetchToolbarToken, fetchExperiments } from "./lib/api.js";
+import type { Experiment } from "./lib/api.js";
+import { getAuth, setAuth, clearAuth, isAuthenticated, getExperimentFilter, setExperimentFilter } from "./lib/storage.js";
 
 // ─── Message types ────────────────────────────────────────────────────────────
 
@@ -22,6 +23,9 @@ export type BackgroundMessage =
   | { type: "REFRESH_TOKEN" }
   | { type: "OVERLAY_CLOSED" }
   | { type: "SAVE_VISUAL_SETTINGS"; settings: { radius: number; opacity: number; blur: number } }
+  | { type: "FETCH_EXPERIMENTS"; projectId: string }
+  | { type: "SET_EXPERIMENT_FILTER"; experimentId: string | null; variant: string }
+  | { type: "GET_EXPERIMENT_FILTER" }
   | {
       type: "LOAD_OVERLAY_DATA";
       mode: "clicks" | "scroll" | "rage";
@@ -36,11 +40,26 @@ export type BackgroundMessage =
       pageHeight: number;
       isCanvasOnly?: boolean;
       visualSettings?: { radius: number; opacity: number; blur: number };
+      experimentId?: string | null;
+      variant?: string;
     };
 
 export type BackgroundResponse =
   | { ok: true; data?: unknown }
   | { ok: false; error: string };
+
+// ─── Active overlay state (persisted in memory for tab re-injection) ─────────
+
+interface ActiveOverlayState {
+  projectId: string;
+  from: string;
+  to: string;
+  deviceType: string;
+  token: string;
+}
+
+/** Tracks which tabs have an active overlay so we can re-inject on navigation */
+const activeOverlays = new Map<number, ActiveOverlayState>();
 
 // ─── Alarm ────────────────────────────────────────────────────────────────────
 
@@ -58,6 +77,44 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== TOKEN_REFRESH_ALARM) return;
   await refreshTokenIfNeeded();
+});
+
+// ─── Auto-reactivate overlay on full page navigation ─────────────────────────
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  // Only act when page finishes loading and tab has an active overlay
+  if (changeInfo.status !== "complete") return;
+  const state = activeOverlays.get(tabId);
+  if (!state) return;
+
+  // Refresh token if needed
+  await refreshTokenIfNeeded();
+  const auth = await getAuth();
+  const token = auth?.token || state.token;
+
+  // Re-inject content script + send SHOW_OVERLAY for the new URL
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["content.js"],
+    });
+  } catch { /* already injected */ }
+
+  await sendToTab(tabId, {
+    type: "SHOW_OVERLAY",
+    mode: "clicks",
+    projectId: state.projectId,
+    from: state.from,
+    to: state.to,
+    deviceType: state.deviceType,
+    token,
+    dashboardOrigin: DASHBOARD_ORIGIN,
+  });
+});
+
+// Clean up state when tab is closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  activeOverlays.delete(tabId);
 });
 
 // ─── Token refresh ────────────────────────────────────────────────────────────
@@ -125,6 +182,7 @@ async function handleMessage(
 
     case "DISCONNECT": {
       await clearAuth();
+      activeOverlays.clear();
       await sendToActiveTab({ type: "CLEAR_OVERLAY" });
       return { ok: true };
     }
@@ -150,11 +208,21 @@ async function handleMessage(
         // Already injected
       }
 
+      // Track overlay state for this tab (enables auto-reactivation on navigation)
+      const overlayState: ActiveOverlayState = {
+        projectId: message.projectId || freshAuth.projectId,
+        from: message.from,
+        to: message.to,
+        deviceType: message.deviceType,
+        token: freshAuth.token,
+      };
+      if (tab.id) activeOverlays.set(tab.id, overlayState);
+
       // Tell content script to show the widget
       const forwarded = await sendToActiveTab({
         type: "SHOW_OVERLAY",
         mode: "clicks",
-        projectId: message.projectId || freshAuth.projectId,
+        projectId: overlayState.projectId,
         from: message.from,
         to: message.to,
         deviceType: message.deviceType,
@@ -167,12 +235,16 @@ async function handleMessage(
     }
 
     case "CLEAR_HEATMAP": {
+      const [clearTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (clearTab?.id) activeOverlays.delete(clearTab.id);
       await sendToActiveTab({ type: "CLEAR_OVERLAY" });
       return { ok: true };
     }
 
     case "OVERLAY_CLOSED": {
-      // Content script closed the overlay — nothing to do in background
+      // Content script closed the overlay — clear tracked state
+      const [closedTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (closedTab?.id) activeOverlays.delete(closedTab.id);
       return { ok: true };
     }
 
@@ -183,6 +255,30 @@ async function handleMessage(
     case "SAVE_VISUAL_SETTINGS": {
       await chrome.storage.local.set({ lumitra_visual: message.settings });
       return { ok: true };
+    }
+
+    case "FETCH_EXPERIMENTS": {
+      try {
+        const experiments = await fetchExperiments(message.projectId, "running");
+        return { ok: true, data: { experiments } };
+      } catch (err) {
+        // Non-fatal — API may not exist yet
+        console.warn("[Lumitra] Could not fetch experiments:", err);
+        return { ok: true, data: { experiments: [] } };
+      }
+    }
+
+    case "SET_EXPERIMENT_FILTER": {
+      await setExperimentFilter({
+        experimentId: message.experimentId,
+        variant: message.variant,
+      });
+      return { ok: true };
+    }
+
+    case "GET_EXPERIMENT_FILTER": {
+      const filter = await getExperimentFilter();
+      return { ok: true, data: filter };
     }
 
     case "REFRESH_TOKEN": {
@@ -210,18 +306,32 @@ async function handleOverlayDataRequest(msg: {
   pageHeight: number;
   isCanvasOnly?: boolean;
   visualSettings?: { radius: number; opacity: number; blur: number };
+  experimentId?: string | null;
+  variant?: string;
 }): Promise<BackgroundResponse> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return { ok: false, error: "No active tab" };
 
+  // Read experiment filter from storage if not passed directly
+  let experimentId = msg.experimentId;
+  let variant = msg.variant;
+  if (experimentId === undefined) {
+    const filter = await getExperimentFilter();
+    experimentId = filter.experimentId;
+    variant = filter.variant;
+  }
+
+  // Merge experiment filter into msg for downstream handlers
+  const enrichedMsg = { ...msg, experimentId, variant };
+
   try {
     if (msg.mode === "clicks") {
       if (msg.isCanvasOnly) {
-        return await handleClicksCoordsMode(tab.id, msg);
+        return await handleClicksCoordsMode(tab.id, enrichedMsg);
       }
       // Try element-based first, fall back to coordinates if API unavailable
       try {
-        return await handleElementsMode(tab.id, msg, msg.visualSettings);
+        return await handleElementsMode(tab.id, enrichedMsg, msg.visualSettings);
       } catch (elemErr) {
         console.warn("[Lumitra] Element mode unavailable, falling back to coordinates:", elemErr);
         await sendToTab(tab.id, {
@@ -231,7 +341,7 @@ async function handleOverlayDataRequest(msg: {
           error: null,
           fallback: true,
         });
-        return await handleClicksCoordsMode(tab.id, msg);
+        return await handleClicksCoordsMode(tab.id, enrichedMsg);
       }
     } else if (msg.mode === "scroll") {
       return await handleScrollMode(tab.id, msg);
@@ -264,6 +374,8 @@ async function handleElementsMode(
     token: string;
     dashboardOrigin: string;
     url: string;
+    experimentId?: string | null;
+    variant?: string;
   },
   visual?: { radius: number; opacity: number; blur: number }
 ): Promise<BackgroundResponse> {
@@ -276,6 +388,10 @@ async function handleElementsMode(
   });
   if (msg.deviceType && msg.deviceType !== "all") {
     params.set("deviceType", msg.deviceType);
+  }
+  if (msg.experimentId && msg.variant && msg.variant !== "all") {
+    params.set("experiment_id", msg.experimentId);
+    params.set("variant", msg.variant);
   }
 
   // Fetch both: aggregated selector counts (for inspector) + individual click positions (for precise h337)
@@ -368,6 +484,8 @@ async function handleClicksCoordsMode(
     url: string;
     pageWidth: number;
     pageHeight: number;
+    experimentId?: string | null;
+    variant?: string;
   }
 ): Promise<BackgroundResponse> {
   const params = new URLSearchParams({
@@ -379,6 +497,10 @@ async function handleClicksCoordsMode(
   });
   if (msg.deviceType && msg.deviceType !== "all") {
     params.set("deviceType", msg.deviceType);
+  }
+  if (msg.experimentId && msg.variant && msg.variant !== "all") {
+    params.set("experiment_id", msg.experimentId);
+    params.set("variant", msg.variant);
   }
 
   const res = await fetch(`${msg.dashboardOrigin}/api/heatmap?${params}`);
@@ -543,6 +665,8 @@ function renderElementHeatmapInMainWorld(
   // Clean up previous
   const existingContainer = document.getElementById("lumitra-heatmap-container");
   if (existingContainer) existingContainer.remove();
+  const existingFixed = document.getElementById("lumitra-heatmap-fixed");
+  if (existingFixed) existingFixed.remove();
 
   document.querySelectorAll("[data-lumitra-element-heat]").forEach((el) => {
     el.removeAttribute("data-lumitra-element-heat");
@@ -558,11 +682,38 @@ function renderElementHeatmapInMainWorld(
   const preciseSelectorSet = new Set(clickPoints.map((c) => c.selector));
   const hasPreciseData = clickPoints.length > 0;
 
-  const points: Array<{ x: number; y: number; value: number }> = [];
+  const scrollPoints: Array<{ x: number; y: number; value: number; radius?: number }> = [];
+  const fixedPoints: Array<{ x: number; y: number; value: number; radius?: number }> = [];
   const scrollX = window.scrollX;
   const scrollY = window.scrollY;
 
-  // Tag elements for inspector tooltip
+  // Detect if an element (or any ancestor) is fixed/sticky positioned
+  function isFixedOrSticky(el: Element): boolean {
+    let current: Element | null = el;
+    while (current && current !== document.documentElement) {
+      const pos = getComputedStyle(current).position;
+      if (pos === "fixed" || pos === "sticky") return true;
+      current = current.parentElement;
+    }
+    return false;
+  }
+
+  // Tag elements + add visible highlight outlines
+  // Ensures ALL clicked elements are visible regardless of h337 intensity
+  const style = document.createElement("style");
+  style.id = "lumitra-element-style";
+  style.textContent = `
+    [data-lumitra-element-heat] {
+      outline: 2px solid rgba(201,168,76,0.5) !important;
+      outline-offset: 2px;
+      transition: outline-color 0.15s;
+    }
+    [data-lumitra-element-heat]:hover {
+      outline-color: rgba(201,168,76,0.9) !important;
+    }
+  `;
+  document.head.appendChild(style);
+
   selectors.forEach(({ selector, count, sessions }) => {
     try {
       document.querySelectorAll(selector).forEach((el) => {
@@ -584,14 +735,14 @@ function renderElementHeatmapInMainWorld(
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) return;
 
-        // Proportional position within element (responsive across viewports)
         const ratioX = ew > 0 ? ox / ew : 0.5;
         const ratioY = eh > 0 ? oy / eh : 0.5;
+        const fixed = isFixedOrSticky(el);
 
-        const pageX = Math.round(rect.left + scrollX + rect.width * ratioX);
-        const pageY = Math.round(rect.top + scrollY + rect.height * ratioY);
+        const px = Math.round(rect.left + (fixed ? 0 : scrollX) + rect.width * ratioX);
+        const py = Math.round(rect.top + (fixed ? 0 : scrollY) + rect.height * ratioY);
 
-        points.push({ x: pageX, y: pageY, value: 1 });
+        (fixed ? fixedPoints : scrollPoints).push({ x: px, y: py, value: 1 });
       } catch { /* invalid selector */ }
     });
 
@@ -602,9 +753,10 @@ function renderElementHeatmapInMainWorld(
         document.querySelectorAll(selector).forEach((el) => {
           const rect = el.getBoundingClientRect();
           if (rect.width === 0 && rect.height === 0) return;
-          points.push({
-            x: Math.round(rect.left + scrollX + rect.width / 2),
-            y: Math.round(rect.top + scrollY + rect.height / 2),
+          const fixed = isFixedOrSticky(el);
+          (fixed ? fixedPoints : scrollPoints).push({
+            x: Math.round(rect.left + (fixed ? 0 : scrollX) + rect.width / 2),
+            y: Math.round(rect.top + (fixed ? 0 : scrollY) + rect.height / 2),
             value: count,
           });
         });
@@ -612,58 +764,26 @@ function renderElementHeatmapInMainWorld(
     });
   } else {
     // ── Fallback: element center mode (for old data without offsets) ─────
+    // Single blob per element at its center — radius scaled to element size
     selectors.forEach(({ selector, count }) => {
       try {
         document.querySelectorAll(selector).forEach((el) => {
           const rect = el.getBoundingClientRect();
           if (rect.width === 0 && rect.height === 0) return;
-          const baseX = rect.left + scrollX;
-          const baseY = rect.top + scrollY;
-          points.push({
-            x: Math.round(baseX + rect.width / 2),
-            y: Math.round(baseY + rect.height / 2),
+          const fixed = isFixedOrSticky(el);
+          (fixed ? fixedPoints : scrollPoints).push({
+            x: Math.round(rect.left + (fixed ? 0 : scrollX) + rect.width / 2),
+            y: Math.round(rect.top + (fixed ? 0 : scrollY) + rect.height / 2),
             value: count,
+            radius: Math.round(Math.max(Math.min(rect.width, rect.height) * 0.6, 30)),
           });
-          // Spread for large elements
-          if (rect.width > 80 || rect.height > 80) {
-            const inset = Math.min(rect.width, rect.height) * 0.25;
-            const cv = Math.max(Math.round(count * 0.4), 1);
-            points.push(
-              { x: Math.round(baseX + inset), y: Math.round(baseY + inset), value: cv },
-              { x: Math.round(baseX + rect.width - inset), y: Math.round(baseY + inset), value: cv },
-              { x: Math.round(baseX + inset), y: Math.round(baseY + rect.height - inset), value: cv },
-              { x: Math.round(baseX + rect.width - inset), y: Math.round(baseY + rect.height - inset), value: cv },
-            );
-          }
         });
       } catch { /* skip */ }
     });
   }
 
-  if (points.length === 0) return;
-
-  // Create full-page overlay container for h337
-  const pageWidth = Math.max(
-    document.body.scrollWidth,
-    document.documentElement.scrollWidth
-  );
-  const pageHeight = Math.max(
-    document.body.scrollHeight,
-    document.documentElement.scrollHeight
-  );
-
-  const container = document.createElement("div");
-  container.id = "lumitra-heatmap-container";
-  container.style.cssText = [
-    "position:absolute",
-    "top:0",
-    "left:0",
-    `width:${pageWidth}px`,
-    `height:${pageHeight}px`,
-    "pointer-events:none",
-    "z-index:2147483645",
-  ].join(";");
-  document.documentElement.appendChild(container);
+  const allPoints = [...scrollPoints, ...fixedPoints];
+  if (allPoints.length === 0) return;
 
   // Render with h337
   if (typeof (window as unknown as { h337: unknown }).h337 === "undefined") {
@@ -681,21 +801,61 @@ function renderElementHeatmapInMainWorld(
     }): { setData(d: { max: number; data: Array<{ x: number; y: number; value: number; radius?: number }> }): void };
   } }).h337;
 
-  const instance = h.create({
-    container,
-    radius: visual.radius,
-    maxOpacity: visual.opacity,
-    minOpacity: 0.05,
-    blur: visual.blur,
-  });
-
-  // For precise mode, overlapping points at similar positions auto-intensify
-  // For fallback mode, maxCount from aggregated data drives intensity
+  const isLowData = allPoints.length < 15;
+  const effectiveRadius = isLowData ? Math.max(visual.radius, 55) : visual.radius;
+  const effectiveMinOpacity = isLowData ? 0.15 : 0.05;
   const effectiveMax = hasPreciseData
-    ? Math.max(Math.round(points.length / 5), 2)
+    ? (allPoints.length < 10 ? 1 : Math.max(Math.round(allPoints.length / 8), 2))
     : maxCount;
 
-  instance.setData({ max: effectiveMax, data: points });
+  // Helper: create an h337 layer and render points into it
+  function createHeatmapLayer(
+    id: string,
+    posType: "absolute" | "fixed",
+    w: number,
+    hgt: number,
+    pts: typeof allPoints
+  ): void {
+    const el = document.createElement("div");
+    el.id = id;
+    el.style.cssText = [
+      `position:${posType}!important`,
+      "top:0!important",
+      "left:0!important",
+      `width:${w}px`,
+      `height:${hgt}px`,
+      "pointer-events:none!important",
+      "z-index:2147483645!important",
+    ].join(";");
+    document.body.appendChild(el);
+
+    const inst = h.create({
+      container: el,
+      radius: effectiveRadius,
+      maxOpacity: visual.opacity,
+      minOpacity: effectiveMinOpacity,
+      blur: visual.blur,
+    });
+
+    // h337.create() overrides position to 'relative' — restore it
+    el.style.setProperty("position", posType, "important");
+    el.style.setProperty("top", "0", "important");
+    el.style.setProperty("left", "0", "important");
+
+    inst.setData({ max: effectiveMax, data: pts });
+  }
+
+  // Layer 1: scrollable elements (position: absolute, full page size)
+  if (scrollPoints.length > 0) {
+    const pageWidth = Math.max(document.body.scrollWidth, document.documentElement.scrollWidth);
+    const pageHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+    createHeatmapLayer("lumitra-heatmap-container", "absolute", pageWidth, pageHeight, scrollPoints);
+  }
+
+  // Layer 2: fixed/sticky elements (position: fixed, viewport size)
+  if (fixedPoints.length > 0) {
+    createHeatmapLayer("lumitra-heatmap-fixed", "fixed", window.innerWidth, window.innerHeight, fixedPoints);
+  }
 }
 
 function injectElementInspectorInMainWorld(): void {
@@ -762,16 +922,16 @@ function renderHeatmapInMainWorld(
   const container = document.createElement("div");
   container.id = "lumitra-heatmap-container";
   container.style.cssText = [
-    "position:absolute",
-    "top:0",
-    "left:0",
+    "position:absolute!important",
+    "top:0!important",
+    "left:0!important",
     `width:${pageWidth}px`,
     `height:${pageHeight}px`,
-    "pointer-events:none",
-    "z-index:2147483645",
+    "pointer-events:none!important",
+    "z-index:2147483645!important",
   ].join(";");
 
-  document.documentElement.appendChild(container);
+  document.body.appendChild(container);
 
   // Use h337 (available in main world after heatmap.min.js injection)
   if (typeof (window as unknown as { h337: unknown }).h337 === "undefined") {
@@ -789,15 +949,22 @@ function renderHeatmapInMainWorld(
     }): { setData(d: { max: number; data: typeof points }): void };
   } }).h337;
 
+  const isLowData = points.length < 15;
+
   const instance = h.create({
     container,
-    radius: 25,
-    maxOpacity: 0.6,
-    minOpacity: 0,
+    radius: isLowData ? 50 : 25,
+    maxOpacity: isLowData ? 0.8 : 0.6,
+    minOpacity: isLowData ? 0.15 : 0,
     blur: 0.75,
   });
 
-  instance.setData({ max, data: points });
+  // h337.create() overrides container position to 'relative' — re-apply absolute
+  container.style.setProperty("position", "absolute", "important");
+  container.style.setProperty("top", "0", "important");
+  container.style.setProperty("left", "0", "important");
+
+  instance.setData({ max: isLowData ? Math.max(max, 1) : max, data: points });
 }
 
 function renderScrollOverlayInMainWorld(
