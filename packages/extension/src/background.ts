@@ -1226,25 +1226,26 @@ async function sendToTab(tabId: number, message: object): Promise<boolean> {
 function renderClickZonesInMainWorld(): void {
   removeClickZonesInMainWorld();
 
-  // Find all interactive/clickable elements
-  const INTERACTIVE = "a, button, input, select, textarea, [role='button'], [role='link'], [role='tab'], [onclick], [data-testid], [data-analytics], label, summary, details, img, svg, video";
-  const interactive = new Set<Element>(document.querySelectorAll(INTERACTIVE));
+  // Get ALL visible DOM elements — the tracker captures clicks on any of them
+  const allEls = document.querySelectorAll("body *");
+  const elements: Element[] = [];
 
-  // Also grab any element with cursor:pointer
-  document.querySelectorAll("body *").forEach((el) => {
+  allEls.forEach((el) => {
     try {
-      if (getComputedStyle(el).cursor === "pointer") interactive.add(el);
-    } catch { /* skip */ }
-  });
+      // Skip lumitra's own elements
+      if ((el as HTMLElement).closest?.("#lumitra-widget-host, #lumitra-overlay-host, #lumitra-zone-container")) return;
+      // Skip script/style/meta
+      const tag = el.tagName.toLowerCase();
+      if (["script", "style", "link", "meta", "noscript", "br", "hr"].includes(tag)) return;
 
-  // Filter hidden and lumitra elements
-  const elements = Array.from(interactive).filter((el) => {
-    if ((el as HTMLElement).closest?.("#lumitra-widget-host, #lumitra-overlay-host, #lumitra-zone-container")) return false;
-    const rect = el.getBoundingClientRect();
-    if (rect.width < 4 || rect.height < 4) return false;
-    const style = getComputedStyle(el);
-    if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false;
-    return true;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) return;
+
+      const style = getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") return;
+
+      elements.push(el);
+    } catch { /* skip */ }
   });
 
   // Create container for all overlays
