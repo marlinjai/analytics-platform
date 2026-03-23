@@ -850,6 +850,47 @@ export default function SettingsPage() {
           </>
         )}
       </section>
+
+      {/* ── Danger Zone ── */}
+      {selectedProjectId && (
+        <section className="rounded-xl border border-red-900/50 bg-gray-900 p-6">
+          <h2 className="mb-4 text-lg font-semibold text-red-400">Danger Zone</h2>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-200">Reset all analytics data</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Permanently delete all events, heatmap data, and session recordings for this project. This cannot be undone.
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                const confirmed = window.confirm(
+                  'Are you sure? This will permanently delete ALL analytics data for this project. This action cannot be undone.'
+                );
+                if (!confirmed) return;
+                const doubleConfirm = window.confirm(
+                  'This is your last chance to cancel. All heatmap data, session recordings, and events will be lost forever. Continue?'
+                );
+                if (!doubleConfirm) return;
+                try {
+                  const res = await fetch(`/api/projects/${selectedProjectId}/reset`, { method: 'DELETE' });
+                  if (res.ok) {
+                    alert('All analytics data has been deleted. New data will appear as events come in.');
+                  } else {
+                    const data = await res.json();
+                    alert(`Error: ${data.error || 'Failed to reset data'}`);
+                  }
+                } catch {
+                  alert('Failed to reset data. Check your connection.');
+                }
+              }}
+              className="rounded-lg border border-red-800 bg-red-950 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-900 hover:text-red-300 transition flex-shrink-0"
+            >
+              Reset data
+            </button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
