@@ -30,10 +30,12 @@ export const config = {
      * Match all request paths except:
      * - /login
      * - /api/collect (uses API key auth)
+     * - /api/health (Coolify / uptime monitoring)
      * - /api/auth/* (NextAuth routes)
+     * - /api/projects/*/config (public SDK config endpoint)
      * - /_next/* (Next.js internals)
      * - /favicon.ico, /robots.txt, etc.
      */
-    '/((?!login|accept-invite|api/collect|api/auth|api/invitations/accept|_next/static|_next/image|favicon.ico|robots.txt).*)',
+    '/((?!login|accept-invite|api/collect|api/health|api/auth|api/invitations/accept|api/projects/[^/]+/config|_next/static|_next/image|favicon.ico|robots.txt).*)',
   ],
 };
