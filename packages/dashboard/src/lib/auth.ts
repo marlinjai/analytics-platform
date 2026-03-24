@@ -17,6 +17,7 @@ declare module 'next-auth' {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   adapter: PostgresAdapter(getDb()),
   session: { strategy: 'jwt' },
   pages: {
