@@ -1,0 +1,46 @@
+name: Build, Test & Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm build
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          CLICKHOUSE_URL: http://localhost:8123
+          CLICKHOUSE_USER: default
+          CLICKHOUSE_PASSWORD: ci
+          NEXTAUTH_SECRET: ci-build-secret
+
+  deploy:
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Load Coolify webhook from 1Password
+        uses: 1password/load-secrets-action@v2
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          COOLIFY_WEBHOOK: op://Dev Secrets/Coolify Analytics/webhook-url
+
+      - name: Trigger Coolify deploy
+        run: curl -sf "$COOLIFY_WEBHOOK" || exit 1
