@@ -26,16 +26,11 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - /login
-     * - /api/collect (uses API key auth)
-     * - /api/health (Coolify / uptime monitoring)
-     * - /api/auth/* (NextAuth routes)
-     * - /api/projects/*/config (public SDK config endpoint)
-     * - /_next/* (Next.js internals)
-     * - /favicon.ico, /robots.txt, etc.
-     */
+    // Match all request paths except:
+    // - /login, /accept-invite
+    // - /api/collect, /api/health, /api/auth, /api/invitations/accept
+    // - /api/projects/{id}/config (public SDK config)
+    // - /_next/static, /_next/image, favicon.ico, robots.txt
     '/((?!login|accept-invite|api/collect|api/health|api/auth|api/invitations/accept|api/projects/[^/]+/config|_next/static|_next/image|favicon.ico|robots.txt).*)',
   ],
 };
