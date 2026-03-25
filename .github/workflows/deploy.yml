@@ -45,5 +45,12 @@ jobs:
 
       - name: Trigger Coolify deploy
         run: |
-          curl -sf "$COOLIFY_WEBHOOK" \
-            -H "Authorization: Bearer $COOLIFY_TOKEN" || exit 1
+          HTTP_CODE=$(curl -s -o /tmp/coolify_response.txt -w "%{http_code}" \
+            -X POST "$COOLIFY_WEBHOOK" \
+            -H "Authorization: Bearer $COOLIFY_TOKEN")
+          echo "Coolify response code: $HTTP_CODE"
+          cat /tmp/coolify_response.txt || true
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Coolify deploy failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
