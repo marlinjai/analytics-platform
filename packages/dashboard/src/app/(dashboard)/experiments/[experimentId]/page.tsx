@@ -48,20 +48,22 @@ interface Goal {
 }
 
 interface VariantResult {
-  variant: string;
+  key: string;
   sessions: number;
   conversions: number;
   conversionRate: number;
   liftVsControl: number | null;
-  probabilityToBeat: number;
+  probabilityToBeBest: number;
+  credibleInterval: [number, number];
 }
 
 interface ExperimentResults {
+  experimentId: string;
+  status: 'needs_data' | 'not_significant' | 'significant';
   variants: VariantResult[];
-  timeseries: { date: string; [variant: string]: number | string }[];
+  totalSessions: number;
+  minimumSampleReached: boolean;
   recommendation: string;
-  significanceReached: boolean;
-  minSamplesPerVariant: number;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -95,13 +97,13 @@ function HeroResultCard({
 }) {
   // Find the best variant (not control)
   const bestVariant = results.variants
-    .filter((v) => v.variant !== 'control')
-    .sort((a, b) => b.probabilityToBeat - a.probabilityToBeat)[0];
+    .filter((v) => v.key !== 'control')
+    .sort((a, b) => b.probabilityToBeBest - a.probabilityToBeBest)[0];
 
-  const controlVariant = results.variants.find((v) => v.variant === 'control');
+  const controlVariant = results.variants.find((v) => v.key === 'control');
   const totalSessions = results.variants.reduce((s, v) => s + v.sessions, 0);
   const needsMoreData = results.variants.some(
-    (v) => v.sessions < results.minSamplesPerVariant,
+    (v) => v.sessions < 100,
   );
 
   // Determine the state of the hero card
@@ -111,7 +113,7 @@ function HeroResultCard({
   if (experiment.status === 'completed' && experiment.winner_variant) {
     bgClass = 'border-green-700/50 bg-green-900/10';
     headlineColor = 'text-green-400';
-  } else if (results.significanceReached && bestVariant) {
+  } else if (results.status === 'significant' && bestVariant) {
     bgClass = 'border-green-700/50 bg-green-900/10';
     headlineColor = 'text-green-400';
   } else if (needsMoreData) {
@@ -126,13 +128,13 @@ function HeroResultCard({
   if (experiment.status === 'completed' && experiment.winner_variant) {
     headline = `${experiment.winner_variant} was declared the winner`;
   } else if (needsMoreData) {
-    const minNeeded = results.minSamplesPerVariant * results.variants.length;
+    const minNeeded = 100 * results.variants.length;
     const remaining = Math.max(0, minNeeded - totalSessions);
     headline = `Not enough data yet — need ~${remaining.toLocaleString()} more sessions`;
-  } else if (bestVariant && results.significanceReached) {
-    headline = `${bestVariant.variant} has a ${bestVariant.probabilityToBeat.toFixed(1)}% probability of beating Control`;
+  } else if (bestVariant && results.status === 'significant') {
+    headline = `${bestVariant.key} has a ${(bestVariant.probabilityToBeBest * 100).toFixed(1)}% probability of beating Control`;
   } else if (bestVariant) {
-    headline = `${bestVariant.variant} is leading at ${bestVariant.probabilityToBeat.toFixed(1)}% — not yet significant`;
+    headline = `${bestVariant.key} is leading at ${(bestVariant.probabilityToBeBest * 100).toFixed(1)}% — not yet significant`;
   } else {
     headline = 'Collecting data...';
   }
@@ -151,13 +153,13 @@ function HeroResultCard({
         {controlVariant && (
           <div>
             <span className="text-xs text-gray-500">Control conv. rate</span>
-            <p className="font-semibold text-white">{controlVariant.conversionRate.toFixed(1)}%</p>
+            <p className="font-semibold text-white">{(controlVariant.conversionRate * 100).toFixed(1)}%</p>
           </div>
         )}
         {bestVariant && (
           <div>
             <span className="text-xs text-gray-500">Best variant conv. rate</span>
-            <p className="font-semibold text-white">{bestVariant.conversionRate.toFixed(1)}%</p>
+            <p className="font-semibold text-white">{(bestVariant.conversionRate * 100).toFixed(1)}%</p>
           </div>
         )}
         {bestVariant && bestVariant.liftVsControl !== null && (
@@ -198,10 +200,10 @@ function VariantsTable({
           </thead>
           <tbody>
             {results.variants.map((v, i) => {
-              const isWinner = winnerVariant === v.variant;
+              const isWinner = winnerVariant === v.key;
               return (
                 <tr
-                  key={v.variant}
+                  key={v.key}
                   className={`border-b border-gray-800/50 last:border-0 ${isWinner ? 'bg-green-900/10' : ''}`}
                 >
                   <td className="px-4 py-3">
@@ -210,7 +212,7 @@ function VariantsTable({
                         className="h-2.5 w-2.5 rounded-full shrink-0"
                         style={{ backgroundColor: VARIANT_COLORS[i % VARIANT_COLORS.length] }}
                       />
-                      <span className="font-medium text-gray-100">{v.variant}</span>
+                      <span className="font-medium text-gray-100">{v.key}</span>
                       {isWinner && (
                         <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
                           Winner
@@ -220,7 +222,7 @@ function VariantsTable({
                   </td>
                   <td className="px-4 py-3 text-right text-gray-300">{v.sessions.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right text-gray-300">{v.conversions.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right font-medium text-gray-100">{v.conversionRate.toFixed(1)}%</td>
+                  <td className="px-4 py-3 text-right font-medium text-gray-100">{(v.conversionRate * 100).toFixed(1)}%</td>
                   <td className="px-4 py-3 text-right">
                     {v.liftVsControl !== null ? (
                       <span className={v.liftVsControl > 0 ? 'text-green-400' : v.liftVsControl < 0 ? 'text-red-400' : 'text-gray-400'}>
@@ -231,8 +233,8 @@ function VariantsTable({
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <span className={`font-medium ${v.probabilityToBeat > 90 ? 'text-green-400' : v.probabilityToBeat > 50 ? 'text-yellow-400' : 'text-gray-400'}`}>
-                      {v.probabilityToBeat.toFixed(1)}%
+                    <span className={`font-medium ${v.probabilityToBeBest * 100 > 90 ? 'text-green-400' : v.probabilityToBeBest * 100 > 50 ? 'text-yellow-400' : 'text-gray-400'}`}>
+                      {(v.probabilityToBeBest * 100).toFixed(1)}%
                     </span>
                   </td>
                 </tr>
@@ -347,7 +349,7 @@ function SampleSizeIndicator({
 }: {
   results: ExperimentResults;
 }) {
-  const minPerVariant = results.minSamplesPerVariant;
+  const minPerVariant = 100;
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
@@ -357,14 +359,14 @@ function SampleSizeIndicator({
           const progress = Math.min(100, (v.sessions / minPerVariant) * 100);
           const isComplete = v.sessions >= minPerVariant;
           return (
-            <div key={v.variant}>
+            <div key={v.key}>
               <div className="mb-1 flex items-center justify-between text-xs">
                 <div className="flex items-center gap-1.5">
                   <div
                     className="h-2 w-2 rounded-full"
                     style={{ backgroundColor: VARIANT_COLORS[i % VARIANT_COLORS.length] }}
                   />
-                  <span className="text-gray-300">{v.variant}</span>
+                  <span className="text-gray-300">{v.key}</span>
                 </div>
                 <span className={isComplete ? 'text-green-400' : 'text-gray-500'}>
                   {v.sessions.toLocaleString()} / {minPerVariant.toLocaleString()}
@@ -442,7 +444,7 @@ function DeclareWinnerDialog({
   // Pre-select the variant with highest probability
   const bestVariantKey =
     results.variants
-      .sort((a, b) => b.probabilityToBeat - a.probabilityToBeat)[0]?.variant ?? variants[0]?.key ?? '';
+      .sort((a, b) => b.probabilityToBeBest - a.probabilityToBeBest)[0]?.variant ?? variants[0]?.key ?? '';
   const [selected, setSelected] = useState(bestVariantKey);
 
   return (
@@ -456,7 +458,7 @@ function DeclareWinnerDialog({
 
         <div className="mt-4 space-y-2">
           {variants.map((v, i) => {
-            const result = results.variants.find((r) => r.variant === v.key);
+            const result = results.variants.find((r) => r.key === v.key);
             return (
               <label
                 key={v.key}
@@ -484,8 +486,8 @@ function DeclareWinnerDialog({
                   </div>
                   {result && (
                     <p className="mt-0.5 text-xs text-gray-400">
-                      {result.conversionRate.toFixed(1)}% conv. rate &middot;{' '}
-                      {result.probabilityToBeat.toFixed(1)}% P(win)
+                      {(result.conversionRate * 100).toFixed(1)}% conv. rate &middot;{' '}
+                      {(result.probabilityToBeBest * 100).toFixed(1)}% P(win)
                     </p>
                   )}
                 </div>
@@ -933,7 +935,7 @@ export default function ExperimentDetailPage() {
               <VariantsTable results={results} winnerVariant={experiment.winner_variant} />
 
               {/* Conversion Timeline */}
-              <ConversionTimeline timeseries={results.timeseries} variants={variantKeys} />
+              <ConversionTimeline timeseries={[]} variants={variantKeys} />
 
               {/* Sample Size + Goals side by side */}
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
