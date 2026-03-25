@@ -51,10 +51,52 @@ export function ReplayPlayer({ events }: Props) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="overflow-hidden rounded-xl border border-gray-800 bg-gray-900"
-      style={{ minHeight: '500px' }}
-    />
+    <>
+      <div
+        ref={containerRef}
+        className="replay-player-dark overflow-hidden rounded-xl border border-gray-800"
+        style={{ minHeight: '500px' }}
+      />
+      <style>{`
+        .replay-player-dark .rr-player {
+          background: #111827;
+          border-radius: 0.75rem;
+          box-shadow: none;
+        }
+        .replay-player-dark .rr-controller {
+          background: #1f2937 !important;
+          border-radius: 0 0 0.75rem 0.75rem;
+        }
+        .replay-player-dark .rr-timeline__time {
+          color: #d1d5db !important;
+        }
+        .replay-player-dark .rr-progress {
+          background: #374151 !important;
+          border-color: #1f2937 !important;
+        }
+        .replay-player-dark .rr-progress__step {
+          background: #4f46e5 !important;
+        }
+        .replay-player-dark .rr-controller__btns button {
+          color: #d1d5db !important;
+        }
+        .replay-player-dark .rr-controller__btns button:active {
+          background: #374151 !important;
+        }
+        .replay-player-dark .rr-controller__btns button.active {
+          color: #fff !important;
+          background: #4f46e5 !important;
+        }
+        .replay-player-dark .rr-controller__btns button svg {
+          fill: #d1d5db;
+        }
+        .replay-player-dark .rr-controller__btns button.active svg {
+          fill: #fff;
+        }
+        .replay-player-dark .switch .label {
+          color: #d1d5db !important;
+        }
+      `}</style>
+    </>
   );
 }
