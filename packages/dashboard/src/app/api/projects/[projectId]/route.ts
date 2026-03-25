@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
 import { getDb } from '@/lib/db';
-import { checkProjectMembership } from '@/lib/auth-check';
 
 type Params = { params: Promise<{ projectId: string }> };
 
-export async function GET(_request: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export async function GET(request: NextRequest, { params }: Params) {
   const { projectId } = await params;
-
-  if (!(await checkProjectMembership(session.user.id, projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authResult = await authenticateRequest(request, projectId);
+  if (!authResult.authenticated) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
   const db = getDb();
@@ -27,15 +21,18 @@ export async function GET(_request: NextRequest, { params }: Params) {
 }
 
 export async function PUT(request: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  return updateProject(request, params);
+}
 
+export async function PATCH(request: NextRequest, { params }: Params) {
+  return updateProject(request, params);
+}
+
+async function updateProject(request: NextRequest, params: Promise<{ projectId: string }>) {
   const { projectId } = await params;
-
-  if (!(await checkProjectMembership(session.user.id, projectId, ['owner', 'admin']))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authResult = await authenticateRequest(request, projectId, ['owner', 'admin']);
+  if (!authResult.authenticated) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
   const body = await request.json();
@@ -57,20 +54,19 @@ export async function PUT(request: NextRequest, { params }: Params) {
   return NextResponse.json({ project });
 }
 
-export async function DELETE(_request: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export async function DELETE(request: NextRequest, { params }: Params) {
   const { projectId } = await params;
-
-  if (!(await checkProjectMembership(session.user.id, projectId, ['owner']))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authResult = await authenticateRequest(request, projectId, ['owner']);
+  if (!authResult.authenticated) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
   const db = getDb();
   await db`DELETE FROM projects WHERE id = ${projectId}`;
 
   return NextResponse.json({ ok: true });
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
