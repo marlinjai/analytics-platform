@@ -21,6 +21,7 @@ const updateExperimentSchema = z.object({
     .max(5)
     .optional(),
   targeting: z.record(z.unknown()).optional(),
+  minSessionsPerVariant: z.number().int().min(1).max(100000).optional(),
 });
 
 export async function OPTIONS(request: NextRequest) {
@@ -81,14 +82,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  if (existing.status !== 'draft') {
+  const data = parsed.data;
+
+  // Structural changes (variants, targeting) only allowed on drafts
+  if (existing.status !== 'draft' && (data.variants || data.targeting)) {
     return NextResponse.json(
-      { error: 'Only draft experiments can be edited' },
+      { error: 'Variants and targeting can only be edited on draft experiments' },
       { status: 400 },
     );
   }
-
-  const data = parsed.data;
 
   const [experiment] = await db`
     UPDATE experiments
@@ -96,7 +98,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         description = ${data.description ?? existing.description},
         hypothesis = ${data.hypothesis ?? existing.hypothesis},
         variants = ${'variants' in data ? db.json(data.variants as any) : existing.variants},
-        targeting = ${'targeting' in data ? db.json(data.targeting as any) : existing.targeting}
+        targeting = ${'targeting' in data ? db.json(data.targeting as any) : existing.targeting},
+        min_sessions_per_variant = ${data.minSessionsPerVariant ?? existing.min_sessions_per_variant}
     WHERE id = ${experimentId} AND project_id = ${projectId}
     RETURNING *
   `;

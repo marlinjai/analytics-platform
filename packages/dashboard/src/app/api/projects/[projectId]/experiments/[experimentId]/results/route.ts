@@ -181,7 +181,8 @@ export async function GET(request: NextRequest, { params }: Params) {
   }));
 
   // Run Bayesian analysis
-  const results = analyzeExperiment(experimentId, variantData);
+  const minSessions = (experiment.min_sessions_per_variant as number) ?? 100;
+  const results = analyzeExperiment(experimentId, variantData, minSessions);
 
   return NextResponse.json({
     results,

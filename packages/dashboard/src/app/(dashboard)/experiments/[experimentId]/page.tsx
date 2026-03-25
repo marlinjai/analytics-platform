@@ -37,6 +37,7 @@ interface Experiment {
   started_at: string | null;
   ended_at: string | null;
   winner_variant: string | null;
+  min_sessions_per_variant: number;
 }
 
 interface Goal {
@@ -102,8 +103,9 @@ function HeroResultCard({
 
   const controlVariant = results.variants.find((v) => v.key === 'control');
   const totalSessions = results.variants.reduce((s, v) => s + v.sessions, 0);
+  const minPerVariant = experiment.min_sessions_per_variant ?? 100;
   const needsMoreData = results.variants.some(
-    (v) => v.sessions < 100,
+    (v) => v.sessions < minPerVariant,
   );
 
   // Determine the state of the hero card
@@ -128,7 +130,7 @@ function HeroResultCard({
   if (experiment.status === 'completed' && experiment.winner_variant) {
     headline = `${experiment.winner_variant} was declared the winner`;
   } else if (needsMoreData) {
-    const minNeeded = 100 * results.variants.length;
+    const minNeeded = minPerVariant * results.variants.length;
     const remaining = Math.max(0, minNeeded - totalSessions);
     headline = `Not enough data yet — need ~${remaining.toLocaleString()} more sessions`;
   } else if (bestVariant && results.status === 'significant') {
@@ -346,14 +348,51 @@ function ConversionTimeline({
 
 function SampleSizeIndicator({
   results,
+  minPerVariant,
+  onChangeMin,
 }: {
   results: ExperimentResults;
+  minPerVariant: number;
+  onChangeMin: (value: number) => void;
 }) {
-  const minPerVariant = 100;
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(String(minPerVariant));
+
+  function handleSave() {
+    const num = parseInt(editValue, 10);
+    if (num >= 1) {
+      onChangeMin(num);
+    }
+    setEditing(false);
+  }
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
-      <h3 className="mb-3 text-sm font-medium text-gray-300">Sample Size Progress</h3>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-medium text-gray-300">Sample Size Progress</h3>
+        {editing ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min={1}
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              className="w-20 rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-200 border border-gray-700 focus:border-blue-500 focus:outline-none"
+              autoFocus
+            />
+            <button onClick={handleSave} className="text-xs text-blue-400 hover:text-blue-300">Save</button>
+            <button onClick={() => setEditing(false)} className="text-xs text-gray-500 hover:text-gray-400">Cancel</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setEditValue(String(minPerVariant)); setEditing(true); }}
+            className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            Min: {minPerVariant}/variant (edit)
+          </button>
+        )}
+      </div>
       <div className="space-y-3">
         {results.variants.map((v, i) => {
           const progress = Math.min(100, (v.sessions / minPerVariant) * 100);
@@ -389,7 +428,7 @@ function SampleSizeIndicator({
       </div>
       {results.variants.some((v) => v.sessions < minPerVariant) && (
         <p className="mt-3 text-xs text-yellow-400">
-          Minimum {minPerVariant} sessions per variant recommended for reliable results.
+          Minimum {minPerVariant} sessions per variant needed for reliable results.
         </p>
       )}
     </div>
@@ -939,7 +978,24 @@ export default function ExperimentDetailPage() {
 
               {/* Sample Size + Goals side by side */}
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <SampleSizeIndicator results={results} />
+                <SampleSizeIndicator
+                  results={results}
+                  minPerVariant={experiment.min_sessions_per_variant ?? 100}
+                  onChangeMin={async (value) => {
+                    if (!projectId) return;
+                    try {
+                      const res = await fetch(`/api/projects/${projectId}/experiments/${experimentId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ minSessionsPerVariant: value }),
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        setExperiment(data.experiment);
+                      }
+                    } catch {}
+                  }}
+                />
                 <GoalsSection goals={goals} />
               </div>
 

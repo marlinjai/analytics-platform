@@ -47,7 +47,7 @@ export interface ExperimentResults {
 
 const NUM_SAMPLES = 10_000;
 const SIGNIFICANCE_THRESHOLD = 0.95;
-const MIN_SESSIONS_PER_VARIANT = 100;
+const DEFAULT_MIN_SESSIONS_PER_VARIANT = 100;
 
 // ---------------------------------------------------------------------------
 // Random sampling (zero dependencies)
@@ -102,6 +102,7 @@ function sampleBeta(alpha: number, beta: number): number {
 export function analyzeExperiment(
   experimentId: string,
   variants: VariantData[],
+  minSessionsPerVariant = DEFAULT_MIN_SESSIONS_PER_VARIANT,
 ): ExperimentResults {
   if (variants.length === 0) {
     return {
@@ -149,7 +150,7 @@ export function analyzeExperiment(
       : 0;
 
   const minimumSampleReached = variants.every(
-    (v) => v.sessions >= MIN_SESSIONS_PER_VARIANT,
+    (v) => v.sessions >= minSessionsPerVariant,
   );
 
   const results: VariantResult[] = variants.map((v) => {
@@ -183,7 +184,7 @@ export function analyzeExperiment(
 
   if (!minimumSampleReached) {
     status = 'needs_data';
-    recommendation = `Need at least ${MIN_SESSIONS_PER_VARIANT} sessions per variant. Continue running.`;
+    recommendation = `Need at least ${minSessionsPerVariant} sessions per variant. Continue running.`;
   } else if (bestVariant.probabilityToBeBest >= SIGNIFICANCE_THRESHOLD) {
     status = 'significant';
     recommendation = `"${bestVariant.key}" is the winner with ${(bestVariant.probabilityToBeBest * 100).toFixed(1)}% probability. Consider stopping the experiment.`;

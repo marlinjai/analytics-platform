@@ -22,6 +22,7 @@ const createExperimentSchema = z.object({
   hypothesis: z.string().optional().default(''),
   variants: z.array(variantSchema).min(2).max(5),
   targeting: z.record(z.unknown()).optional().default({}),
+  minSessionsPerVariant: z.number().int().min(1).max(100000).optional().default(100),
 });
 
 export async function OPTIONS(request: NextRequest) {
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   if (statusFilter && validStatuses.includes(statusFilter)) {
     experiments = await db`
       SELECT id, project_id, key, name, description, hypothesis, status,
-             variants, targeting, created_at, started_at, ended_at, winner_variant
+             variants, targeting, created_at, started_at, ended_at, winner_variant, min_sessions_per_variant
       FROM experiments
       WHERE project_id = ${projectId} AND status = ${statusFilter}
       ORDER BY created_at DESC
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   } else {
     experiments = await db`
       SELECT id, project_id, key, name, description, hypothesis, status,
-             variants, targeting, created_at, started_at, ended_at, winner_variant
+             variants, targeting, created_at, started_at, ended_at, winner_variant, min_sessions_per_variant
       FROM experiments
       WHERE project_id = ${projectId}
       ORDER BY created_at DESC
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  const { key, name, description, hypothesis, variants, targeting } = parsed.data;
+  const { key, name, description, hypothesis, variants, targeting, minSessionsPerVariant } = parsed.data;
   const db = getDb();
 
   // Check for duplicate key within the project
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   const [experiment] = await db`
-    INSERT INTO experiments (project_id, key, name, description, hypothesis, variants, targeting)
+    INSERT INTO experiments (project_id, key, name, description, hypothesis, variants, targeting, min_sessions_per_variant)
     VALUES (
       ${projectId},
       ${key},
@@ -104,7 +105,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       ${description},
       ${hypothesis},
       ${db.json(variants as any)},
-      ${db.json(targeting as any)}
+      ${db.json(targeting as any)},
+      ${minSessionsPerVariant}
     )
     RETURNING *
   `;
