@@ -47,14 +47,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429, headers: cors });
   }
 
-  // Parse body — decompress gzip if Content-Encoding header is set
+  // Parse body — decompress gzip if Content-Encoding header is set.
+  // Note: reverse proxies (Traefik) may decompress the body but leave the header,
+  // so we try gunzip first and fall back to plain JSON parsing on failure.
   let body: unknown;
   try {
     const encoding = request.headers.get('content-encoding');
     if (encoding === 'gzip') {
       const buf = Buffer.from(await request.arrayBuffer());
-      const decompressed = gunzipSync(buf);
-      body = JSON.parse(decompressed.toString('utf-8'));
+      try {
+        const decompressed = gunzipSync(buf);
+        body = JSON.parse(decompressed.toString('utf-8'));
+      } catch {
+        // Proxy may have already decompressed — try parsing raw buffer as JSON
+        body = JSON.parse(buf.toString('utf-8'));
+      }
     } else {
       body = await request.json();
     }
