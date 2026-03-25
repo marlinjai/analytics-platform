@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: resolve(__dirname, '../..'),
   },
+  // Include postgres in standalone output for the instrumentation migration runner
+  outputFileTracingIncludes: {
+    '/api/**': ['./node_modules/postgres/**'],
+  },
 };
 
 export default nextConfig;
