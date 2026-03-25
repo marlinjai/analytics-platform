@@ -686,7 +686,7 @@ export default function ExperimentDetailPage() {
         if (!r.ok) throw new Error('Failed');
         return r.json();
       })
-      .then((data) => setResults(data))
+      .then((data) => setResults(data.results ?? data))
       .catch(() => {
         // Set empty results if API not available yet
         setResults(null);
