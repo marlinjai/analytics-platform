@@ -68,7 +68,7 @@ export const eventBatchSchema = z
 export const statsQuerySchema = z.object({
   projectId: z.string().uuid(),
   dateRange: dateRangeSchema,
-  interval: z.enum(['hour', 'day', 'week', 'month']).optional(),
+  interval: z.enum(['five_minute', 'hour', 'day', 'week', 'month']).optional(),
 });
 
 export const heatmapQuerySchema = z.object({

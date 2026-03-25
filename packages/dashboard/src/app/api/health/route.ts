@@ -1,8 +1,19 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getClickHouse } from '@/lib/clickhouse';
 
-export async function GET() {
+/**
+ * GET /api/health — used by Coolify container health check.
+ *
+ * Always returns 200 so Coolify marks the container as healthy once the
+ * Next.js server is up. The response body still reports individual
+ * dependency status for observability.
+ *
+ * To get a strict check that returns 503 on failure, pass ?strict=true
+ * (useful for external monitoring / uptime robots).
+ */
+export async function GET(request: NextRequest) {
+  const strict = request.nextUrl.searchParams.get('strict') === 'true';
   const checks: Record<string, 'ok' | 'error'> = {};
 
   // Check PostgreSQL
@@ -24,9 +35,10 @@ export async function GET() {
   }
 
   const healthy = Object.values(checks).every((v) => v === 'ok');
+  const status = healthy ? 'healthy' : 'degraded';
 
   return NextResponse.json(
-    { status: healthy ? 'healthy' : 'degraded', checks },
-    { status: healthy ? 200 : 503 }
+    { status, checks },
+    { status: strict && !healthy ? 503 : 200 },
   );
 }

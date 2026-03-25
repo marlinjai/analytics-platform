@@ -121,27 +121,95 @@ export async function getStatsOverview(
   };
 }
 
+// ── Bucket helpers ──────────────────────────────────────────
+
+type Interval = 'five_minute' | 'hour' | 'day' | 'week' | 'month';
+
+const INTERVAL_CH_FN: Record<Interval, string> = {
+  five_minute: 'toStartOfFiveMinutes',
+  hour: 'toStartOfHour',
+  day: 'toStartOfDay',
+  week: 'toStartOfWeek',
+  month: 'toStartOfMonth',
+};
+
+const INTERVAL_MS: Record<Interval, number> = {
+  five_minute: 5 * 60_000,
+  hour: 60 * 60_000,
+  day: 24 * 60 * 60_000,
+  week: 7 * 24 * 60 * 60_000,
+  month: 30 * 24 * 60 * 60_000,
+};
+
+/** Pick the best interval from the date range span. */
+export function pickInterval(from: string, to: string): Interval {
+  const ms = new Date(to).getTime() - new Date(from).getTime();
+  const hours = ms / 3_600_000;
+  if (hours <= 12) return 'five_minute';
+  if (hours <= 24) return 'hour';
+  if (hours <= 72) return 'hour';
+  if (hours <= 720) return 'day'; // up to 30d
+  return 'week';
+}
+
+/** Align a Date to the start of the given bucket (local time). */
+function alignToBucket(d: Date, interval: Interval): Date {
+  const out = new Date(d);
+  if (interval === 'five_minute') {
+    out.setSeconds(0, 0);
+    out.setMinutes(Math.floor(out.getMinutes() / 5) * 5);
+  } else if (interval === 'hour') {
+    out.setMinutes(0, 0, 0);
+  } else if (interval === 'day') {
+    out.setHours(0, 0, 0, 0);
+  } else if (interval === 'week') {
+    // ClickHouse toStartOfWeek uses Monday=0 by default
+    const day = out.getDay();
+    const diff = day === 0 ? 6 : day - 1; // shift to Monday
+    out.setDate(out.getDate() - diff);
+    out.setHours(0, 0, 0, 0);
+  } else {
+    out.setDate(1);
+    out.setHours(0, 0, 0, 0);
+  }
+  return out;
+}
+
+/** Generate all bucket timestamps between from and to (inclusive). */
+function generateBuckets(from: string, to: string, interval: Interval): string[] {
+  const buckets: string[] = [];
+  let cursor = alignToBucket(new Date(from), interval);
+  const end = new Date(to);
+
+  while (cursor <= end) {
+    buckets.push(cursor.toISOString());
+    if (interval === 'month') {
+      cursor = new Date(cursor);
+      cursor.setMonth(cursor.getMonth() + 1);
+    } else {
+      cursor = new Date(cursor.getTime() + INTERVAL_MS[interval]);
+    }
+  }
+  return buckets;
+}
+
 export async function getTimeseries(
   projectId: string,
   dateRange: DateRange,
-  interval: 'hour' | 'day' | 'week' | 'month' = 'day',
+  interval: Interval = 'day',
   filters?: DashboardFilters
 ): Promise<TimeseriesPoint[]> {
   const ch = getClickHouse();
   const { sql: fSql, params: fParams } = filterWhere(filters);
 
-  const intervalFn = {
-    hour: 'toStartOfHour',
-    day: 'toStartOfDay',
-    week: 'toStartOfWeek',
-    month: 'toStartOfMonth',
-  }[interval];
+  const intervalFn = INTERVAL_CH_FN[interval];
 
   const result = await ch.query({
     query: `
       SELECT
         ${intervalFn}(timestamp) AS timestamp,
-        count() AS count
+        count() AS count,
+        uniqExact(ip_hash) AS visitors
       FROM analytics.events
       WHERE project_id = {projectId: UUID}
         AND type = 'pageview'
@@ -158,7 +226,18 @@ export async function getTimeseries(
     format: 'JSONEachRow',
   });
 
-  return result.json<TimeseriesPoint>();
+  const rows = await result.json<TimeseriesPoint>();
+
+  // Build a lookup from ClickHouse rows, then fill empty buckets with zeros
+  const rowMap = new Map<string, TimeseriesPoint>();
+  for (const row of rows) {
+    // Normalise to ISO so lookup keys match
+    const key = new Date(row.timestamp).toISOString();
+    rowMap.set(key, { ...row, timestamp: key, count: Number(row.count), visitors: Number(row.visitors) });
+  }
+
+  const allBuckets = generateBuckets(dateRange.from, dateRange.to, interval);
+  return allBuckets.map((ts) => rowMap.get(ts) ?? { timestamp: ts, count: 0, visitors: 0 });
 }
 
 export async function getTopPages(

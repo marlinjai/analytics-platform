@@ -240,6 +240,7 @@ function OverviewPageInner() {
   const { data: statsData, isLoading: statsLoading } = useSWR<{
     overview: StatsOverview;
     timeseries: TimeseriesPoint[];
+    interval?: string;
   }>(statsKey, fetcher, swrOptions);
 
   const { data: pagesData, isLoading: pagesLoading } = useSWR<{ pages: TopPage[] }>(
@@ -292,6 +293,7 @@ function OverviewPageInner() {
 
   const stats = statsData?.overview ?? null;
   const timeseries = statsData?.timeseries ?? [];
+  const interval = (statsData?.interval ?? 'day') as 'five_minute' | 'hour' | 'day' | 'week' | 'month';
   const pages = pagesData?.pages ?? [];
   const sources = sourcesData?.sources ?? [];
   const browsers = browsersData?.browsers ?? [];
@@ -390,7 +392,7 @@ function OverviewPageInner() {
       <FilterPills filters={filters} onRemove={removeFilter} onClearAll={clearAllFilters} />
 
       <StatsCards stats={stats} loading={loading} currentVisitors={currentVisitors} />
-      <TimeseriesChart data={timeseries} loading={loading} />
+      <TimeseriesChart data={timeseries} loading={loading} interval={interval} />
       <TopPagesTable
         pages={pages}
         loading={loading}

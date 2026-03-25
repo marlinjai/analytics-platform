@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { statsQuerySchema } from '@analytics-platform/shared';
-import { getStatsOverview, getTimeseries } from '@/lib/queries/stats';
+import { getStatsOverview, getTimeseries, pickInterval } from '@/lib/queries/stats';
 import { auth } from '@/lib/auth';
 import { checkProjectMembership } from '@/lib/auth-check';
 import type { DashboardFilters } from '@analytics-platform/shared';
@@ -22,7 +22,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid parameters', details: parsed.error.issues }, { status: 400 });
   }
 
-  const { projectId, dateRange, interval } = parsed.data;
+  const { projectId, dateRange } = parsed.data;
+  const interval = parsed.data.interval ?? pickInterval(dateRange.from, dateRange.to);
 
   if (!(await checkProjectMembership(session.user.id, projectId))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -43,5 +44,5 @@ export async function GET(request: NextRequest) {
     getTimeseries(projectId, dateRange, interval, filters),
   ]);
 
-  return NextResponse.json({ overview, timeseries });
+  return NextResponse.json({ overview, timeseries, interval });
 }
