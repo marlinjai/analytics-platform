@@ -56,6 +56,8 @@ export async function insertEvents(events: StoredEvent[]): Promise<void> {
       country: e.country ?? '',
       browser: e.browser ?? '',
       os: e.os ?? '',
+      experiment_id: e.experimentId ?? '',
+      variant: e.variant ?? '',
     })),
     format: 'JSONEachRow',
   });

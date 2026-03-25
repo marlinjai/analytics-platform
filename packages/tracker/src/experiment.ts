@@ -118,6 +118,30 @@ export class ExperimentManager {
     return active;
   }
 
+  /** Return all assignments as { experimentKey: variantKey }. */
+  getAllAssignments(): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const [key, variant] of this.assignments) {
+      result[key] = variant;
+    }
+    return result;
+  }
+
+  /** Return all flag evaluations as { flagKey: boolean }. */
+  getAllFlags(): Record<string, boolean> {
+    const result: Record<string, boolean> = {};
+    for (const flag of this.flags) {
+      result[flag.key] = this.getFlag(flag.key);
+    }
+    return result;
+  }
+
+  /** Override the variant for an experiment. Persists to sessionStorage. */
+  setVariant(key: string, variant: string): void {
+    this.assignments.set(key, variant);
+    storeAssignment(key, variant);
+  }
+
   // ── Internal ───────────────────────────────────────────────────────────────
 
   private resolveAllAssignments(): void {

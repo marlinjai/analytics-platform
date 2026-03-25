@@ -72,6 +72,9 @@ export class AnalyticsTracker {
       );
     }
 
+    // Set initial global (experiments not yet loaded)
+    this.updateGlobal();
+
     // Non-blocking remote config fetch
     this.fetchRemoteConfig();
   }
@@ -86,6 +89,19 @@ export class AnalyticsTracker {
     return this.experimentManager.getVariant(key);
   }
 
+  /** Override the variant for an experiment and notify listeners. */
+  setVariant(key: string, variant: string): void {
+    this.experimentManager.setVariant(key, variant);
+    this.updateGlobal();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('lumitra:variant-changed', {
+          detail: { key, variant },
+        }),
+      );
+    }
+  }
+
   /** Evaluate a feature flag. Returns false if not found or disabled. */
   getFlag(key: string): boolean {
     return this.experimentManager.getFlag(key);
@@ -94,6 +110,12 @@ export class AnalyticsTracker {
   /** Switch from session-based to user-based experiment assignment. */
   identify(userId: string): void {
     this.experimentManager.identify(userId);
+    this.updateGlobal();
+  }
+
+  /** Get the project ID this tracker was initialized with. */
+  get projectId(): string {
+    return this.config.projectId;
   }
 
   /**
@@ -171,9 +193,27 @@ export class AnalyticsTracker {
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups = [];
     this.batcher.destroy();
+    this.cleanupGlobal();
+  }
+
+  /** Remove the window.__lumitra global. */
+  cleanupGlobal(): void {
+    if (typeof window !== 'undefined') {
+      delete (window as unknown as Record<string, unknown>).__lumitra;
+    }
   }
 
   // ── Internal ───────────────────────────────────────────────────────────────
+
+  private updateGlobal(): void {
+    if (typeof window === 'undefined') return;
+    (window as unknown as Record<string, unknown>).__lumitra = {
+      projectId: this.config.projectId,
+      experiments: this.experimentManager.getAllAssignments(),
+      flags: this.experimentManager.getAllFlags(),
+      ready: this.readyPromise,
+    };
+  }
 
   private fetchRemoteConfig(): void {
     const baseUrl = this.config.endpoint.replace(/\/api\/collect\/?$/, '');
@@ -197,6 +237,16 @@ export class AnalyticsTracker {
           data.experiments ?? [],
           data.flags ?? [],
         );
+        this.updateGlobal();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('lumitra:ready', {
+            detail: {
+              projectId: this.config.projectId,
+              experiments: this.experimentManager.getAllAssignments(),
+              flags: this.experimentManager.getAllFlags(),
+            },
+          }));
+        }
         if (this.config.debug) {
           console.log('[analytics] remote config loaded:', data);
         }

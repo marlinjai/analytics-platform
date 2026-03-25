@@ -37,6 +37,10 @@ export interface TrackerEvent {
   viewportWidth?: number;
   viewportHeight?: number;
   inputType?: string;
+
+  // Experiment
+  experimentId?: string;
+  variant?: string;
 }
 
 /** Server-enriched fields added during ingestion. */

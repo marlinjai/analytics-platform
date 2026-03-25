@@ -50,13 +50,18 @@ export async function getHeatmapData(
     ? 'AND variant = {variant: String}'
     : '';
 
+  // Use variant-specific MV when filtering by experiment, base MV otherwise
+  const table = experimentId
+    ? 'analytics.heatmap_clicks_by_variant_mv'
+    : 'analytics.heatmap_clicks_mv';
+
   const result = await ch.query({
     query: `
       SELECT
         x_bucket AS x,
         y_bucket AS y,
         sum(click_count) AS count
-      FROM analytics.heatmap_clicks_mv
+      FROM ${table}
       WHERE project_id = {projectId: UUID}
         AND url IN ({url0: String}, {url1: String}, {url2: String}, {url3: String})
         AND day >= toDate({from: String})
@@ -106,13 +111,18 @@ export async function getHeatmapBySelector(
     ? 'AND variant = {variant: String}'
     : '';
 
+  // Use variant-specific MV when filtering by experiment, base MV otherwise
+  const table = experimentId
+    ? 'analytics.heatmap_selectors_by_variant_mv'
+    : 'analytics.heatmap_selectors_mv';
+
   const result = await ch.query({
     query: `
       SELECT
         selector,
         sum(click_count) AS count,
         sum(session_count) AS sessions
-      FROM analytics.heatmap_selectors_mv
+      FROM ${table}
       WHERE project_id = {projectId: UUID}
         AND url IN ({url0: String}, {url1: String}, {url2: String}, {url3: String})
         AND day >= toDate({from: String})

@@ -56,6 +56,10 @@ export const trackerEventSchema = z.object({
   viewportWidth: z.number().int().positive().optional(),
   viewportHeight: z.number().int().positive().optional(),
   inputType: z.string().max(32).optional(),
+
+  // Experiment
+  experimentId: z.string().max(128).optional(),
+  variant: z.string().max(128).optional(),
 });
 
 export const eventBatchSchema = z
