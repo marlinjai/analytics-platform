@@ -11,7 +11,8 @@ on the Lumitra analytics platform directly from your development environment.
 ## Setup
 
 Credentials are read from environment variables:
-- `LUMITRA_API_KEY` or `NEXT_PUBLIC_ANALYTICS_API_KEY` -- API key for authentication
+- `LUMITRA_API_KEY` or `NEXT_PUBLIC_ANALYTICS_API_KEY` -- Project-level API key (`ap_live_` prefix)
+- `LUMITRA_ACCOUNT_KEY` -- Account-level API key (`ap_account_` prefix) for cross-project operations
 - `LUMITRA_PROJECT_ID` or `NEXT_PUBLIC_ANALYTICS_PROJECT_ID` -- Project UUID
 - `LUMITRA_ENDPOINT` -- API base URL (default: https://analytics.lumitra.co)
 
@@ -19,10 +20,34 @@ Credentials are read from environment variables:
 
 All API calls use the `X-API-Key` header:
 ```
-X-API-Key: ap_live_xxxxx
+X-API-Key: ap_live_xxxxx      # project-level (single project access)
+X-API-Key: ap_account_xxxxx   # account-level (all projects + can create projects)
 ```
 
+### Key types
+- **Project keys** (`ap_live_`, `ap_test_`): Scoped to a single project. Can manage experiments, flags, and ingest events for that project.
+- **Account keys** (`ap_account_`): Scoped to the user's account. Can access all projects the user owns, create new projects, and manage account settings. Use for CI/CD, agent automation, and Claude Code integrations.
+
 ## API Reference
+
+### List projects (account key required)
+```
+GET {endpoint}/api/projects
+```
+Returns all projects the authenticated user is a member of.
+
+### Create project (account key required)
+```
+POST {endpoint}/api/projects
+```
+Body:
+```json
+{
+  "name": "My App",
+  "domain": "myapp.com"
+}
+```
+The authenticated user becomes the project owner. Returns the created project with its UUID.
 
 ### List experiments
 ```
@@ -275,6 +300,38 @@ const tracker = createTracker({
 ```
 
 ## Workflow
+
+### Creating a new project
+
+When asked to set up analytics for a new app (requires account key):
+
+1. Read `LUMITRA_ACCOUNT_KEY` and `LUMITRA_ENDPOINT` env vars
+2. Create the project via POST to `/api/projects`
+3. Save the returned project ID to `.env.local` as `NEXT_PUBLIC_ANALYTICS_PROJECT_ID` / `LUMITRA_PROJECT_ID`
+4. Create a project-level API key via POST to `/api/projects/{projectId}/keys` (using account key auth)
+5. Save the returned key to `.env.local` as `NEXT_PUBLIC_ANALYTICS_API_KEY` / `LUMITRA_API_KEY`
+
+```bash
+# Step 1: Create project
+PROJECT=$(curl -s -X POST \
+  "${LUMITRA_ENDPOINT}/api/projects" \
+  -H "X-API-Key: ${LUMITRA_ACCOUNT_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "My App", "domain": "myapp.com" }')
+
+PROJECT_ID=$(echo "$PROJECT" | jq -r '.project.id')
+echo "Project ID: $PROJECT_ID"
+
+# Step 2: Create a project API key
+KEY=$(curl -s -X POST \
+  "${LUMITRA_ENDPOINT}/api/projects/${PROJECT_ID}/keys" \
+  -H "X-API-Key: ${LUMITRA_ACCOUNT_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{ "label": "Production", "environment": "live" }')
+
+API_KEY=$(echo "$KEY" | jq -r '.key.fullKey')
+echo "API Key: $API_KEY"
+```
 
 ### Creating an A/B test
 

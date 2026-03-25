@@ -67,7 +67,7 @@ See [Self-Hosting Guide](docs/public/self-hosting.md) for full details.
 | `packages/tracker` | `@marlinjai/analytics-tracker` | Browser SDK (published) |
 | `packages/dashboard` | `@analytics-platform/dashboard` | Next.js app (private) |
 | `packages/react` | `@marlinjai/analytics-react` | React SDK with hooks for experiments and feature flags (published) |
-| `packages/cli` | `@marlinjai/analytics-cli` | CLI setup tool with Claude Code skill generator (published) |
+| `packages/cli` | `@marlinjai/lumitra-cli` | CLI setup tool with Claude Code skill generator (published) |
 | `packages/demo` | `@analytics-platform/demo` | Test page with traffic simulator (private) |
 
 ## License

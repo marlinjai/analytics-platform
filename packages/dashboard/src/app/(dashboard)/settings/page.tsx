@@ -100,7 +100,7 @@ function DeveloperToolsSection({ projectId }: { projectId: string }) {
   const apiSnippet = `curl -X GET ${endpoint}/api/projects/${projectId}/experiments \\
   -H "X-API-Key: <your-api-key>"`;
 
-  const installSnippet = 'npx @marlinjai/analytics-cli init';
+  const installSnippet = 'npx @marlinjai/lumitra-cli init';
 
   async function copyApiSnippet() {
     await navigator.clipboard.writeText(apiSnippet);

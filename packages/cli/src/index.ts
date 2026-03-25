@@ -10,6 +10,7 @@ import { SKILL_TEMPLATE } from './skill-template.js';
 
 const BOLD = '\x1b[1m';
 const GREEN = '\x1b[32m';
+const RED = '\x1b[31m';
 const CYAN = '\x1b[36m';
 const YELLOW = '\x1b[33m';
 const DIM = '\x1b[2m';
@@ -25,6 +26,10 @@ function success(msg: string): void {
 
 function warn(msg: string): void {
   log(`${YELLOW}!${RESET} ${msg}`);
+}
+
+function error(msg: string): void {
+  log(`${RED}✗${RESET} ${msg}`);
 }
 
 function heading(msg: string): void {
@@ -46,22 +51,10 @@ function detectFramework(cwd: string): Framework {
     }
   })();
 
-  // Next.js
-  if (files.some((f) => f.startsWith('next.config'))) {
-    return 'nextjs';
-  }
+  if (files.some((f) => f.startsWith('next.config'))) return 'nextjs';
+  if (files.some((f) => f.startsWith('nuxt.config'))) return 'nuxt';
+  if (files.some((f) => f.startsWith('vite.config'))) return 'vite';
 
-  // Nuxt
-  if (files.some((f) => f.startsWith('nuxt.config'))) {
-    return 'nuxt';
-  }
-
-  // Vite
-  if (files.some((f) => f.startsWith('vite.config'))) {
-    return 'vite';
-  }
-
-  // React (check package.json dependencies)
   const pkgPath = join(cwd, 'package.json');
   if (existsSync(pkgPath)) {
     try {
@@ -71,9 +64,7 @@ function detectFramework(cwd: string): Framework {
         ...pkg.devDependencies,
         ...pkg.peerDependencies,
       };
-      if ('react' in allDeps) {
-        return 'react';
-      }
+      if ('react' in allDeps) return 'react';
     } catch {
       // ignore parse errors
     }
@@ -94,6 +85,130 @@ function frameworkLabel(fw: Framework): string {
       return 'React';
     case 'vanilla':
       return 'Vanilla JS';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Project name / domain detection
+// ---------------------------------------------------------------------------
+
+function readProjectName(cwd: string): string {
+  const pkgPath = join(cwd, 'package.json');
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      if (pkg.name && typeof pkg.name === 'string') {
+        return pkg.name.replace(/^@[^/]+\//, '');
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return cwd.split('/').pop() || 'my-project';
+}
+
+function detectDomain(cwd: string): string {
+  for (const filename of ['.env.local', '.env.production', '.env']) {
+    const p = join(cwd, filename);
+    if (!existsSync(p)) continue;
+    try {
+      const content = readFileSync(p, 'utf-8');
+      const match = content.match(
+        /(?:NEXT_PUBLIC_|NUXT_PUBLIC_|VITE_)?(?:SITE_URL|BASE_URL|APP_URL|DOMAIN)\s*=\s*(.+)/,
+      );
+      if (match) {
+        const val = match[1]!.trim().replace(/^['"]|['"]$/g, '');
+        try {
+          return new URL(val).hostname;
+        } catch {
+          return val;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return `${readProjectName(cwd)}.com`;
+}
+
+// ---------------------------------------------------------------------------
+// Auto-provisioning (account key)
+// ---------------------------------------------------------------------------
+
+interface ProvisionResult {
+  projectId: string;
+  apiKey: string;
+}
+
+async function autoProvisionProject(cwd: string): Promise<ProvisionResult | null> {
+  const accountKey = process.env.LUMITRA_ACCOUNT_KEY;
+  const endpoint = process.env.LUMITRA_ENDPOINT;
+
+  if (!accountKey || !endpoint) return null;
+
+  const projectName = readProjectName(cwd);
+  const domain = detectDomain(cwd);
+
+  log(`  ${DIM}Auto-provisioning with account key...${RESET}`);
+  log(`  Project name: ${BOLD}${projectName}${RESET}`);
+  log(`  Domain: ${BOLD}${domain}${RESET}`);
+  log('');
+
+  // Step 1: Create the project
+  let projectId: string;
+  try {
+    const res = await fetch(`${endpoint}/api/projects`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': accountKey,
+      },
+      body: JSON.stringify({ name: projectName, domain }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      error(`Failed to create project (HTTP ${res.status}): ${body}`);
+      return null;
+    }
+
+    const data = (await res.json()) as { project: { id: string } };
+    projectId = data.project.id;
+    success(`Created project ${BOLD}${projectId}${RESET}`);
+  } catch (err) {
+    error(`Network error creating project: ${(err as Error).message}`);
+    return null;
+  }
+
+  // Step 2: Create a project-level API key
+  try {
+    const res = await fetch(`${endpoint}/api/projects/${projectId}/keys`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': accountKey,
+      },
+      body: JSON.stringify({
+        label: `cli-init-${projectName}`,
+        environment: 'live',
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      error(`Failed to create API key (HTTP ${res.status}): ${body}`);
+      warn(`Project was created (${projectId}) but key creation failed.`);
+      warn('Create a key manually in the dashboard.');
+      return null;
+    }
+
+    const data = (await res.json()) as { key: { fullKey: string } };
+    success('Created project API key');
+    return { projectId, apiKey: data.key.fullKey };
+  } catch (err) {
+    error(`Network error creating API key: ${(err as Error).message}`);
+    warn(`Project was created (${projectId}) but key creation failed.`);
+    return null;
   }
 }
 
@@ -119,7 +234,7 @@ function installSkillFile(cwd: string): void {
 // Env file installer
 // ---------------------------------------------------------------------------
 
-const ENV_VARS = [
+const ENV_PLACEHOLDERS = [
   'NEXT_PUBLIC_ANALYTICS_PROJECT_ID=your-project-id',
   'NEXT_PUBLIC_ANALYTICS_API_KEY=your-api-key',
   'NEXT_PUBLIC_ANALYTICS_ENDPOINT=https://analytics.lumitra.co/api/collect',
@@ -128,12 +243,29 @@ const ENV_VARS = [
   'LUMITRA_ENDPOINT=https://analytics.lumitra.co',
 ];
 
-function installEnvFile(cwd: string): void {
+function buildEnvVars(provision?: ProvisionResult): string[] {
+  if (!provision) return ENV_PLACEHOLDERS;
+
+  const endpoint = process.env.LUMITRA_ENDPOINT || 'https://analytics.lumitra.co';
+  const accountKey = process.env.LUMITRA_ACCOUNT_KEY || '';
+
+  return [
+    `NEXT_PUBLIC_ANALYTICS_PROJECT_ID=${provision.projectId}`,
+    `NEXT_PUBLIC_ANALYTICS_API_KEY=${provision.apiKey}`,
+    `NEXT_PUBLIC_ANALYTICS_ENDPOINT=${endpoint}/api/collect`,
+    `LUMITRA_API_KEY=${provision.apiKey}`,
+    `LUMITRA_ACCOUNT_KEY=${accountKey}`,
+    `LUMITRA_ENDPOINT=${endpoint}`,
+  ];
+}
+
+function installEnvFile(cwd: string, provision?: ProvisionResult): void {
   const envPath = join(cwd, '.env.local');
+  const vars = buildEnvVars(provision);
 
   if (existsSync(envPath)) {
     const existing = readFileSync(envPath, 'utf-8');
-    const missing = ENV_VARS.filter((line) => {
+    const missing = vars.filter((line) => {
       const key = line.split('=')[0]!;
       return !existing.includes(key);
     });
@@ -143,15 +275,14 @@ function installEnvFile(cwd: string): void {
       return;
     }
 
-    // Append missing vars
     const separator = existing.endsWith('\n') ? '' : '\n';
     const block = `${separator}\n# Lumitra Analytics\n${missing.join('\n')}\n`;
     writeFileSync(envPath, existing + block, 'utf-8');
-    success(`Added ${missing.length} missing variable(s) to .env.local`);
+    success(`Added ${missing.length} variable(s) to .env.local${provision ? ' with real credentials' : ''}`);
   } else {
-    const content = `# Lumitra Analytics\n${ENV_VARS.join('\n')}\n`;
+    const content = `# Lumitra Analytics\n${vars.join('\n')}\n`;
     writeFileSync(envPath, content, 'utf-8');
-    success('Created .env.local with Lumitra placeholder variables');
+    success(`Created .env.local${provision ? ' with provisioned credentials' : ' with Lumitra placeholder variables'}`);
   }
 }
 
@@ -159,26 +290,35 @@ function installEnvFile(cwd: string): void {
 // Next steps printer
 // ---------------------------------------------------------------------------
 
-function printNextSteps(fw: Framework): void {
+function printNextSteps(fw: Framework, provisioned: boolean): void {
   heading('Next steps');
 
-  log(`  1. Get your project ID and API key from the Lumitra dashboard`);
-  log(`     ${DIM}https://analytics.lumitra.co${RESET}`);
-  log('');
-  log(`  2. Update the placeholder values in ${BOLD}.env.local${RESET}`);
-  log('');
-  log(`  3. Install the tracker:`);
+  let step = 1;
+
+  if (!provisioned) {
+    log(`  ${step}. Get your project ID and API key from the Lumitra dashboard`);
+    log(`     ${DIM}https://analytics.lumitra.co${RESET}`);
+    log('');
+    step++;
+    log(`  ${step}. Update the placeholder values in ${BOLD}.env.local${RESET}`);
+    log('');
+    step++;
+  }
+
+  log(`  ${step}. Install the tracker:`);
   log(`     ${CYAN}pnpm add @marlinjai/analytics-tracker${RESET}`);
 
   if (fw === 'nextjs' || fw === 'react' || fw === 'vite') {
     log('');
-    log(`  4. Install React hooks:`);
+    step++;
+    log(`  ${step}. Install React hooks:`);
     log(`     ${CYAN}pnpm add @marlinjai/analytics-react${RESET}`);
   }
 
   if (fw === 'nuxt') {
     log('');
-    log(`  4. Initialize the tracker in a Nuxt plugin:`);
+    step++;
+    log(`  ${step}. Initialize the tracker in a Nuxt plugin:`);
     log(`     ${DIM}plugins/lumitra.client.ts${RESET}`);
   }
 
@@ -192,7 +332,7 @@ function printNextSteps(fw: Framework): void {
 // Commands
 // ---------------------------------------------------------------------------
 
-function runInit(cwd: string, skillOnly: boolean): void {
+async function runInit(cwd: string, skillOnly: boolean): Promise<void> {
   const fw = detectFramework(cwd);
 
   heading(`Lumitra Analytics — init`);
@@ -200,15 +340,21 @@ function runInit(cwd: string, skillOnly: boolean): void {
   log(`  Project root: ${DIM}${cwd}${RESET}`);
   log('');
 
-  // Always install skill file
   installSkillFile(cwd);
 
-  // Full setup also writes env vars
+  let provisioned = false;
+
   if (!skillOnly) {
-    installEnvFile(cwd);
+    const provision = await autoProvisionProject(cwd);
+    if (provision) {
+      installEnvFile(cwd, provision);
+      provisioned = true;
+    } else {
+      installEnvFile(cwd);
+    }
   }
 
-  printNextSteps(fw);
+  printNextSteps(fw, provisioned);
 }
 
 function printHelp(): void {
@@ -221,13 +367,17 @@ function printHelp(): void {
   log(`  ${CYAN}lumitra --help${RESET}        Show this help message`);
   log(`  ${CYAN}lumitra --version${RESET}     Show version`);
   log('');
+  log('Environment variables:');
+  log(`  ${CYAN}LUMITRA_ACCOUNT_KEY${RESET}   Account API key — enables auto-provisioning`);
+  log(`  ${CYAN}LUMITRA_ENDPOINT${RESET}      API base URL (default: https://analytics.lumitra.co)`);
+  log('');
 }
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
-function main(): void {
+async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const cwd = resolve(process.cwd());
 
@@ -237,7 +387,7 @@ function main(): void {
   }
 
   if (args.includes('--version') || args.includes('-v')) {
-    log('1.0.0');
+    log('1.1.0');
     return;
   }
 
@@ -245,11 +395,10 @@ function main(): void {
 
   if (command === 'init') {
     const skillOnly = args.includes('--skill');
-    runInit(cwd, skillOnly);
+    await runInit(cwd, skillOnly);
     return;
   }
 
-  // No command or unknown command
   if (!command) {
     printHelp();
     return;
@@ -260,4 +409,7 @@ function main(): void {
   process.exit(1);
 }
 
-main();
+main().catch((err) => {
+  error(`Unexpected error: ${(err as Error).message}`);
+  process.exit(1);
+});

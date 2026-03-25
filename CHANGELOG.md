@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Experiment goals** — pageview, custom event, and click-based conversion tracking with primary goal designation
 - **Per-variant heatmaps** — ClickHouse materialized views for variant-filtered coordinate and selector heatmaps
 - **React SDK** (`@marlinjai/analytics-react`) — `useLumitraVariant`, `useLumitraFlag`, `useLumitraTrack`, `useLumitraIdentify` hooks + `<LumitraVariant>` component
-- **CLI** (`@marlinjai/analytics-cli`) — `lumitra init` command with framework detection, Claude Code skill file generator, and env var scaffolding
+- **CLI** (`@marlinjai/lumitra-cli`) — `lumitra init` command with framework detection, Claude Code skill file generator, and env var scaffolding
 - **Unified API authentication** (`auth-api.ts`) — single middleware supporting both NextAuth sessions and X-API-Key header with role-based access control
 - **Experiment dashboard UI** — detail page with variant results, conversion charts (Recharts), goal management, start/stop controls
 - **Feature flags page** — list, create, toggle, update rollout percentage, delete flags
