@@ -444,7 +444,7 @@ function DeclareWinnerDialog({
   // Pre-select the variant with highest probability
   const bestVariantKey =
     results.variants
-      .sort((a, b) => b.probabilityToBeBest - a.probabilityToBeBest)[0]?.variant ?? variants[0]?.key ?? '';
+      .sort((a, b) => b.probabilityToBeBest - a.probabilityToBeBest)[0]?.key ?? variants[0]?.key ?? '';
   const [selected, setSelected] = useState(bestVariantKey);
 
   return (
