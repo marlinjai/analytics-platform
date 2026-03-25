@@ -4,10 +4,9 @@ import { useEffect, useRef } from 'react';
 
 interface Props {
   events: unknown[];
-  speed: number;
 }
 
-export function ReplayPlayer({ events, speed }: Props) {
+export function ReplayPlayer({ events }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerRef = useRef<any>(null);
@@ -19,7 +18,6 @@ export function ReplayPlayer({ events, speed }: Props) {
       const RRWebPlayer = (await import('rrweb-player')).default;
       await import('rrweb-player/dist/style.css');
 
-      // Destroy previous player
       playerRef.current?.$destroy?.();
 
       const container = containerRef.current;
@@ -30,7 +28,6 @@ export function ReplayPlayer({ events, speed }: Props) {
         target: container,
         props: {
           events: events as ConstructorParameters<typeof RRWebPlayer>[0]['props']['events'],
-          speed,
           showController: true,
           autoPlay: false,
           skipInactive: true,
@@ -43,7 +40,7 @@ export function ReplayPlayer({ events, speed }: Props) {
     return () => {
       playerRef.current?.$destroy?.();
     };
-  }, [events, speed]);
+  }, [events]);
 
   if (events.length === 0) {
     return (
