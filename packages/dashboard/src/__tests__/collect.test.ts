@@ -34,6 +34,7 @@ const VALID_KEY_ID = 'key-id-abc123';
 const VALID_API_KEY = 'ap_live_testkey12345';
 
 const validKeyInfo = {
+  kind: 'project' as const,
   projectId: VALID_PROJECT_ID,
   keyId: VALID_KEY_ID,
   prefix: 'ap_live_',

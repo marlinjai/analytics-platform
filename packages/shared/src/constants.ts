@@ -14,6 +14,7 @@ export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
 // ── API Key Prefixes ─────────────────────────────────────────
 export const API_KEY_PREFIX_LIVE = 'ap_live_';
 export const API_KEY_PREFIX_TEST = 'ap_test_';
+export const API_KEY_PREFIX_ACCOUNT = 'ap_account_';
 
 // ── Device Breakpoints ───────────────────────────────────────
 export const DEVICE_BREAKPOINTS = {

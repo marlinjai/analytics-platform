@@ -124,6 +124,8 @@ const ENV_VARS = [
   'NEXT_PUBLIC_ANALYTICS_API_KEY=your-api-key',
   'NEXT_PUBLIC_ANALYTICS_ENDPOINT=https://analytics.lumitra.co/api/collect',
   'LUMITRA_API_KEY=your-api-key',
+  'LUMITRA_ACCOUNT_KEY=your-account-key',
+  'LUMITRA_ENDPOINT=https://analytics.lumitra.co',
 ];
 
 function installEnvFile(cwd: string): void {

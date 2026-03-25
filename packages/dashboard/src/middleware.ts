@@ -29,8 +29,11 @@ export const config = {
     // Match all request paths except:
     // - /login, /accept-invite
     // - /api/collect, /api/health, /api/auth, /api/invitations/accept
+    // - /api/account (account-level API key routes)
+    // - /api/projects (supports API key auth for programmatic access)
     // - /api/projects/{id}/config (public SDK config)
+    // - /api/projects/{id}/experiments, flags, keys (support API key auth)
     // - /_next/static, /_next/image, favicon.ico, robots.txt
-    '/((?!login|accept-invite|api/collect|api/health|api/auth|api/invitations/accept|api/projects/[^/]+/config|_next/static|_next/image|favicon.ico|robots.txt).*)',
+    '/((?!login|accept-invite|api/collect|api/health|api/auth|api/invitations/accept|api/account|api/projects|_next/static|_next/image|favicon.ico|robots.txt).*)',
   ],
 };

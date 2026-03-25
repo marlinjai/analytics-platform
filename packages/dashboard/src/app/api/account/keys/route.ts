@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createProjectSchema } from '@analytics-platform/shared';
+import { z } from 'zod';
 import { authenticateAccountRequest, corsHeaders } from '@/lib/auth-api';
+import { generateApiKey } from '@/lib/crypto';
 import { getDb } from '@/lib/db';
+
+const createAccountKeySchema = z.object({
+  label: z.string().min(1).max(128),
+});
 
 export async function GET(request: NextRequest) {
   const authResult = await authenticateAccountRequest(request);
@@ -10,14 +15,14 @@ export async function GET(request: NextRequest) {
   }
 
   const db = getDb();
-  const projects = await db`
-    SELECT p.* FROM projects p
-    JOIN memberships m ON m.project_id = p.id
-    WHERE m.user_id = ${authResult.userId}
-    ORDER BY p.created_at DESC
+  const keys = await db`
+    SELECT id, prefix, label, created_at, last_used_at, revoked_at
+    FROM account_api_keys
+    WHERE user_id = ${authResult.userId}
+    ORDER BY created_at DESC
   `;
 
-  return NextResponse.json({ projects });
+  return NextResponse.json({ keys });
 }
 
 export async function POST(request: NextRequest) {
@@ -27,27 +32,23 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const parsed = createProjectSchema.safeParse(body);
+  const parsed = createAccountKeySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: 'Validation failed', details: parsed.error.issues }, { status: 400 });
   }
 
+  const { fullKey, keyHash, prefix } = await generateApiKey('account');
   const db = getDb();
-  const { name, domain } = parsed.data;
 
-  const [project] = await db`
-    INSERT INTO projects (name, domain)
-    VALUES (${name}, ${domain})
-    RETURNING *
+  const [key] = await db`
+    INSERT INTO account_api_keys (user_id, key_hash, prefix, label)
+    VALUES (${authResult.userId}, ${keyHash}, ${prefix}, ${parsed.data.label})
+    RETURNING id, prefix, label, created_at
   `;
 
-  // Auto-create owner membership
-  await db`
-    INSERT INTO memberships (user_id, project_id, role)
-    VALUES (${authResult.userId}, ${project!.id}, 'owner')
-  `;
-
-  return NextResponse.json({ project }, { status: 201 });
+  return NextResponse.json({
+    key: { ...key, fullKey },
+  }, { status: 201 });
 }
 
 export async function OPTIONS() {

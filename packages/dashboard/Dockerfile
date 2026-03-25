@@ -40,10 +40,14 @@ RUN mkdir -p ./packages/dashboard/public
 COPY --from=builder --chown=nextjs:nodejs /app/packages/dashboard/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/packages/dashboard/.next/static ./packages/dashboard/.next/static
 
+# Migration files + runner
+COPY --from=builder --chown=nextjs:nodejs /app/packages/shared/src/migrations ./packages/shared/src/migrations
+COPY --from=builder --chown=nextjs:nodejs /app/packages/dashboard/scripts/run-migrations.mjs ./packages/dashboard/scripts/run-migrations.mjs
+
 USER nextjs
 
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "packages/dashboard/server.js"]
+CMD ["sh", "-c", "node packages/dashboard/scripts/run-migrations.mjs && node packages/dashboard/server.js"]

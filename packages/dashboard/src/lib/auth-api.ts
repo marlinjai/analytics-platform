@@ -21,9 +21,10 @@ type AuthResult = AuthSuccess | AuthFailure;
  * Authenticate a request via session (cookie) or API key (X-API-Key header).
  *
  * 1. Try session auth first (existing auth() + checkProjectMembership())
- * 2. If no session, try API key from X-API-Key header (existing validateApiKey())
- * 3. For API key: verify the key's projectId matches the route's projectId
- * 4. API keys get implicit 'admin' role (they can create/manage experiments)
+ * 2. If no session, try API key from X-API-Key header
+ * 3. For project keys: verify the key's projectId matches the route's projectId
+ * 4. For account keys: verify the user has membership to the route's project
+ * 5. API keys get implicit 'admin' role (they can create/manage experiments)
  */
 export async function authenticateRequest(
   request: NextRequest,
@@ -59,7 +60,24 @@ export async function authenticateRequest(
     };
   }
 
-  // Verify the key belongs to the project in the route
+  if (keyInfo.kind === 'account') {
+    // Account key: verify user has membership to this project
+    const hasAccess = await checkProjectMembership(
+      keyInfo.userId,
+      projectId,
+      requiredRoles,
+    );
+    if (!hasAccess) {
+      return {
+        authenticated: false,
+        error: 'Account key owner does not have access to this project',
+        status: 403,
+      };
+    }
+    return { authenticated: true, userId: keyInfo.userId, projectId };
+  }
+
+  // Project key: verify it belongs to the project in the route
   if (keyInfo.projectId !== projectId) {
     return {
       authenticated: false,
@@ -78,6 +96,41 @@ export async function authenticateRequest(
   }
 
   return { authenticated: true, userId: `apikey:${keyInfo.keyId}`, projectId };
+}
+
+/**
+ * Authenticate a request that is not project-scoped (e.g. project creation).
+ * Supports session auth or account-level API keys.
+ */
+export async function authenticateAccountRequest(
+  request: NextRequest,
+): Promise<{ authenticated: true; userId: string } | AuthFailure> {
+  // Try session auth
+  const session = await auth();
+  if (session?.user?.id) {
+    return { authenticated: true, userId: session.user.id };
+  }
+
+  // Try account API key
+  const apiKey = request.headers.get('x-api-key');
+  if (!apiKey) {
+    return { authenticated: false, error: 'Unauthorized', status: 401 };
+  }
+
+  const keyInfo = await validateApiKey(apiKey);
+  if (!keyInfo) {
+    return { authenticated: false, error: 'Invalid or revoked API key', status: 401 };
+  }
+
+  if (keyInfo.kind !== 'account') {
+    return {
+      authenticated: false,
+      error: 'Project-level API keys cannot perform account-level operations. Use an account key (ap_account_).',
+      status: 403,
+    };
+  }
+
+  return { authenticated: true, userId: keyInfo.userId };
 }
 
 /**

@@ -91,6 +91,7 @@ export interface ReplayQuery {
 export interface TimeseriesPoint {
   timestamp: string;
   count: number;
+  visitors: number;
 }
 
 export interface StatsOverview {
@@ -187,4 +188,15 @@ export interface Membership {
   projectId: string;
   role: 'owner' | 'admin' | 'viewer';
   createdAt: string;
+}
+
+export interface AccountApiKey {
+  id: string;
+  userId: string;
+  keyHash: string;
+  prefix: string; // ap_account_
+  label: string;
+  createdAt: string;
+  lastUsedAt?: string;
+  revokedAt?: string;
 }

@@ -28,10 +28,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing x-api-key header' }, { status: 401, headers: cors });
   }
 
-  // Validate API key
+  // Validate API key (only project keys allowed for ingestion)
   const keyInfo = await validateApiKey(apiKey);
   if (!keyInfo) {
     return NextResponse.json({ error: 'Invalid or revoked API key' }, { status: 401, headers: cors });
+  }
+  if (keyInfo.kind !== 'project') {
+    return NextResponse.json({ error: 'Account keys cannot be used for event ingestion. Use a project key (ap_live_ or ap_test_).' }, { status: 403, headers: cors });
   }
 
   // Rate limit

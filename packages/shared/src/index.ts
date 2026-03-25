@@ -3,6 +3,7 @@ export {
   EVENT_TYPES,
   API_KEY_PREFIX_LIVE,
   API_KEY_PREFIX_TEST,
+  API_KEY_PREFIX_ACCOUNT,
   DEVICE_BREAKPOINTS,
   MAX_BATCH_SIZE,
   MAX_EVENT_SIZE_BYTES,
@@ -38,6 +39,7 @@ export type {
   ApiKey,
   User,
   Membership,
+  AccountApiKey,
 } from './types.js';
 
 // Experiment & Feature Flag Types
