@@ -664,6 +664,171 @@ curl -X POST https://analytics.lumitra.co/api/collect \\
   );
 }
 
+// ── Experiment Settings ──────────────────────────────────────────────────────
+
+function ExperimentSettings({
+  experiment,
+  projectId,
+  onUpdate,
+  onDelete,
+}: {
+  experiment: Experiment;
+  projectId: string;
+  onUpdate: (experiment: Experiment) => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState(experiment.name);
+  const [description, setDescription] = useState(experiment.description ?? '');
+  const [hypothesis, setHypothesis] = useState(experiment.hypothesis ?? '');
+  const [minSessions, setMinSessions] = useState(experiment.min_sessions_per_variant ?? 100);
+
+  // Sync local state when experiment prop changes
+  useEffect(() => {
+    setName(experiment.name);
+    setDescription(experiment.description ?? '');
+    setHypothesis(experiment.hypothesis ?? '');
+    setMinSessions(experiment.min_sessions_per_variant ?? 100);
+  }, [experiment]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/experiments/${experiment.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          description,
+          hypothesis,
+          minSessionsPerVariant: minSessions,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onUpdate(data.experiment);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const hasChanges =
+    name !== experiment.name ||
+    description !== (experiment.description ?? '') ||
+    hypothesis !== (experiment.hypothesis ?? '') ||
+    minSessions !== (experiment.min_sessions_per_variant ?? 100);
+
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-900">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between p-5 text-left"
+      >
+        <h3 className="text-sm font-medium text-gray-300">Experiment Settings</h3>
+        <svg
+          className={`h-4 w-4 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="border-t border-gray-800 p-5 space-y-4">
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Experiment Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none resize-none"
+            />
+          </div>
+
+          {/* Hypothesis */}
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Hypothesis</label>
+            <textarea
+              value={hypothesis}
+              onChange={(e) => setHypothesis(e.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none resize-none"
+            />
+          </div>
+
+          {/* Min Sessions Per Variant */}
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">
+              Minimum Sessions Per Variant
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={1}
+                value={minSessions}
+                onChange={(e) => setMinSessions(parseInt(e.target.value, 10) || 1)}
+                className="w-28 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none"
+              />
+              <span className="text-xs text-gray-500">
+                Total needed: {minSessions * experiment.variants.length} sessions
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-gray-600">
+              Results are marked as &quot;needs more data&quot; until each variant reaches this threshold.
+            </p>
+          </div>
+
+          {/* Save button */}
+          {hasChanges && (
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 transition"
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          )}
+
+          {/* Danger Zone */}
+          <div className="mt-4 border-t border-red-900/30 pt-4">
+            <h4 className="text-xs font-medium text-red-400 mb-2">Danger Zone</h4>
+            <div className="flex items-center justify-between rounded-lg border border-red-900/30 bg-red-950/10 p-3">
+              <div>
+                <p className="text-sm text-gray-300">Delete this experiment</p>
+                <p className="text-xs text-gray-500">This action cannot be undone.</p>
+              </div>
+              <button
+                onClick={onDelete}
+                className="rounded-lg border border-red-700/50 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-950/40 transition"
+              >
+                Delete Experiment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function ExperimentDetailPage() {
@@ -1068,6 +1233,14 @@ export default function ExperimentDetailPage() {
           <IntegrationCodeSection experiment={experiment} />
         </>
       )}
+
+      {/* Experiment Settings */}
+      <ExperimentSettings
+        experiment={experiment}
+        projectId={projectId!}
+        onUpdate={(updated) => setExperiment(updated)}
+        onDelete={handleDelete}
+      />
 
       {/* Declare Winner Modal */}
       {showDeclareWinner && results && (
