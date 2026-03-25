@@ -283,7 +283,7 @@ function ConversionTimeline({
   timeseries,
   variants,
 }: {
-  timeseries: ExperimentResults['timeseries'];
+  timeseries: { date: string; [variant: string]: number | string }[];
   variants: string[];
 }) {
   if (timeseries.length === 0) {
