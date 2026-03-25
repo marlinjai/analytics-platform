@@ -21,7 +21,9 @@ export async function getSessionList(
         dateDiff('second', min(timestamp), max(timestamp)) AS duration,
         countIf(type = 'pageview') AS pageviews,
         any(country) AS country,
-        any(device_type) AS deviceType
+        any(device_type) AS deviceType,
+        countIf(type = 'replay_chunk' AND replay_chunk != '') AS replayChunks,
+        replayChunks > 0 AS hasReplay
       FROM analytics.events
       WHERE project_id = {projectId: UUID}
         AND timestamp >= {from: DateTime64(3)}

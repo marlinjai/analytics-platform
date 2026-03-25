@@ -26,8 +26,12 @@ export function SessionList({ sessions, loading, hasMore, onLoadMore, projectId 
 
   if (sessions.length === 0) {
     return (
-      <div className="flex h-48 items-center justify-center rounded-xl border border-gray-800 bg-gray-900">
-        <p className="text-sm text-gray-500">No sessions found</p>
+      <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-xl border border-gray-800 bg-gray-900">
+        <p className="text-sm text-gray-500">No sessions with replay data found</p>
+        <p className="max-w-md text-center text-xs text-gray-600">
+          Session replay requires the tracker to call <code className="rounded bg-gray-800 px-1">enableReplay()</code> after
+          user consent. Sessions without replay are filtered out.
+        </p>
       </div>
     );
   }
@@ -38,6 +42,7 @@ export function SessionList({ sessions, loading, hasMore, onLoadMore, projectId 
         <thead>
           <tr className="border-b border-gray-800 text-left text-xs text-gray-500">
             <th className="px-4 py-3 font-medium">Session</th>
+            <th className="px-4 py-3 font-medium">Replay</th>
             <th className="px-4 py-3 font-medium">Duration</th>
             <th className="px-4 py-3 font-medium">Pages</th>
             <th className="px-4 py-3 font-medium">Device</th>
@@ -55,6 +60,16 @@ export function SessionList({ sessions, loading, hasMore, onLoadMore, projectId 
                 >
                   {s.sessionId.slice(0, 8)}...
                 </Link>
+              </td>
+              <td className="px-4 py-3">
+                {s.hasReplay ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-900/30 px-2 py-0.5 text-xs font-medium text-green-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                    {s.replayChunks} chunks
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-600">—</span>
+                )}
               </td>
               <td className="px-4 py-3 text-gray-300">{formatDuration(s.duration)}</td>
               <td className="px-4 py-3 text-gray-300">{s.pageviews}</td>

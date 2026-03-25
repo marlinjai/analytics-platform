@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { gunzipSync } from 'node:zlib';
 import { eventBatchSchema } from '@analytics-platform/shared';
 import { validateApiKey } from '@/lib/api-key';
 import { enrichEvents } from '@/lib/enrich';
 import { insertEvents } from '@/lib/clickhouse';
 import { checkRateLimit } from '@/lib/rate-limit';
 
+export const config = {
+  api: { bodyParser: { sizeLimit: '5mb' } },
+};
+
 function corsHeaders(origin?: string | null) {
   return {
     'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-API-Key',
+    'Access-Control-Allow-Headers': 'Content-Type, Content-Encoding, X-API-Key',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Max-Age': '86400',
   };
@@ -42,10 +47,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429, headers: cors });
   }
 
-  // Parse and validate body
+  // Parse body — decompress gzip if Content-Encoding header is set
   let body: unknown;
   try {
-    body = await request.json();
+    const encoding = request.headers.get('content-encoding');
+    if (encoding === 'gzip') {
+      const buf = Buffer.from(await request.arrayBuffer());
+      const decompressed = gunzipSync(buf);
+      body = JSON.parse(decompressed.toString('utf-8'));
+    } else {
+      body = await request.json();
+    }
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400, headers: cors });
   }

@@ -1,5 +1,6 @@
 import type { TrackerEvent } from './constants';
-import { FLUSH_INTERVAL_MS, MAX_BATCH_SIZE } from './constants';
+import { FLUSH_INTERVAL_MS, MAX_BATCH_SIZE, BEACON_MAX_BYTES } from './constants';
+import { compressPayload } from './compress.js';
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
@@ -37,7 +38,9 @@ export class EventBatcher {
     const batch = this.queue.splice(0, MAX_BATCH_SIZE);
     const body = JSON.stringify(batch);
 
-    if (useBeacon && typeof navigator !== 'undefined' && navigator.sendBeacon) {
+    // Only use beacon for small payloads — large ones (replay chunks) need
+    // compression which requires custom headers that beacon doesn't support
+    if (useBeacon && body.length <= BEACON_MAX_BYTES && typeof navigator !== 'undefined' && navigator.sendBeacon) {
       const blob = new Blob([body], { type: 'application/json' });
       const sent = navigator.sendBeacon(this.endpoint, blob);
       if (sent) {
@@ -51,21 +54,32 @@ export class EventBatcher {
   }
 
   private async fetchWithRetry(body: string, batch: TrackerEvent[]): Promise<void> {
+    // Compress large payloads (replay FullSnapshots with inlined CSS can be 2-5MB)
+    const { body: payload, compressed } = await compressPayload(body);
+
+    const headers: Record<string, string> = {
+      'X-API-Key': this.apiKey,
+    };
+
+    if (compressed) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Encoding'] = 'gzip';
+    } else {
+      headers['Content-Type'] = 'application/json';
+    }
+
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const res = await fetch(this.endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': this.apiKey,
-          },
-          body,
-          keepalive: true,
+          headers,
+          body: payload,
+          keepalive: !compressed, // keepalive has 64KB limit, skip for compressed blobs
           credentials: 'omit',
         });
 
         if (res.ok) {
-          if (this.debug) console.log('[analytics] flushed:', batch.length, 'events');
+          if (this.debug) console.log('[analytics] flushed:', batch.length, 'events', compressed ? '(gzip)' : '');
           return;
         }
 

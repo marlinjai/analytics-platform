@@ -1,6 +1,6 @@
 {
   "name": "@marlinjai/analytics-tracker",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Lightweight browser analytics tracker — pageviews, clicks, heatmaps, session replay",
   "type": "module",
   "exports": {
@@ -11,7 +11,9 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",

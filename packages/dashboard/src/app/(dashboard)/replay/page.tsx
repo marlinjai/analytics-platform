@@ -30,7 +30,8 @@ function ReplayListPageInner() {
       const res = await fetch(`/api/sessions?${params}`);
       if (res.ok) {
         const data = await res.json();
-        setSessions((prev) => append ? [...prev, ...data.sessions] : data.sessions);
+        const replaySessions = (data.sessions as SessionSummary[]).filter((s) => s.hasReplay);
+        setSessions((prev) => append ? [...prev, ...replaySessions] : replaySessions);
         setCursor(data.nextCursor);
         setHasMore(!!data.nextCursor);
       }

@@ -4,6 +4,8 @@ export const MAX_BATCH_SIZE = 50;
 export const MAX_REPLAY_CHUNK_BYTES = 512 * 1024;
 export const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 export const FLUSH_INTERVAL_MS = 5_000;
+export const COMPRESS_THRESHOLD_BYTES = 50_000; // 50KB — compress anything above this
+export const BEACON_MAX_BYTES = 64_000; // Browser beacon limit ~64KB
 
 export interface TrackerEvent {
   type: string;

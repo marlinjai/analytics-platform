@@ -156,6 +156,8 @@ export interface SessionSummary {
   pageviews: number;
   country?: string;
   deviceType?: DeviceType;
+  hasReplay: boolean;
+  replayChunks: number;
 }
 
 // ── Postgres Models ──────────────────────────────────────────
