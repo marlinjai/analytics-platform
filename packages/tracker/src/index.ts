@@ -19,11 +19,9 @@ export interface TrackerConfig {
   endpoint: string;
   /** API key (ap_live_... or ap_test_...). */
   apiKey: string;
-  /** Enable session replay (requires rrweb peer dep). Default: false. */
-  replay?: boolean;
-  /** Enable click heatmap tracking. Default: true. */
+  /** Enable click heatmap tracking. Default: true. Requires enableTracking(). */
   heatmap?: boolean;
-  /** Enable scroll depth tracking. Default: true. */
+  /** Enable scroll depth tracking. Default: true. Requires enableTracking(). */
   scrollDepth?: boolean;
   /** Batch flush interval in ms. Default: 5000. */
   flushInterval?: number;
@@ -37,6 +35,11 @@ let instance: AnalyticsTracker | null = null;
 
 /**
  * Initialize the analytics tracker. Creates a singleton.
+ *
+ * Tracks: pageviews, sessions, visitors (aggregate). No consent required.
+ * Loads: feature flags + A/B experiment assignments (technically necessary).
+ *
+ * Does NOT track clicks, scroll, or replay — call enableTracking() after consent.
  */
 export function init(config: TrackerConfig): AnalyticsTracker {
   if (instance) {
@@ -44,14 +47,16 @@ export function init(config: TrackerConfig): AnalyticsTracker {
     return instance;
   }
 
-  instance = new AnalyticsTracker(config);
-
-  // Enable replay if explicitly requested (caller is responsible for consent)
-  if (config.replay) {
-    instance.enableReplay();
-  }
-
+  instance = new AnalyticsTracker({ ...config, coreOnly: true });
   return instance;
+}
+
+/**
+ * Enable behavioral tracking (clicks, scroll, heatmaps) after user consent.
+ * Safe to call multiple times — only attaches listeners once.
+ */
+export function enableTracking(): void {
+  instance?.enableTracking();
 }
 
 /**

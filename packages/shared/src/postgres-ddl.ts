@@ -55,6 +55,24 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_project ON api_keys(project_id);
 CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
 `;
 
+export const CREATE_TEST_LINKS_TABLE = `
+CREATE TABLE IF NOT EXISTS test_links (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    code        TEXT NOT NULL UNIQUE,
+    label       TEXT NOT NULL,
+    variant     TEXT NOT NULL,
+    language    TEXT NOT NULL DEFAULT 'de',
+    target_url  TEXT NOT NULL,
+    auto_consent BOOLEAN NOT NULL DEFAULT true,
+    active      BOOLEAN NOT NULL DEFAULT true,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_test_links_project ON test_links(project_id);
+CREATE INDEX IF NOT EXISTS idx_test_links_code ON test_links(code);
+`;
+
 /** All DDL statements in execution order. */
 export const ALL_DDL = [
   CREATE_EXTENSIONS,
@@ -62,4 +80,5 @@ export const ALL_DDL = [
   CREATE_PROJECTS_TABLE,
   CREATE_MEMBERSHIPS_TABLE,
   CREATE_API_KEYS_TABLE,
+  CREATE_TEST_LINKS_TABLE,
 ] as const;

@@ -1,5 +1,8 @@
 import type { TrackerEvent } from './constants';
 import type { TrackerConfig } from './index.js';
+
+/** Internal config with coreOnly flag — not part of public API. */
+type InternalConfig = TrackerConfig & { coreOnly?: boolean };
 import { getOrCreateSession, touchSession } from './session.js';
 import { EventBatcher } from './batch.js';
 import { getDeviceType, getScreenDimensions } from './device.js';
@@ -10,7 +13,7 @@ import type { RemoteConfig } from './experiment.js';
 const CONFIG_TIMEOUT_MS = 3000;
 
 export class AnalyticsTracker {
-  private config: Required<Pick<TrackerConfig, 'projectId' | 'endpoint'>> & TrackerConfig;
+  private config: Required<Pick<TrackerConfig, 'projectId' | 'endpoint'>> & InternalConfig;
   private sessionId: string;
   private batcher: EventBatcher;
   private cleanups: (() => void)[] = [];
@@ -20,7 +23,9 @@ export class AnalyticsTracker {
   private resolveReady!: () => void;
   private replayActive = false;
 
-  constructor(config: TrackerConfig) {
+  private trackingEnabled = false;
+
+  constructor(config: InternalConfig) {
     this.config = config;
     const { sessionId, isNew } = getOrCreateSession();
     this.sessionId = sessionId;
@@ -53,30 +58,54 @@ export class AnalyticsTracker {
       });
     }
 
-    // Pageview listener (always on)
+    // Pageview listener (always on — no consent needed for aggregate pageviews)
     this.cleanups.push(
       attachPageviewListener((e) => this.track(e))
     );
 
-    // Click / heatmap listener
-    if (config.heatmap !== false) {
-      this.cleanups.push(
-        attachClickListener((e) => this.track(e))
-      );
-    }
-
-    // Scroll depth listener
-    if (config.scrollDepth !== false) {
-      this.cleanups.push(
-        attachScrollListener((e) => this.track(e))
-      );
+    // Click, scroll, and replay require consent — only attach via enableTracking()
+    if (!config.coreOnly) {
+      this.attachBehavioralListeners();
     }
 
     // Set initial global (experiments not yet loaded)
     this.updateGlobal();
 
-    // Non-blocking remote config fetch
+    // Non-blocking remote config fetch (flags + experiments — technically necessary)
     this.fetchRemoteConfig();
+  }
+
+  /**
+   * Enable behavioral tracking (clicks, scroll, heatmaps) after user consent.
+   * Call this from your cookie consent callback.
+   * Safe to call multiple times — only attaches listeners once.
+   */
+  enableTracking(): void {
+    if (this.trackingEnabled) return;
+    this.attachBehavioralListeners();
+    if (this.config.debug) console.log('[analytics] behavioral tracking enabled (post-consent)');
+  }
+
+  /** Whether behavioral tracking (clicks, scroll) is active. */
+  get isTrackingEnabled(): boolean {
+    return this.trackingEnabled;
+  }
+
+  private attachBehavioralListeners(): void {
+    if (this.trackingEnabled) return;
+    this.trackingEnabled = true;
+
+    if (this.config.heatmap !== false) {
+      this.cleanups.push(
+        attachClickListener((e) => this.track(e))
+      );
+    }
+
+    if (this.config.scrollDepth !== false) {
+      this.cleanups.push(
+        attachScrollListener((e) => this.track(e))
+      );
+    }
   }
 
   /** Resolves when remote config has been fetched (or after timeout / error). */
