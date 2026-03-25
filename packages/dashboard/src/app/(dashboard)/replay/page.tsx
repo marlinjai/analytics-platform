@@ -58,6 +58,7 @@ function ReplayListPageInner() {
         loading={loading}
         hasMore={hasMore}
         onLoadMore={() => fetchSessions(true)}
+        onDelete={(id) => setSessions((prev) => prev.filter((s) => s.sessionId !== id))}
         projectId={projectId}
       />
     </div>

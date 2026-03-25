@@ -75,3 +75,19 @@ export async function getReplayChunks(
   const rows = await result.json<{ replay_chunk: string }>();
   return rows.map((r) => JSON.parse(r.replay_chunk) as unknown[]);
 }
+
+export async function deleteSession(
+  projectId: string,
+  sessionId: string
+): Promise<void> {
+  const ch = getClickHouse();
+
+  await ch.command({
+    query: `
+      ALTER TABLE analytics.events
+      DELETE WHERE project_id = {projectId: UUID}
+        AND session_id = {sessionId: String}
+    `,
+    query_params: { projectId, sessionId },
+  });
+}
