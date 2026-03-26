@@ -6,11 +6,14 @@
   "bin": {
     "lumitra": "dist/index.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --target node18 --minify --clean"
   },
   "devDependencies": {
+    "@types/node": "^25.5.0",
     "tsup": "^8.5.0",
     "typescript": "^5.7.0"
   },

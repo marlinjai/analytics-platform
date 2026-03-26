@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SKILL_TEMPLATE } from './skill-template.js';
 
@@ -217,17 +218,32 @@ async function autoProvisionProject(cwd: string): Promise<ProvisionResult | null
 // ---------------------------------------------------------------------------
 
 function installSkillFile(cwd: string): void {
-  const skillDir = join(cwd, '.claude', 'skills');
+  // Default: user scope (~/.claude/skills/) — works across all projects
+  // Use --project-scope flag to install at project level instead
+  const useProjectScope = process.argv.includes('--project-scope');
+  const skillDir = useProjectScope
+    ? join(cwd, '.claude', 'skills')
+    : join(homedir(), '.claude', 'skills');
   const skillPath = join(skillDir, 'lumitra.md');
+  const scopeLabel = useProjectScope ? 'project' : 'user';
+
+  // Clean up old project-scoped installs when installing at user scope
+  if (!useProjectScope) {
+    const oldPath = join(cwd, '.claude', 'skills', 'lumitra.md');
+    if (existsSync(oldPath)) {
+      unlinkSync(oldPath);
+      warn('Removed old project-scoped skill at .claude/skills/lumitra.md');
+    }
+  }
 
   if (existsSync(skillPath)) {
-    warn('Skill file already exists at .claude/skills/lumitra.md — skipping');
+    warn(`Skill file already exists at ${scopeLabel} scope — skipping`);
     return;
   }
 
   mkdirSync(skillDir, { recursive: true });
   writeFileSync(skillPath, SKILL_TEMPLATE, 'utf-8');
-  success('Created .claude/skills/lumitra.md');
+  success(`Created lumitra.md skill (${scopeLabel} scope)`);
 }
 
 // ---------------------------------------------------------------------------
