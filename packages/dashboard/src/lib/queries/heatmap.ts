@@ -43,17 +43,13 @@ export async function getHeatmapData(
   const deviceFilter = deviceType
     ? 'AND device_type = {deviceType: String}'
     : '';
-  const experimentFilter = experimentId
-    ? 'AND experiment_id = {experimentId: String}'
-    : '';
-  const variantFilter = variant
-    ? 'AND variant = {variant: String}'
-    : '';
-
-  // Use variant-specific MV when filtering by experiment, base MV otherwise
-  const table = experimentId
+  // Only use variant-specific MV + filters when both experiment and variant are specified
+  const useVariantMv = !!(experimentId && variant);
+  const table = useVariantMv
     ? 'analytics.heatmap_clicks_by_variant_mv'
     : 'analytics.heatmap_clicks_mv';
+  const experimentFilter = useVariantMv ? 'AND experiment_id = {experimentId: String}' : '';
+  const variantFilter = useVariantMv ? 'AND variant = {variant: String}' : '';
 
   const result = await ch.query({
     query: `
@@ -80,8 +76,8 @@ export async function getHeatmapData(
       url3: urls[3],
       ...chDateParams(dateRange),
       ...(deviceType && { deviceType }),
-      ...(experimentId && { experimentId }),
-      ...(variant && { variant }),
+      ...(useVariantMv && experimentId && { experimentId }),
+      ...(useVariantMv && variant && { variant }),
     },
     format: 'JSONEachRow',
   });
@@ -104,17 +100,12 @@ export async function getHeatmapBySelector(
   const deviceFilter = deviceType
     ? 'AND device_type = {deviceType: String}'
     : '';
-  const experimentFilter = experimentId
-    ? 'AND experiment_id = {experimentId: String}'
-    : '';
-  const variantFilter = variant
-    ? 'AND variant = {variant: String}'
-    : '';
-
-  // Use variant-specific MV when filtering by experiment, base MV otherwise
-  const table = experimentId
+  const useVariantMv = !!(experimentId && variant);
+  const table = useVariantMv
     ? 'analytics.heatmap_selectors_by_variant_mv'
     : 'analytics.heatmap_selectors_mv';
+  const experimentFilter = useVariantMv ? 'AND experiment_id = {experimentId: String}' : '';
+  const variantFilter = useVariantMv ? 'AND variant = {variant: String}' : '';
 
   const result = await ch.query({
     query: `
@@ -142,8 +133,8 @@ export async function getHeatmapBySelector(
       url3: urls[3],
       ...chDateParams(dateRange),
       ...(deviceType && { deviceType }),
-      ...(experimentId && { experimentId }),
-      ...(variant && { variant }),
+      ...(useVariantMv && experimentId && { experimentId }),
+      ...(useVariantMv && variant && { variant }),
       limit,
     },
     format: 'JSONEachRow',
@@ -184,12 +175,10 @@ export async function getElementClickPoints(
   const deviceFilter = deviceType
     ? 'AND device_type = {deviceType: String}'
     : '';
-  const experimentFilter = experimentId
-    ? 'AND experiment_id = {experimentId: String}'
-    : '';
-  const variantFilter = variant
-    ? 'AND variant = {variant: String}'
-    : '';
+  // Only filter by experiment+variant when both are specified
+  const useExpFilter = !!(experimentId && variant);
+  const experimentFilter = useExpFilter ? 'AND experiment_id = {experimentId: String}' : '';
+  const variantFilter = useExpFilter ? 'AND variant = {variant: String}' : '';
 
   const result = await ch.query({
     query: `
@@ -221,8 +210,8 @@ export async function getElementClickPoints(
       url3: urls[3],
       ...chDateParams(dateRange),
       ...(deviceType && { deviceType }),
-      ...(experimentId && { experimentId }),
-      ...(variant && { variant }),
+      ...(useExpFilter && experimentId && { experimentId }),
+      ...(useExpFilter && variant && { variant }),
       limit,
     },
     format: 'JSONEachRow',
