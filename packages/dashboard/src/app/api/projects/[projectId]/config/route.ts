@@ -10,6 +10,19 @@ const DEFAULT_SETTINGS: Record<string, boolean> = {
 
 type Params = { params: Promise<{ projectId: string }> };
 
+function corsHeaders(origin?: string | null) {
+  return {
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request.headers.get('origin')) });
+}
+
 /**
  * GET /api/projects/{id}/config
  *
@@ -72,9 +85,10 @@ export async function GET(_request: NextRequest, { params }: Params) {
     variants: e.variants,
   }));
 
+  const cors = corsHeaders(_request.headers.get('origin'));
   return NextResponse.json({ config, flags, experiments }, {
     headers: {
-      // Allow tracker to cache for up to 60 s
+      ...cors,
       'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
     },
   });
