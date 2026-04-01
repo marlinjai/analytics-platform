@@ -27,8 +27,10 @@ export async function generateApiKey(environment: 'live' | 'test' | 'account'): 
     test: API_KEY_PREFIX_TEST,
     account: API_KEY_PREFIX_ACCOUNT,
   } as const;
-  const prefix = prefixMap[environment];
-  const fullKey = prefix + randomHex(16);
+  const typePrefix = prefixMap[environment];
+  const fullKey = typePrefix + randomHex(16);
   const keyHash = await sha256(fullKey);
+  // Store type prefix + first 5 chars of the random part as a recognisable hint
+  const prefix = fullKey.slice(0, typePrefix.length + 5);
   return { fullKey, keyHash, prefix };
 }
