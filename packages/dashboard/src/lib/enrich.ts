@@ -1,3 +1,4 @@
+import { API_KEY_PREFIX_TEST } from '@analytics-platform/shared';
 import type { TrackerEvent, StoredEvent } from '@analytics-platform/shared';
 
 async function sha256(input: string): Promise<string> {
@@ -124,9 +125,25 @@ async function lookupCountry(ip: string): Promise<GeoResult> {
   return { country: '', countryCode: '' };
 }
 
+// ── Environment Inference ────────────────────────────────────
+
+const DEV_HOSTNAME_RE = /^localhost$|^127\.0\.0\.1$|^0\.0\.0\.0$|\.local$/;
+
+function inferEnvironment(url: string, keyPrefix: string): string {
+  if (keyPrefix.startsWith(API_KEY_PREFIX_TEST)) return 'test';
+  try {
+    const hostname = new URL(url).hostname;
+    if (DEV_HOSTNAME_RE.test(hostname)) return 'development';
+  } catch {
+    // invalid URL — assume production
+  }
+  return 'production';
+}
+
 export async function enrichEvents(
   events: TrackerEvent[],
-  ip: string
+  ip: string,
+  keyPrefix: string = '',
 ): Promise<StoredEvent[]> {
   const salt = getDailySalt();
   const ipHash = await sha256(`${ip}:${salt}`);
@@ -139,6 +156,7 @@ export async function enrichEvents(
     const ua = event.userAgent ?? '';
     const { browser, os } = parseUserAgent(ua);
     const deviceModel = extractDeviceModel(ua);
+    const environment = inferEnvironment(event.url, keyPrefix);
     return {
       ...event,
       eventId: crypto.randomUUID(),
@@ -148,6 +166,7 @@ export async function enrichEvents(
       browser,
       os,
       deviceModel,
+      environment,
     };
   });
 }

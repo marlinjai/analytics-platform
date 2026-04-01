@@ -34,6 +34,7 @@ const FILTER_KEYS: (keyof DashboardFilters)[] = [
   'os',
   'device',
   'source',
+  'environment',
 ];
 
 function appendFilters(base: string, filters: DashboardFilters): string {
@@ -156,6 +157,41 @@ function AutoRefreshToggle({ enabled, onToggle }: AutoRefreshToggleProps) {
   );
 }
 
+// ── Environment Selector ────────────────────────────────────────
+
+const ENV_OPTIONS = [
+  { value: 'production', label: 'Production' },
+  { value: 'development', label: 'Development' },
+  { value: 'test', label: 'Test' },
+  { value: '', label: 'All' },
+] as const;
+
+function EnvironmentSelector({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (env: string) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-gray-700 bg-gray-800 p-0.5">
+      {ENV_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+            value === opt.value
+              ? 'bg-gray-600 text-gray-100'
+              : 'text-gray-400 hover:text-gray-200'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Inner component (uses useSearchParams — must live inside <Suspense>) ──────
 
 function OverviewPageInner() {
@@ -189,13 +225,14 @@ function OverviewPageInner() {
       .catch(() => setHasProjects(false));
   }, []);
 
-  // Filters — initialise from URL
+  // Filters — initialise from URL, default environment to 'production'
   const [filters, setFilters] = useState<DashboardFilters>(() => {
     const out: DashboardFilters = {};
     for (const key of FILTER_KEYS) {
       const val = searchParams.get(key);
       if (val) (out as Record<string, string>)[key] = val;
     }
+    if (!out.environment) out.environment = 'production';
     return out;
   });
 
@@ -317,7 +354,7 @@ function OverviewPageInner() {
   }
 
   function clearAllFilters() {
-    setFilters({});
+    setFilters({ environment: 'production' });
   }
 
   // ── Export ────────────────────────────────────────────────────
@@ -372,6 +409,20 @@ function OverviewPageInner() {
       {/* Header row */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
         <div className="flex flex-wrap items-center gap-3">
+          <EnvironmentSelector
+            value={filters.environment ?? 'production'}
+            onChange={(env) => {
+              setFilters((prev) => {
+                const next = { ...prev };
+                if (env) {
+                  next.environment = env;
+                } else {
+                  delete next.environment;
+                }
+                return next;
+              });
+            }}
+          />
           <AutoRefreshToggle
             enabled={autoRefresh}
             onToggle={() => setAutoRefresh((v) => !v)}

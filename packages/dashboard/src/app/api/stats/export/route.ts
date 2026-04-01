@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
     os: params.get('os') ?? undefined,
     device: params.get('device') ?? undefined,
     source: params.get('source') ?? undefined,
+    environment: params.get('environment') ?? 'production',
   };
 
   const dateRange = { from, to };

@@ -25,9 +25,10 @@ export async function GET(request: NextRequest) {
       SELECT uniqExact(session_id) AS current_visitors
       FROM analytics.events
       WHERE project_id = {projectId: UUID}
+        AND environment = {environment: String}
         AND timestamp >= now() - INTERVAL 5 MINUTE
     `,
-    query_params: { projectId },
+    query_params: { projectId, environment: 'production' },
     format: 'JSONEachRow',
   });
 

@@ -51,6 +51,7 @@ export interface ServerEnrichedFields {
   browser?: string;
   os?: string;
   deviceModel?: string;
+  environment?: string;
 }
 
 /** Full event as stored in ClickHouse. */
@@ -135,6 +136,7 @@ export interface DashboardFilters {
   os?: string;
   device?: string;
   source?: string;
+  environment?: string;
 }
 
 export interface HeatmapPoint {

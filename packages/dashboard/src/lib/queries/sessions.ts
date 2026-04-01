@@ -5,7 +5,8 @@ export async function getSessionList(
   projectId: string,
   dateRange: DateRange,
   limit: number = 50,
-  cursor?: string
+  cursor?: string,
+  environment: string = 'production',
 ): Promise<{ sessions: SessionSummary[]; nextCursor: string | null }> {
   const ch = getClickHouse();
 
@@ -26,6 +27,7 @@ export async function getSessionList(
         replayChunks > 0 AS hasReplay
       FROM analytics.events
       WHERE project_id = {projectId: UUID}
+        AND environment = {environment: String}
         AND timestamp >= {from: DateTime64(3)}
         AND timestamp <= {to: DateTime64(3)}
         ${cursorFilter}
@@ -36,6 +38,7 @@ export async function getSessionList(
     `,
     query_params: {
       projectId,
+      environment,
       ...chDateParams(dateRange),
       limit: limit + 1,
       ...(cursor && { cursor }),
@@ -54,7 +57,8 @@ export async function getSessionList(
 
 export async function getReplayChunks(
   projectId: string,
-  sessionId: string
+  sessionId: string,
+  environment: string = 'production',
 ): Promise<unknown[][]> {
   const ch = getClickHouse();
 
@@ -63,12 +67,13 @@ export async function getReplayChunks(
       SELECT replay_chunk
       FROM analytics.events
       WHERE project_id = {projectId: UUID}
+        AND environment = {environment: String}
         AND session_id = {sessionId: String}
         AND type = 'replay_chunk'
         AND replay_chunk != ''
       ORDER BY timestamp ASC
     `,
-    query_params: { projectId, sessionId },
+    query_params: { projectId, environment, sessionId },
     format: 'JSONEachRow',
   });
 

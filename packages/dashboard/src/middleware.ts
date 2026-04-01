@@ -34,6 +34,6 @@ export const config = {
     // - /api/projects/{id}/config (public SDK config)
     // - /api/projects/{id}/experiments, flags, keys (support API key auth)
     // - /_next/static, /_next/image, favicon.ico, robots.txt
-    '/((?!login|accept-invite|api/collect|api/health|api/auth|api/invitations/accept|api/account|api/projects|_next/static|_next/image|favicon.ico|robots.txt).*)',
+    '/((?!login|accept-invite|api/collect|api/health|api/auth|api/invitations/accept|api/account|api/projects|api/cli-auth/device|api/cli-auth/poll|_next/static|_next/image|favicon.ico|robots.txt).*)',
   ],
 };

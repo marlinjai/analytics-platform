@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const data = await getScrollDepth(projectId, dateRange);
+  const environment = request.nextUrl.searchParams.get('environment') ?? 'production';
+  const data = await getScrollDepth(projectId, dateRange, environment);
   return NextResponse.json({ data }, { headers: { 'Access-Control-Allow-Origin': '*' } });
 }

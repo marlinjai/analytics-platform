@@ -47,6 +47,10 @@ function buildFilterClauses(filters?: DashboardFilters): {
     clauses.push('domain(referrer) = {filterSource: String}');
     params.filterSource = filters.source;
   }
+  if (filters?.environment) {
+    clauses.push('environment = {filterEnvironment: String}');
+    params.filterEnvironment = filters.environment;
+  }
 
   return { clauses, params };
 }

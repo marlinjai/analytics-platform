@@ -10,12 +10,21 @@ export async function GET(request: NextRequest) {
   }
 
   const db = getDb();
-  const projects = await db`
-    SELECT p.* FROM projects p
-    JOIN memberships m ON m.project_id = p.id
-    WHERE m.user_id = ${authResult.userId}
-    ORDER BY p.created_at DESC
-  `;
+  const domain = request.nextUrl.searchParams.get('domain');
+
+  const projects = domain
+    ? await db`
+        SELECT p.* FROM projects p
+        JOIN memberships m ON m.project_id = p.id
+        WHERE m.user_id = ${authResult.userId} AND p.domain = ${domain}
+        ORDER BY p.created_at DESC
+      `
+    : await db`
+        SELECT p.* FROM projects p
+        JOIN memberships m ON m.project_id = p.id
+        WHERE m.user_id = ${authResult.userId}
+        ORDER BY p.created_at DESC
+      `;
 
   return NextResponse.json({ projects });
 }

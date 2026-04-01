@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
     os: sp.get('os') ?? undefined,
     device: sp.get('device') ?? undefined,
     source: sp.get('source') ?? undefined,
+    environment: sp.get('environment') ?? 'production',
   };
 
   const [overview, timeseries] = await Promise.all([

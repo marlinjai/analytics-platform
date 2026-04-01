@@ -168,6 +168,7 @@ export async function getElementClickPoints(
   limit = 500,
   experimentId?: string,
   variant?: string,
+  environment: string = 'production',
 ): Promise<ElementClickPoint[]> {
   const ch = getClickHouse();
   const urls = urlVariants(url);
@@ -190,6 +191,7 @@ export async function getElementClickPoints(
         JSONExtractInt(properties, 'eh') AS eh
       FROM analytics.events
       WHERE project_id = {projectId: UUID}
+        AND environment = {environment: String}
         AND type = 'click'
         AND selector != ''
         AND url IN ({url0: String}, {url1: String}, {url2: String}, {url3: String})
@@ -204,6 +206,7 @@ export async function getElementClickPoints(
     `,
     query_params: {
       projectId,
+      environment,
       url0: urls[0],
       url1: urls[1],
       url2: urls[2],

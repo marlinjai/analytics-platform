@@ -55,12 +55,14 @@ export async function GET(request: NextRequest, { params }: Params) {
         uniqExact(session_id) AS unique_sessions
       FROM analytics.events
       WHERE project_id = {projectId: UUID}
+        AND environment = {environment: String}
         AND experiment_id = {experimentId: String}
         AND variant != ''
       GROUP BY variant
     `,
     query_params: {
       projectId,
+      environment: 'production',
       experimentId,
     },
     format: 'JSONEachRow',
@@ -89,6 +91,7 @@ export async function GET(request: NextRequest, { params }: Params) {
           uniqExact(session_id) AS converted_sessions
         FROM analytics.events
         WHERE project_id = {projectId: UUID}
+          AND environment = {environment: String}
           AND experiment_id = {experimentId: String}
           AND variant != ''
           AND type = 'pageview'
@@ -97,6 +100,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       `,
       query_params: {
         projectId,
+        environment: 'production',
         experimentId,
         target: primaryGoal.target,
       },
@@ -119,6 +123,7 @@ export async function GET(request: NextRequest, { params }: Params) {
           uniqExact(session_id) AS converted_sessions
         FROM analytics.events
         WHERE project_id = {projectId: UUID}
+          AND environment = {environment: String}
           AND experiment_id = {experimentId: String}
           AND variant != ''
           AND type = 'custom'
@@ -127,6 +132,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       `,
       query_params: {
         projectId,
+        environment: 'production',
         experimentId,
         target: primaryGoal.target,
       },
@@ -149,6 +155,7 @@ export async function GET(request: NextRequest, { params }: Params) {
           uniqExact(session_id) AS converted_sessions
         FROM analytics.events
         WHERE project_id = {projectId: UUID}
+          AND environment = {environment: String}
           AND experiment_id = {experimentId: String}
           AND variant != ''
           AND type = 'click'
@@ -157,6 +164,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       `,
       query_params: {
         projectId,
+        environment: 'production',
         experimentId,
         target: primaryGoal.target,
       },

@@ -16,7 +16,8 @@ export interface FunnelStepResult {
 export async function computeFunnelResults(
   projectId: string,
   steps: FunnelStep[],
-  dateRange: DateRange
+  dateRange: DateRange,
+  environment: string = 'production',
 ): Promise<FunnelStepResult[]> {
   const ch = getClickHouse();
 
@@ -30,6 +31,7 @@ export async function computeFunnelResults(
   const cteParts: string[] = [];
   const params: Record<string, string> = {
     projectId,
+    environment,
     ...chDateParams(dateRange),
   };
 
@@ -51,6 +53,7 @@ export async function computeFunnelResults(
           SELECT session_id, min(timestamp) AS ts
           FROM analytics.events
           WHERE project_id = {projectId: UUID}
+            AND environment = {environment: String}
             AND timestamp >= {from: DateTime64(3)}
             AND timestamp <= {to: DateTime64(3)}
             AND ${condition}
@@ -63,6 +66,7 @@ export async function computeFunnelResults(
           FROM analytics.events e
           INNER JOIN step_${i - 1} prev ON prev.session_id = e.session_id
           WHERE e.project_id = {projectId: UUID}
+            AND e.environment = {environment: String}
             AND e.timestamp >= {from: DateTime64(3)}
             AND e.timestamp <= {to: DateTime64(3)}
             AND e.timestamp > prev.ts

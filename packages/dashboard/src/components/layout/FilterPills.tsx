@@ -15,13 +15,13 @@ const FILTER_LABELS: Record<keyof DashboardFilters, string> = {
   os: 'OS',
   device: 'Device',
   source: 'Source',
+  environment: 'Environment',
 };
 
 export function FilterPills({ filters, onRemove, onClearAll }: Props) {
-  const activeEntries = Object.entries(filters).filter(([, v]) => Boolean(v)) as [
-    keyof DashboardFilters,
-    string,
-  ][];
+  const activeEntries = Object.entries(filters).filter(
+    ([k, v]) => Boolean(v) && k !== 'environment',
+  ) as [keyof DashboardFilters, string][];
 
   if (activeEntries.length === 0) return null;
 

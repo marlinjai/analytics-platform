@@ -20,7 +20,8 @@ export interface RageClickRow {
 
 export async function getScrollDepth(
   projectId: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  environment: string = 'production',
 ): Promise<ScrollDepthRow[]> {
   const ch = getClickHouse();
 
@@ -36,6 +37,7 @@ export async function getScrollDepth(
         uniqExact(session_id)                           AS sessions
       FROM analytics.events
       WHERE project_id  = {projectId: UUID}
+        AND environment = {environment: String}
         AND type        = 'scroll'
         AND scroll_depth IS NOT NULL
         AND timestamp  >= {from: DateTime64(3)}
@@ -44,7 +46,7 @@ export async function getScrollDepth(
       ORDER BY sessions DESC
       LIMIT 50
     `,
-    query_params: { projectId, ...chDateParams(dateRange) },
+    query_params: { projectId, environment, ...chDateParams(dateRange) },
     format: 'JSONEachRow',
   });
 
@@ -62,7 +64,8 @@ export async function getScrollDepth(
 
 export async function getRageClicks(
   projectId: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  environment: string = 'production',
 ): Promise<RageClickRow[]> {
   const ch = getClickHouse();
 
@@ -85,6 +88,7 @@ export async function getRageClicks(
           arraySort(groupArray(toFloat64(timestamp))) AS ts_arr
         FROM analytics.events
         WHERE project_id = {projectId: UUID}
+          AND environment = {environment: String}
           AND type       = 'click'
           AND selector  != ''
           AND timestamp >= {from: DateTime64(3)}
@@ -101,7 +105,7 @@ export async function getRageClicks(
       ORDER BY count DESC
       LIMIT 50
     `,
-    query_params: { projectId, ...chDateParams(dateRange) },
+    query_params: { projectId, environment, ...chDateParams(dateRange) },
     format: 'JSONEachRow',
   });
 

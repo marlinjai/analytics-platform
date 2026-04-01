@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS analytics.events
 
     -- Server-enriched
     ip_hash         String,
-    country         LowCardinality(String) DEFAULT ''
+    country         LowCardinality(String) DEFAULT '',
+    environment     LowCardinality(String) DEFAULT 'production'
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)

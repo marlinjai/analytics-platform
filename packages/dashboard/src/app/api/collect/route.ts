@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     ?? request.headers.get('x-real-ip')
     ?? '0.0.0.0';
 
-  const enriched = await enrichEvents(events, ip);
+  const enriched = await enrichEvents(events, ip, keyInfo.prefix);
 
   // Insert into ClickHouse
   try {
