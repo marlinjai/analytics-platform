@@ -1,3 +1,5 @@
+FROM infisical/cli:0.43.69 AS infisical
+
 FROM node:20-alpine AS base
 
 # Install pnpm
@@ -30,6 +32,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+COPY --from=infisical /bin/infisical /usr/local/bin/infisical
 RUN apk add --no-cache curl
 
 RUN addgroup --system --gid 1001 nodejs
@@ -49,4 +52,8 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "packages/dashboard/server.js"]
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
+  CMD curl -f http://localhost:3000/ || exit 1
+
+COPY --chown=nextjs:nodejs packages/dashboard/entrypoint.sh ./entrypoint.sh
+CMD ["sh", "entrypoint.sh"]
