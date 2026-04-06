@@ -40,5 +40,8 @@ jobs:
     steps:
       - name: Trigger Coolify deploy
         run: |
-          curl -sf "${{ secrets.COOLIFY_WEBHOOK }}" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" || exit 1
+          HTTP=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
+            "${{ secrets.COOLIFY_WEBHOOK }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}")
+          echo "HTTP $HTTP: $(cat /tmp/resp.txt)"
+          [ "$HTTP" -ge 200 ] && [ "$HTTP" -lt 300 ] || exit 1
