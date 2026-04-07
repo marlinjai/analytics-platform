@@ -18,5 +18,8 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Infisical
+.infisical.json
+
 # Docker
 docker-compose.override.yml

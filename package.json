@@ -5,7 +5,8 @@
   "description": "Self-hosted analytics, heatmap, and session replay platform",
   "scripts": {
     "build": "pnpm -r build",
-    "dev": "pnpm --filter @analytics-platform/dashboard dev",
+    "dev": "infisical run --token=$INFISICAL_LUMITRA_TOKEN --env=dev --projectId=$INFISICAL_PID_ANALYTICS -- pnpm --filter @analytics-platform/dashboard dev",
+    "dev:local": "pnpm --filter @analytics-platform/dashboard dev",
     "dev:demo": "pnpm --filter @analytics-platform/dashboard dev & pnpm --filter @analytics-platform/demo dev & wait",
     "lint": "pnpm -r lint",
     "test": "vitest",
