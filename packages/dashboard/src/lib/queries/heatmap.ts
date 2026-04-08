@@ -1,5 +1,5 @@
 import { getClickHouse, chDateParams } from '../clickhouse';
-import type { HeatmapPoint, SelectorHeatmapPoint, DateRange, DeviceType } from '@analytics-platform/shared';
+import type { SelectorHeatmapPoint, DateRange, DeviceType } from '@analytics-platform/shared';
 
 /**
  * Generate all URL variants for matching (with/without www, http/https).
@@ -27,62 +27,6 @@ function urlVariants(url: string): string[] {
   } catch {
     return [url];
   }
-}
-
-export async function getHeatmapData(
-  projectId: string,
-  url: string,
-  dateRange: DateRange,
-  deviceType?: DeviceType,
-  experimentId?: string,
-  variant?: string,
-): Promise<HeatmapPoint[]> {
-  const ch = getClickHouse();
-  const urls = urlVariants(url);
-
-  const deviceFilter = deviceType
-    ? 'AND device_type = {deviceType: String}'
-    : '';
-  // Only use variant-specific MV + filters when both experiment and variant are specified
-  const useVariantMv = !!(experimentId && variant);
-  const table = useVariantMv
-    ? 'analytics.heatmap_clicks_by_variant_mv'
-    : 'analytics.heatmap_clicks_mv';
-  const experimentFilter = useVariantMv ? 'AND experiment_id = {experimentId: String}' : '';
-  const variantFilter = useVariantMv ? 'AND variant = {variant: String}' : '';
-
-  const result = await ch.query({
-    query: `
-      SELECT
-        x_bucket AS x,
-        y_bucket AS y,
-        sum(click_count) AS count
-      FROM ${table}
-      WHERE project_id = {projectId: UUID}
-        AND url IN ({url0: String}, {url1: String}, {url2: String}, {url3: String})
-        AND day >= toDate({from: String})
-        AND day <= toDate({to: String})
-        ${deviceFilter}
-        ${experimentFilter}
-        ${variantFilter}
-      GROUP BY x_bucket, y_bucket
-      ORDER BY count DESC
-    `,
-    query_params: {
-      projectId,
-      url0: urls[0],
-      url1: urls[1],
-      url2: urls[2],
-      url3: urls[3],
-      ...chDateParams(dateRange),
-      ...(deviceType && { deviceType }),
-      ...(useVariantMv && experimentId && { experimentId }),
-      ...(useVariantMv && variant && { variant }),
-    },
-    format: 'JSONEachRow',
-  });
-
-  return result.json<HeatmapPoint>();
 }
 
 export async function getHeatmapBySelector(

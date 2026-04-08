@@ -94,23 +94,46 @@ export async function GET(request: NextRequest) {
     var to = now.toISOString();
     var url = encodeURIComponent(location.href.split('?')[0]);
 
-    var apiUrl = '${origin}/api/heatmap?projectId=${projectId}&url=' + url + '&from=' + from + '&to=' + to;
+    var apiUrl = '${origin}/api/heatmap/by-selector/clicks?projectId=${projectId}&url=' + url + '&from=' + from + '&to=' + to;
     ${token ? `apiUrl += '&token=${token}';` : ''}
 
     fetch(apiUrl, { credentials: 'include' })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        if (!data.points || data.points.length === 0) {
+        if (!data.clicks || data.clicks.length === 0) {
           status.textContent = 'No click data for this page';
           return;
         }
-        status.textContent = data.points.length + ' click zones';
-        renderHeatmap(data.points);
+        var result = resolveClicks(data.clicks);
+        if (result.resolved.length === 0) {
+          status.textContent = 'No elements matched (' + result.dropped + ' unresolved)';
+          return;
+        }
+        status.textContent = result.resolved.length + ' clicks mapped' + (result.dropped > 0 ? ' (' + result.dropped + ' unresolved)' : '');
+        renderHeatmap(result.resolved);
       })
       .catch(function(err) {
         status.textContent = 'Error: ' + err.message;
       });
   });
+
+  function resolveClicks(clicks) {
+    var resolved = [];
+    var dropped = 0;
+    for (var i = 0; i < clicks.length; i++) {
+      var c = clicks[i];
+      var el = document.querySelector(c.selector);
+      if (!el) { dropped++; continue; }
+      var rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) { dropped++; continue; }
+      resolved.push({
+        x: Math.round(rect.left + window.scrollX + (c.ox / c.ew) * rect.width),
+        y: Math.round(rect.top + window.scrollY + (c.oy / c.eh) * rect.height),
+        value: 1
+      });
+    }
+    return { resolved: resolved, dropped: dropped };
+  }
 
   function renderHeatmap(points) {
     // Remove previous overlay
@@ -141,10 +164,10 @@ export async function GET(request: NextRequest) {
       blur: 0.85,
     });
 
-    var max = Math.max.apply(null, points.map(function(p) { return p.count; }));
+    var max = Math.max.apply(null, points.map(function(p) { return p.value; }));
     heatmapInstance.setData({
-      max: max,
-      data: points.map(function(p) { return { x: p.x, y: p.y, value: p.count }; }),
+      max: max || 1,
+      data: points,
     });
   }
 })();

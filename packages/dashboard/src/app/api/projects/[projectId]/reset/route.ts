@@ -26,7 +26,6 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   // Delete all events + materialized view data for this project
   await Promise.all([
     ch.command({ query: `ALTER TABLE analytics.events DELETE WHERE project_id = '${projectId}'` }),
-    ch.command({ query: `ALTER TABLE analytics.heatmap_clicks_mv DELETE WHERE project_id = '${projectId}'` }),
     ch.command({ query: `ALTER TABLE analytics.heatmap_selectors_mv DELETE WHERE project_id = '${projectId}'` }),
   ]);
 

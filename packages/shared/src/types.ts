@@ -139,12 +139,6 @@ export interface DashboardFilters {
   environment?: string;
 }
 
-export interface HeatmapPoint {
-  x: number;
-  y: number;
-  count: number;
-}
-
 export interface SelectorHeatmapPoint {
   selector: string;
   count: number;

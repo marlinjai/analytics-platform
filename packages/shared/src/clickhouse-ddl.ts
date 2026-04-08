@@ -74,25 +74,6 @@ WHERE type = 'pageview'
 GROUP BY project_id, url, hour
 `;
 
-/** Click heatmap aggregation per project + URL + coordinates. */
-export const CREATE_HEATMAP_MV = `
-CREATE MATERIALIZED VIEW IF NOT EXISTS analytics.heatmap_clicks_mv
-ENGINE = SummingMergeTree()
-PARTITION BY toYYYYMM(day)
-ORDER BY (project_id, url, device_type, x_bucket, y_bucket, day)
-AS SELECT
-    project_id,
-    url,
-    device_type,
-    toDate(timestamp)                    AS day,
-    intDiv(toUInt32(assumeNotNull(x)), 10) * 10  AS x_bucket,
-    intDiv(toUInt32(assumeNotNull(y)), 10) * 10  AS y_bucket,
-    count()                              AS click_count
-FROM analytics.events
-WHERE type = 'click' AND x IS NOT NULL AND y IS NOT NULL
-GROUP BY project_id, url, device_type, day, x_bucket, y_bucket
-`;
-
 /** Session summary: duration, pageviews, first/last timestamp. */
 export const CREATE_SESSIONS_MV = `
 CREATE MATERIALIZED VIEW IF NOT EXISTS analytics.sessions_summary_mv
@@ -137,7 +118,6 @@ export const ALL_DDL = [
   CREATE_DATABASE,
   CREATE_EVENTS_TABLE,
   CREATE_PAGEVIEWS_MV,
-  CREATE_HEATMAP_MV,
   CREATE_HEATMAP_SELECTORS_MV,
   CREATE_SESSIONS_MV,
 ] as const;

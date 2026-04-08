@@ -12,7 +12,20 @@ export interface HeatmapDataPoint {
   value: number;
 }
 
+export interface ElementClick {
+  selector: string;
+  ox: number;
+  oy: number;
+  ew: number;
+  eh: number;
+}
+
 export interface HeatmapResponse {
+  clicks: ElementClick[];
+}
+
+/** @deprecated Use HeatmapResponse (element-based) instead */
+export interface LegacyHeatmapResponse {
   data: HeatmapDataPoint[];
   width: number;
   height: number;
@@ -113,9 +126,10 @@ export async function fetchHeatmapData(params: {
     deviceType: params.deviceType,
     token: params.token,
   });
-  const res = await fetch(`${DASHBOARD_ORIGIN}/api/heatmap?${search}`, {
-    credentials: "omit",
-  });
+  const res = await fetch(
+    `${DASHBOARD_ORIGIN}/api/heatmap/by-selector/clicks?${search}`,
+    { credentials: "omit" }
+  );
   if (!res.ok) {
     throw new Error(`Failed to fetch heatmap: ${res.status}`);
   }

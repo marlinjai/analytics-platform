@@ -3,7 +3,7 @@ import {
   CREATE_DATABASE,
   CREATE_EVENTS_TABLE,
   CREATE_PAGEVIEWS_MV,
-  CREATE_HEATMAP_MV,
+  CREATE_HEATMAP_SELECTORS_MV,
   CREATE_SESSIONS_MV,
   ALL_DDL,
 } from '../clickhouse-ddl.js';
@@ -13,6 +13,7 @@ import {
   CREATE_PROJECTS_TABLE,
   CREATE_MEMBERSHIPS_TABLE,
   CREATE_API_KEYS_TABLE,
+  CREATE_TEST_LINKS_TABLE,
   ALL_DDL as PG_ALL_DDL,
 } from '../postgres-ddl.js';
 
@@ -42,15 +43,6 @@ describe('ClickHouse DDL', () => {
     expect(CREATE_PAGEVIEWS_MV).toContain('visitors');
   });
 
-  it('CREATE_HEATMAP_MV creates the heatmap materialized view', () => {
-    expect(CREATE_HEATMAP_MV.trim()).toBeTruthy();
-    expect(CREATE_HEATMAP_MV).toContain('heatmap_clicks_mv');
-    expect(CREATE_HEATMAP_MV).toContain('SummingMergeTree');
-    expect(CREATE_HEATMAP_MV).toContain('x_bucket');
-    expect(CREATE_HEATMAP_MV).toContain('y_bucket');
-    expect(CREATE_HEATMAP_MV).toContain('click_count');
-  });
-
   it('CREATE_SESSIONS_MV creates the sessions materialized view', () => {
     expect(CREATE_SESSIONS_MV.trim()).toBeTruthy();
     expect(CREATE_SESSIONS_MV).toContain('sessions_summary_mv');
@@ -64,7 +56,7 @@ describe('ClickHouse DDL', () => {
     expect(ALL_DDL[0]).toBe(CREATE_DATABASE);
     expect(ALL_DDL[1]).toBe(CREATE_EVENTS_TABLE);
     expect(ALL_DDL[2]).toBe(CREATE_PAGEVIEWS_MV);
-    expect(ALL_DDL[3]).toBe(CREATE_HEATMAP_MV);
+    expect(ALL_DDL[3]).toBe(CREATE_HEATMAP_SELECTORS_MV);
     expect(ALL_DDL[4]).toBe(CREATE_SESSIONS_MV);
   });
 });
@@ -107,12 +99,13 @@ describe('Postgres DDL', () => {
     expect(CREATE_API_KEYS_TABLE).toContain('idx_api_keys_project');
   });
 
-  it('PG_ALL_DDL contains all 5 statements in order', () => {
-    expect(PG_ALL_DDL).toHaveLength(5);
+  it('PG_ALL_DDL contains all 6 statements in order', () => {
+    expect(PG_ALL_DDL).toHaveLength(6);
     expect(PG_ALL_DDL[0]).toBe(CREATE_EXTENSIONS);
     expect(PG_ALL_DDL[1]).toBe(CREATE_USERS_TABLE);
     expect(PG_ALL_DDL[2]).toBe(CREATE_PROJECTS_TABLE);
     expect(PG_ALL_DDL[3]).toBe(CREATE_MEMBERSHIPS_TABLE);
     expect(PG_ALL_DDL[4]).toBe(CREATE_API_KEYS_TABLE);
+    expect(PG_ALL_DDL[5]).toBe(CREATE_TEST_LINKS_TABLE);
   });
 });

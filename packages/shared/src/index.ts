@@ -32,7 +32,6 @@ export type {
   BreakdownRow,
   CountryRow,
   DashboardFilters,
-  HeatmapPoint,
   SelectorHeatmapPoint,
   SessionSummary,
   Project,

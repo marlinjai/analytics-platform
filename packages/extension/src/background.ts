@@ -503,21 +503,19 @@ async function handleClicksCoordsMode(
     params.set("variant", msg.variant);
   }
 
-  const res = await fetch(`${msg.dashboardOrigin}/api/heatmap?${params}`);
+  const res = await fetch(
+    `${msg.dashboardOrigin}/api/heatmap/by-selector/clicks?${params}`
+  );
   if (!res.ok) throw new Error(`Heatmap API error: ${res.status}`);
 
   const payload = await res.json();
-  const points = (payload.points || payload.data || []).map(
-    (d: { x: number; y: number; value: number }) => ({
-      x: Number(d.x) || 0,
-      y: Number(d.y) || 0,
-      value: Number(d.value) || 0,
-    })
-  );
-  const computedMax = points.length > 0
-    ? Math.max(...points.map((d: { value: number }) => d.value))
-    : 1;
-  const max = Number(payload.max) || computedMax || 1;
+  const clicks: Array<{
+    selector: string;
+    ox: number;
+    oy: number;
+    ew: number;
+    eh: number;
+  }> = payload.clicks || [];
 
   await chrome.scripting.executeScript({
     target: { tabId },
@@ -529,13 +527,13 @@ async function handleClicksCoordsMode(
     target: { tabId },
     world: "MAIN" as chrome.scripting.ExecutionWorld,
     func: renderHeatmapInMainWorld,
-    args: [points, max, msg.pageWidth || 1920, msg.pageHeight || 3000],
+    args: [clicks],
   });
 
   await sendToTab(tabId, {
     type: "LOAD_HEATMAP_RESULT",
     mode: "clicks",
-    data: { count: points.length, type: "coords" },
+    data: { count: clicks.length, type: "element-relative" },
   });
 
   return { ok: true };
@@ -981,16 +979,39 @@ function injectElementInspectorInMainWorld(): void {
 }
 
 function renderHeatmapInMainWorld(
-  points: Array<{ x: number; y: number; value: number }>,
-  max: number,
-  pageWidth: number,
-  pageHeight: number
+  clicks: Array<{ selector: string; ox: number; oy: number; ew: number; eh: number }>
 ): void {
   // Remove existing
   const existing = document.getElementById("lumitra-heatmap-container");
   if (existing) existing.remove();
 
-  // Create container
+  // Resolve element-relative clicks to absolute page coordinates
+  const resolved: Array<{ x: number; y: number; value: number }> = [];
+  let dropped = 0;
+  for (const c of clicks) {
+    const el = document.querySelector(c.selector);
+    if (!el) { dropped++; continue; }
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) { dropped++; continue; }
+    resolved.push({
+      x: Math.round(rect.left + window.scrollX + (c.ox / c.ew) * rect.width),
+      y: Math.round(rect.top + window.scrollY + (c.oy / c.eh) * rect.height),
+      value: 1,
+    });
+  }
+
+  if (dropped > 0) {
+    console.warn(`[Lumitra] ${dropped} click(s) dropped — selector not found or zero-size element`);
+  }
+
+  if (resolved.length === 0) {
+    console.warn("[Lumitra] No clicks could be resolved to page coordinates");
+    return;
+  }
+
+  // Create container sized to full page
+  const pageWidth = document.documentElement.scrollWidth;
+  const pageHeight = document.documentElement.scrollHeight;
   const container = document.createElement("div");
   container.id = "lumitra-heatmap-container";
   container.style.cssText = [
@@ -1018,10 +1039,10 @@ function renderHeatmapInMainWorld(
       maxOpacity?: number;
       minOpacity?: number;
       blur?: number;
-    }): { setData(d: { max: number; data: typeof points }): void };
+    }): { setData(d: { max: number; data: typeof resolved }): void };
   } }).h337;
 
-  const isLowData = points.length < 15;
+  const isLowData = resolved.length < 15;
 
   const instance = h.create({
     container,
@@ -1036,7 +1057,8 @@ function renderHeatmapInMainWorld(
   container.style.setProperty("top", "0", "important");
   container.style.setProperty("left", "0", "important");
 
-  instance.setData({ max: isLowData ? Math.max(max, 1) : max, data: points });
+  const max = isLowData ? 1 : Math.max(...resolved.map((p) => p.value), 1);
+  instance.setData({ max, data: resolved });
 }
 
 function renderScrollOverlayInMainWorld(
