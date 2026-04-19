@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { selectorHeatmapQuerySchema } from '@analytics-platform/shared';
-import { getElementClickPoints } from '@/lib/queries/heatmap';
+import { pageSnapshotQuerySchema } from '@analytics-platform/shared';
 import { auth } from '@/lib/auth';
 import { checkProjectMembership } from '@/lib/auth-check';
 import { verifyToolbarToken } from '@/lib/toolbar-token';
+import { getDb } from '@/lib/db';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,11 +19,12 @@ export async function OPTIONS() {
 export async function GET(request: NextRequest) {
   const params = Object.fromEntries(request.nextUrl.searchParams);
 
+  // --- Auth: NextAuth session OR toolbar token ---
   let authenticatedProjectId: string | null = null;
 
   const session = await auth();
   if (session?.user?.id) {
-    authenticatedProjectId = null;
+    authenticatedProjectId = null; // defer to membership check below
   } else {
     const token = params.token;
     if (token) {
@@ -38,12 +39,10 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const parsed = selectorHeatmapQuerySchema.safeParse({
+  const parsed = pageSnapshotQuerySchema.safeParse({
     projectId: params.projectId,
     url: params.url,
-    dateRange: { from: params.from, to: params.to },
-    deviceType: params.deviceType || undefined,
-    limit: params.limit ? Number(params.limit) : undefined,
+    pageHash: params.pageHash,
   });
 
   if (!parsed.success) {
@@ -53,8 +52,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { projectId, url, dateRange, deviceType, limit } = parsed.data;
+  const { projectId, url, pageHash } = parsed.data;
 
+  // --- Authorization ---
   if (authenticatedProjectId) {
     if (authenticatedProjectId !== projectId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -65,24 +65,20 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const experimentId = params.experiment_id || undefined;
-  const variant = params.variant || undefined;
-  const pageHash = params.pageHash || undefined;
+  const db = getDb();
+  const rows = await db`
+    SELECT snapshot FROM page_snapshots
+    WHERE project_id = ${projectId}
+      AND url = ${url}
+      AND page_hash = ${pageHash}
+    LIMIT 1
+  `;
 
-  const clicks = await getElementClickPoints(
-    projectId,
-    url,
-    dateRange,
-    deviceType,
-    limit,
-    experimentId,
-    variant,
-    undefined, // environment — uses default 'production'
-    pageHash,
-  );
+  const row = rows[0];
+  const snapshot = row ? row.snapshot : null;
 
   return NextResponse.json(
-    { clicks },
+    { snapshot },
     { headers: { 'Access-Control-Allow-Origin': '*' } },
   );
 }

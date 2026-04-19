@@ -1,5 +1,5 @@
 import { getClickHouse, chDateParams } from '../clickhouse';
-import type { SelectorHeatmapPoint, DateRange, DeviceType } from '@analytics-platform/shared';
+import type { SelectorHeatmapPoint, DateRange, DeviceType, PageVersion } from '@analytics-platform/shared';
 
 /**
  * Generate all URL variants for matching (with/without www, http/https).
@@ -37,6 +37,7 @@ export async function getHeatmapBySelector(
   limit = 100,
   experimentId?: string,
   variant?: string,
+  pageHash?: string,
 ): Promise<SelectorHeatmapPoint[]> {
   const ch = getClickHouse();
   const urls = urlVariants(url);
@@ -45,11 +46,16 @@ export async function getHeatmapBySelector(
     ? 'AND device_type = {deviceType: String}'
     : '';
   const useVariantMv = !!(experimentId && variant);
+  // When pageHash is provided (without variant), use the version MV
+  const useVersionMv = !!pageHash && !useVariantMv;
   const table = useVariantMv
     ? 'analytics.heatmap_selectors_by_variant_mv'
-    : 'analytics.heatmap_selectors_mv';
+    : useVersionMv
+      ? 'analytics.heatmap_selectors_by_version_mv'
+      : 'analytics.heatmap_selectors_mv';
   const experimentFilter = useVariantMv ? 'AND experiment_id = {experimentId: String}' : '';
   const variantFilter = useVariantMv ? 'AND variant = {variant: String}' : '';
+  const pageHashFilter = pageHash ? 'AND page_hash = {pageHash: String}' : '';
 
   const result = await ch.query({
     query: `
@@ -65,6 +71,7 @@ export async function getHeatmapBySelector(
         ${deviceFilter}
         ${experimentFilter}
         ${variantFilter}
+        ${pageHashFilter}
       GROUP BY selector
       ORDER BY count DESC
       LIMIT {limit: UInt32}
@@ -79,6 +86,7 @@ export async function getHeatmapBySelector(
       ...(deviceType && { deviceType }),
       ...(useVariantMv && experimentId && { experimentId }),
       ...(useVariantMv && variant && { variant }),
+      ...(pageHash && { pageHash }),
       limit,
     },
     format: 'JSONEachRow',
@@ -113,6 +121,7 @@ export async function getElementClickPoints(
   experimentId?: string,
   variant?: string,
   environment: string = 'production',
+  pageHash?: string,
 ): Promise<ElementClickPoint[]> {
   const ch = getClickHouse();
   const urls = urlVariants(url);
@@ -124,6 +133,7 @@ export async function getElementClickPoints(
   const useExpFilter = !!(experimentId && variant);
   const experimentFilter = useExpFilter ? 'AND experiment_id = {experimentId: String}' : '';
   const variantFilter = useExpFilter ? 'AND variant = {variant: String}' : '';
+  const pageHashFilter = pageHash ? 'AND page_hash = {pageHash: String}' : '';
 
   const result = await ch.query({
     query: `
@@ -145,6 +155,7 @@ export async function getElementClickPoints(
         ${deviceFilter}
         ${experimentFilter}
         ${variantFilter}
+        ${pageHashFilter}
       ORDER BY timestamp DESC
       LIMIT {limit: UInt32}
     `,
@@ -159,6 +170,7 @@ export async function getElementClickPoints(
       ...(deviceType && { deviceType }),
       ...(useExpFilter && experimentId && { experimentId }),
       ...(useExpFilter && variant && { variant }),
+      ...(pageHash && { pageHash }),
       limit,
     },
     format: 'JSONEachRow',
@@ -174,4 +186,47 @@ export async function getElementClickPoints(
       ew: Number(r.ew ?? 0),
       eh: Number(r.eh ?? 0),
     }));
+}
+
+/**
+ * List known page versions (distinct page_hash values) for a URL,
+ * ordered by most recently seen first.
+ */
+export async function getPageVersions(
+  projectId: string,
+  url: string,
+): Promise<PageVersion[]> {
+  const ch = getClickHouse();
+  const urls = urlVariants(url);
+
+  const result = await ch.query({
+    query: `
+      SELECT
+        page_hash AS pageHash,
+        min(first_seen) AS firstSeen,
+        max(last_seen) AS lastSeen,
+        sum(event_count) AS eventCount
+      FROM analytics.page_versions_mv
+      WHERE project_id = {projectId: UUID}
+        AND url IN ({url0: String}, {url1: String}, {url2: String}, {url3: String})
+      GROUP BY page_hash
+      ORDER BY lastSeen DESC
+    `,
+    query_params: {
+      projectId,
+      url0: urls[0],
+      url1: urls[1],
+      url2: urls[2],
+      url3: urls[3],
+    },
+    format: 'JSONEachRow',
+  });
+
+  const rows = await result.json<Record<string, unknown>>();
+  return rows.map((r) => ({
+    pageHash: String(r.pageHash ?? ''),
+    firstSeen: String(r.firstSeen ?? ''),
+    lastSeen: String(r.lastSeen ?? ''),
+    eventCount: Number(r.eventCount ?? 0),
+  }));
 }

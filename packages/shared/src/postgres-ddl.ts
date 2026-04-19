@@ -73,6 +73,20 @@ CREATE INDEX IF NOT EXISTS idx_test_links_project ON test_links(project_id);
 CREATE INDEX IF NOT EXISTS idx_test_links_code ON test_links(code);
 `;
 
+export const CREATE_PAGE_SNAPSHOTS_TABLE = `
+CREATE TABLE IF NOT EXISTS page_snapshots (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    url         TEXT NOT NULL,
+    page_hash   TEXT NOT NULL,
+    snapshot    JSONB NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (project_id, url, page_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_page_snapshots_lookup
+    ON page_snapshots(project_id, url);
+`;
+
 /** All DDL statements in execution order. */
 export const ALL_DDL = [
   CREATE_EXTENSIONS,
@@ -81,4 +95,5 @@ export const ALL_DDL = [
   CREATE_MEMBERSHIPS_TABLE,
   CREATE_API_KEYS_TABLE,
   CREATE_TEST_LINKS_TABLE,
+  CREATE_PAGE_SNAPSHOTS_TABLE,
 ] as const;

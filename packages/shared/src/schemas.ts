@@ -60,6 +60,9 @@ export const trackerEventSchema = z.object({
   // Experiment
   experimentId: z.string().max(128).optional(),
   variant: z.string().max(128).optional(),
+
+  // Page versioning
+  pageHash: z.string().max(8).optional(),
 });
 
 export const eventBatchSchema = z
@@ -96,6 +99,19 @@ export const sessionListQuerySchema = z.object({
 export const replayQuerySchema = z.object({
   projectId: z.string().uuid(),
   sessionId: z.string().min(1),
+});
+
+// ── Page Versioning Schemas ──────────────────────────────────
+
+export const pageVersionQuerySchema = z.object({
+  projectId: z.string().uuid(),
+  url: z.string().min(1),
+});
+
+export const pageSnapshotQuerySchema = z.object({
+  projectId: z.string().uuid(),
+  url: z.string().min(1),
+  pageHash: z.string().max(8),
 });
 
 // ── Project Schemas ──────────────────────────────────────────

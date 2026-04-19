@@ -56,6 +56,7 @@ export async function insertEvents(events: StoredEvent[]): Promise<void> {
       country: e.country ?? '',
       browser: e.browser ?? '',
       os: e.os ?? '',
+      page_hash: e.pageHash ?? '',
       experiment_id: e.experimentId ?? '',
       variant: e.variant ?? '',
       environment: e.environment ?? 'production',

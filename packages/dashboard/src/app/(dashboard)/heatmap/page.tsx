@@ -10,6 +10,7 @@ import { useCurrentProjectId } from '@/components/layout/ProjectSwitcher';
 import { ScrollDepthChart } from '@/components/charts/ScrollDepthChart';
 import { RageClicksTable } from '@/components/charts/RageClicksTable';
 import { EngagementZonesTable } from '@/components/charts/EngagementZonesTable';
+import { HistoricalHeatmapViewer } from '@/components/heatmap/HistoricalHeatmapViewer';
 import type { ScrollDepthRow, RageClickRow } from '@/lib/queries/advanced';
 
 export default function HeatmapPage() {
@@ -190,6 +191,24 @@ function HeatmapPageInner() {
                 url={selectedUrl}
                 dateRange={{ from, to }}
                 deviceType={deviceType}
+              />
+            </div>
+          )}
+
+          {/* Historical Heatmaps */}
+          {selectedUrl && (
+            <div className="rounded-xl border border-gray-800 bg-gray-900 p-6">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-white">Historical Heatmaps</h2>
+                <p className="mt-1 text-sm text-gray-400">
+                  View heatmaps rendered on archived page snapshots. Select a page version to see how it looked when clicks were recorded.
+                </p>
+              </div>
+              <HistoricalHeatmapViewer
+                projectId={projectId}
+                url={selectedUrl}
+                dateRange={{ from, to }}
+                deviceType={deviceType || undefined}
               />
             </div>
           )}

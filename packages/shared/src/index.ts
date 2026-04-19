@@ -39,6 +39,8 @@ export type {
   User,
   Membership,
   AccountApiKey,
+  PageVersion,
+  PageSnapshot,
 } from './types.js';
 
 // Experiment & Feature Flag Types
@@ -70,6 +72,8 @@ export {
   replayQuerySchema,
   createProjectSchema,
   createApiKeySchema,
+  pageVersionQuerySchema,
+  pageSnapshotQuerySchema,
 } from './schemas.js';
 
 // DDL

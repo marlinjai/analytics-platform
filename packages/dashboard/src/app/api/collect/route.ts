@@ -5,6 +5,7 @@ import { validateApiKey } from '@/lib/api-key';
 import { enrichEvents } from '@/lib/enrich';
 import { insertEvents } from '@/lib/clickhouse';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { maybeStoreSnapshot } from '@/lib/snapshot-store';
 
 export const config = {
   api: { bodyParser: { sizeLimit: '5mb' } },
@@ -101,6 +102,22 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error('ClickHouse insert error:', err);
     return NextResponse.json({ error: 'Failed to store events' }, { status: 500, headers: cors });
+  }
+
+  // Fire-and-forget: capture rrweb DOM snapshots per page version
+  for (const event of enriched) {
+    if (
+      event.type === 'replay_chunk' &&
+      event.pageHash &&
+      event.replayChunk?.length
+    ) {
+      maybeStoreSnapshot(
+        event.projectId,
+        event.url,
+        event.pageHash,
+        event.replayChunk
+      ).catch(() => {}); // fire-and-forget
+    }
   }
 
   return NextResponse.json({

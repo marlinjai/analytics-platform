@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS analytics.events
     viewport_width  Nullable(UInt16),
     viewport_height Nullable(UInt16),
 
+    -- Page versioning
+    page_hash       String DEFAULT '',
+
     -- Server-enriched
     ip_hash         String,
     country         LowCardinality(String) DEFAULT '',
@@ -113,6 +116,38 @@ WHERE type = 'click'
 GROUP BY project_id, url, device_type, day, selector
 `;
 
+/** Click heatmap aggregation partitioned by page version. */
+export const CREATE_HEATMAP_SELECTORS_BY_VERSION_MV = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS analytics.heatmap_selectors_by_version_mv
+ENGINE = SummingMergeTree()
+PARTITION BY toYYYYMM(day)
+ORDER BY (project_id, url, page_hash, device_type, selector, day)
+AS SELECT
+    project_id, url, page_hash, device_type, selector,
+    toDate(timestamp) AS day,
+    count() AS click_count,
+    uniqExact(session_id) AS session_count
+FROM analytics.events
+WHERE type = 'click' AND selector != '' AND page_hash != ''
+GROUP BY project_id, url, page_hash, device_type, selector, day
+`;
+
+/** Page version discovery: known versions with date ranges. */
+export const CREATE_PAGE_VERSIONS_MV = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS analytics.page_versions_mv
+ENGINE = AggregatingMergeTree()
+PARTITION BY toYYYYMM(first_seen)
+ORDER BY (project_id, url, page_hash)
+AS SELECT
+    project_id, url, page_hash,
+    min(timestamp) AS first_seen,
+    max(timestamp) AS last_seen,
+    count() AS event_count
+FROM analytics.events
+WHERE page_hash != '' AND type IN ('pageview', 'click')
+GROUP BY project_id, url, page_hash
+`;
+
 /** All DDL statements in execution order. */
 export const ALL_DDL = [
   CREATE_DATABASE,
@@ -120,4 +155,6 @@ export const ALL_DDL = [
   CREATE_PAGEVIEWS_MV,
   CREATE_HEATMAP_SELECTORS_MV,
   CREATE_SESSIONS_MV,
+  CREATE_HEATMAP_SELECTORS_BY_VERSION_MV,
+  CREATE_PAGE_VERSIONS_MV,
 ] as const;

@@ -41,6 +41,9 @@ export interface TrackerEvent {
   // Experiment
   experimentId?: string;
   variant?: string;
+
+  // Page versioning
+  pageHash?: string;
 }
 
 /** Server-enriched fields added during ingestion. */
@@ -189,6 +192,22 @@ export interface Membership {
   userId: string;
   projectId: string;
   role: 'owner' | 'admin' | 'viewer';
+  createdAt: string;
+}
+
+export interface PageVersion {
+  pageHash: string;
+  firstSeen: string;
+  lastSeen: string;
+  eventCount: number;
+}
+
+export interface PageSnapshot {
+  id: string;
+  projectId: string;
+  url: string;
+  pageHash: string;
+  snapshot: unknown;
   createdAt: string;
 }
 

@@ -7,6 +7,7 @@ import { getOrCreateSession, touchSession } from './session.js';
 import { EventBatcher } from './batch.js';
 import { getDeviceType, getScreenDimensions } from './device.js';
 import { attachPageviewListener, attachClickListener, attachScrollListener } from './listeners.js';
+import { getCachedPageHash } from './dom-hash.js';
 import { ExperimentManager } from './experiment.js';
 import type { RemoteConfig } from './experiment.js';
 
@@ -202,6 +203,8 @@ export class AnalyticsTracker {
       }
     }
 
+    const pageHash = getCachedPageHash() || undefined;
+
     const event: TrackerEvent = {
       ...partial,
       projectId: this.config.projectId,
@@ -214,6 +217,7 @@ export class AnalyticsTracker {
       ...(experimentId && { experimentId }),
       ...(variant && { variant }),
       ...(properties && { properties }),
+      ...(pageHash && { pageHash }),
     };
     this.batcher.add(event);
   }

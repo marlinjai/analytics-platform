@@ -28,4 +28,5 @@ export interface TrackerEvent {
   userAgent?: string;
   experimentId?: string;
   variant?: string;
+  pageHash?: string;
 }

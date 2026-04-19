@@ -1,4 +1,5 @@
 import type { TrackerEvent } from './constants';
+import { computePageHash, clearPageHashCache } from './dom-hash';
 
 type EventCallback = (event: Omit<TrackerEvent, 'projectId' | 'sessionId' | 'timestamp'>) => void;
 
@@ -140,22 +141,33 @@ export function attachPageviewListener(cb: EventCallback): () => void {
   history.pushState = function (...args) {
     origPushState(...args);
     trackPageview();
+    clearPageHashCache();
+    requestAnimationFrame(() => computePageHash());
   };
 
   history.replaceState = function (...args) {
     origReplaceState(...args);
     trackPageview();
+    clearPageHashCache();
+    requestAnimationFrame(() => computePageHash());
   };
 
-  window.addEventListener('popstate', trackPageview);
+  const onPopState = () => {
+    trackPageview();
+    clearPageHashCache();
+    requestAnimationFrame(() => computePageHash());
+  };
+
+  window.addEventListener('popstate', onPopState);
 
   // Track initial pageview
   trackPageview();
+  requestAnimationFrame(() => computePageHash());
 
   return () => {
     history.pushState = origPushState;
     history.replaceState = origReplaceState;
-    window.removeEventListener('popstate', trackPageview);
+    window.removeEventListener('popstate', onPopState);
   };
 }
 
