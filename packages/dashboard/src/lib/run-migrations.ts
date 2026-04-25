@@ -40,7 +40,7 @@ export async function runMigrations() {
     }
 
     const files = (await readdir(migrationsDir))
-      .filter((f) => f.endsWith('-postgres.sql'))
+      .filter((f) => f.endsWith('-postgres.sql') || f.endsWith('-clickhouse.sql'))
       .sort();
 
     if (files.length === 0) {
@@ -55,9 +55,15 @@ export async function runMigrations() {
     for (const file of files) {
       if (appliedSet.has(file)) continue;
 
-      console.log(`[migrate] Applying: ${file}`);
       const content = await readFile(join(migrationsDir, file), 'utf-8');
-      await sql.unsafe(content);
+
+      if (file.endsWith('-postgres.sql')) {
+        console.log(`[migrate] Applying Postgres: ${file}`);
+        await sql.unsafe(content);
+      } else {
+        await runClickHouseMigration(file, content);
+      }
+
       await sql`INSERT INTO _migrations (filename) VALUES (${file})`;
       console.log(`[migrate] OK: ${file}`);
       count++;
@@ -70,5 +76,36 @@ export async function runMigrations() {
   } catch (err) {
     console.error('[migrate] Migration failed:', (err as Error).message);
     await sql.end();
+  }
+}
+
+async function runClickHouseMigration(filename: string, content: string) {
+  const chUrl = process.env.CLICKHOUSE_URL;
+  if (!chUrl) {
+    console.log(`[migrate] CLICKHOUSE_URL not set, skipping ${filename}`);
+    return;
+  }
+
+  const user = process.env.CLICKHOUSE_USER ?? 'default';
+  const password = process.env.CLICKHOUSE_PASSWORD ?? '';
+  const endpoint = `${chUrl}/?user=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}`;
+
+  // Strip comment lines and split into individual statements
+  const statements = content
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n')
+    .split(';')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  console.log(`[migrate] Applying ClickHouse: ${filename} (${statements.length} statements)`);
+
+  for (const statement of statements) {
+    const res = await fetch(endpoint, { method: 'POST', body: statement });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`ClickHouse migration failed in ${filename}: ${err}`);
+    }
   }
 }
