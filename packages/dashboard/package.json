@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@analytics-platform/shared": "workspace:*",
-    "@auth/pg-adapter": "^1.11.1",
     "@clickhouse/client": "^1.18.2",
     "bcryptjs": "^3.0.3",
     "next": "^15.1.6",

@@ -1,9 +1,9 @@
 import NextAuth from 'next-auth';
 import GitHub from 'next-auth/providers/github';
 import Credentials from 'next-auth/providers/credentials';
-import PostgresAdapter from '@auth/pg-adapter';
 import bcrypt from 'bcryptjs';
 import { getDb } from './db';
+import { createPostgresAdapter } from './auth-adapter';
 
 declare module 'next-auth' {
   interface Session {
@@ -18,7 +18,7 @@ declare module 'next-auth' {
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
-  adapter: PostgresAdapter(getDb()),
+  adapter: createPostgresAdapter(),
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',
