@@ -6,51 +6,81 @@ import { enrichEvents } from '@/lib/enrich';
 import { insertEvents } from '@/lib/clickhouse';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { maybeStoreSnapshot } from '@/lib/snapshot-store';
+import { getDb } from '@/lib/db';
+import { originIsAllowed } from '@/lib/origin-match';
 
 export const config = {
   api: { bodyParser: { sizeLimit: '5mb' } },
 };
 
-function corsHeaders(origin?: string | null) {
-  return {
-    'Access-Control-Allow-Origin': origin || '*',
+function corsHeaders(origin: string | null, allowedOrigins: string[]) {
+  const echo =
+    origin && (allowedOrigins.length === 0 || originIsAllowed(origin, allowedOrigins))
+      ? origin
+      : null;
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Content-Encoding, X-API-Key',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Max-Age': '86400',
   };
+  if (echo) headers['Access-Control-Allow-Origin'] = echo;
+  return headers;
 }
 
 export async function OPTIONS(request: NextRequest) {
-  return new NextResponse(null, { status: 204, headers: corsHeaders(request.headers.get('origin')) });
+  // Preflight has no project context; be permissive here. POST decides.
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': request.headers.get('origin') ?? '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Content-Encoding, X-API-Key',
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
 }
 
 export async function POST(request: NextRequest) {
-  const cors = corsHeaders(request.headers.get('origin'));
+  const origin = request.headers.get('origin');
+  const referer = request.headers.get('referer');
+  const requestOrigin = origin ?? referer;
 
-  // Extract API key
   const apiKey = request.headers.get('x-api-key');
   if (!apiKey) {
-    return NextResponse.json({ error: 'Missing x-api-key header' }, { status: 401, headers: cors });
+    return NextResponse.json(
+      { error: 'Missing x-api-key header' },
+      { status: 401, headers: corsHeaders(origin, []) }
+    );
   }
 
-  // Validate API key (only project keys allowed for ingestion)
   const keyInfo = await validateApiKey(apiKey);
   if (!keyInfo) {
-    return NextResponse.json({ error: 'Invalid or revoked API key' }, { status: 401, headers: cors });
+    return NextResponse.json(
+      { error: 'Invalid or revoked API key' },
+      { status: 401, headers: corsHeaders(origin, []) }
+    );
   }
   if (keyInfo.kind !== 'project') {
-    return NextResponse.json({ error: 'Account keys cannot be used for event ingestion. Use a project key (ap_live_ or ap_test_).' }, { status: 403, headers: cors });
+    return NextResponse.json(
+      { error: 'Account keys cannot be used for event ingestion. Use a project key (ap_live_ or ap_test_).' },
+      { status: 403, headers: corsHeaders(origin, []) }
+    );
   }
 
-  // Rate limit
+  // Load the project's allowed_origins for both gating and CORS scoping.
+  const db = getDb();
+  const projectRows = await db`
+    SELECT allowed_origins FROM projects WHERE id = ${keyInfo.projectId}
+  `;
+  const allowedOrigins: string[] = projectRows[0]?.allowed_origins ?? [];
+  const cors = corsHeaders(origin, allowedOrigins);
+
   if (!checkRateLimit(keyInfo.keyId)) {
     return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429, headers: cors });
   }
 
-  // Parse body — decompress gzip if Content-Encoding header is set.
-  // Note: reverse proxies (Traefik) may decompress the body but leave the header,
-  // so we try gunzip first and fall back to plain JSON parsing on failure.
   let body: unknown;
   try {
     const encoding = request.headers.get('content-encoding');
@@ -60,7 +90,6 @@ export async function POST(request: NextRequest) {
         const decompressed = gunzipSync(buf);
         body = JSON.parse(decompressed.toString('utf-8'));
       } catch {
-        // Proxy may have already decompressed — try parsing raw buffer as JSON
         body = JSON.parse(buf.toString('utf-8'));
       }
     } else {
@@ -80,7 +109,6 @@ export async function POST(request: NextRequest) {
 
   const events = parsed.data;
 
-  // Verify all events belong to the API key's project
   const invalidEvents = events.filter((e) => e.projectId !== keyInfo.projectId);
   if (invalidEvents.length > 0) {
     return NextResponse.json(
@@ -89,14 +117,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Enrich events
+  // Origin gate: silently drop events from non-allowed origins. 204 + dropped
+  // count tells the SDK "request received, no need to retry" without surfacing
+  // a visible error in the user's app console.
+  if (!originIsAllowed(requestOrigin, allowedOrigins)) {
+    return new NextResponse(null, { status: 204, headers: cors });
+  }
+
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     ?? request.headers.get('x-real-ip')
     ?? '0.0.0.0';
 
   const enriched = await enrichEvents(events, ip, keyInfo.prefix);
 
-  // Insert into ClickHouse
   try {
     await insertEvents(enriched);
   } catch (err) {
@@ -104,7 +137,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to store events' }, { status: 500, headers: cors });
   }
 
-  // Fire-and-forget: capture rrweb DOM snapshots per page version
   for (const event of enriched) {
     if (
       event.type === 'replay_chunk' &&
@@ -116,13 +148,12 @@ export async function POST(request: NextRequest) {
         event.url,
         event.pageHash,
         event.replayChunk
-      ).catch(() => {}); // fire-and-forget
+      ).catch(() => {});
     }
   }
 
-  return NextResponse.json({
-    ok: true,
-    accepted: enriched.length,
-    dropped: 0,
-  }, { headers: cors });
+  return NextResponse.json(
+    { ok: true, accepted: enriched.length, dropped: 0 },
+    { headers: cors }
+  );
 }
