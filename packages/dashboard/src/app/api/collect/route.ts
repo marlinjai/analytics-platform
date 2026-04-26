@@ -74,13 +74,14 @@ export async function POST(request: NextRequest) {
   const projectRows = await db`
     SELECT allowed_origins FROM projects WHERE id = ${keyInfo.projectId}
   `;
-  if (projectRows.length === 0) {
+  const projectRow = projectRows[0];
+  if (!projectRow) {
     return NextResponse.json(
       { error: 'Project not found' },
       { status: 401, headers: corsHeaders(origin, []) }
     );
   }
-  const allowedOrigins: string[] = projectRows[0].allowed_origins;
+  const allowedOrigins: string[] = projectRow.allowed_origins;
   const cors = corsHeaders(origin, allowedOrigins);
 
   if (!checkRateLimit(keyInfo.keyId)) {
