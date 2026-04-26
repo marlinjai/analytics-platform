@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-26
+
+### Added
+- **Password reset flow** — `/forgot-password` and `/reset-password` pages with Resend email integration; SHA256-hashed tokens stored in `verification_tokens`, 1-hour expiry
+- **CLI: `lumitra analytics init`** — renamed from `lumitra init` for extensible subcommand structure; added `--infisical-path` flag for monorepo Infisical folder support; auto-detects `.infisical.json` and writes secrets to Infisical instead of `.env.local` when present
+
+### Changed
+- **Auth adapter** — replaced `@auth/pg-adapter` (incompatible with `postgres` tagged-template client) with a custom adapter using the existing `postgres` client directly
+- **NextAuth env vars** — migrated to v5 naming: `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET` (old `NEXTAUTH_*` names still work as fallback)
+- **ClickHouse migrations** — now run automatically at app startup via the Next.js instrumentation hook (both Postgres and ClickHouse); no manual `migrate.sh` needed in production
+
+### Fixed
+- GitHub OAuth `error=Configuration` caused by missing `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET` env vars and adapter incompatibility
+- `pkceCodeVerifier value could not be parsed` OAuth error caused by missing `AUTH_SECRET` env var
+- Next.js build failure caused by module-level `new Resend()` instantiation throwing when `RESEND_API_KEY` is absent at build time
+- ClickHouse `Database analytics does not exist` errors — migrations now run at startup
+
 ## [0.6.0] - 2026-03-23
 
 ### Added

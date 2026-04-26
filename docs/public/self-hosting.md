@@ -47,13 +47,17 @@ CLICKHOUSE_URL=http://localhost:8123
 CLICKHOUSE_USER=default
 CLICKHOUSE_PASSWORD=clickhouse_dev
 
-# NextAuth
-NEXTAUTH_SECRET=your-secret-here  # generate: openssl rand -base64 32
-NEXTAUTH_URL=http://localhost:3000
+# NextAuth v5
+AUTH_SECRET=your-secret-here  # generate: openssl rand -base64 32
+AUTH_URL=http://localhost:3000
 
-# GitHub OAuth (optional)
-GITHUB_ID=your-github-app-id
-GITHUB_SECRET=your-github-app-secret
+# GitHub OAuth (optional) — auto-discovered by NextAuth v5 from AUTH_GITHUB_* prefix
+AUTH_GITHUB_ID=your-github-app-id
+AUTH_GITHUB_SECRET=your-github-app-secret
+
+# Password reset emails (Resend)
+RESEND_API_KEY=re_your_key_here
+RESEND_FROM_EMAIL=noreply@yourdomain.com
 ```
 
 ## Production with Docker Compose
@@ -62,11 +66,14 @@ GITHUB_SECRET=your-github-app-secret
 # Build and start all services
 docker compose up -d
 
-# Initialize database schemas (first run only)
-./scripts/setup.sh
-
 # View logs
 docker compose logs -f dashboard
+```
+
+Database migrations (Postgres and ClickHouse) run automatically on every app startup via the Next.js instrumentation hook. No manual schema initialization is needed. If you want to run them explicitly for local development:
+
+```bash
+./scripts/migrate.sh
 ```
 
 The `docker-compose.yml` includes:

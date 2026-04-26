@@ -62,9 +62,13 @@
 - [x] End-to-end integration tests (17 unit tests for /api/collect, 69 total)
 - [x] Tracker SDK bundle size CI check (<5KB gzip)
 - [x] ClickHouse schema migration tooling (versioned SQL + migrate.sh)
+- [x] ClickHouse + Postgres migrations run automatically at app startup (instrumentation hook)
 - [x] Loading states and skeleton UI across all dashboard pages
 - [x] API key rotation workflow
 - [x] Onboarding flow (step-by-step first project + tracker setup)
+- [x] Password reset flow (Resend email, SHA256-hashed tokens, 1-hour expiry)
+- [x] GitHub OAuth via NextAuth v5 (custom Postgres adapter, AUTH_GITHUB_* env vars)
+- [x] CLI: `lumitra analytics init` with Infisical auto-detection and `--infisical-path` for monorepo support
 
 ## Phase 6: Analytics Depth (complete)
 - [x] Web analytics: UTM tracking, referrer parsing

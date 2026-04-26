@@ -181,6 +181,19 @@ The extension injects a Shadow DOM overlay onto the page you are viewing, fetche
 
 The overlay persists across client-side navigation in SPAs and can be toggled on or off at any time from the popup.
 
+## Password Reset
+
+The dashboard ships with a built-in password reset flow. Users can request a reset link from the login page (`/login` → "Forgot your password?"). The link is sent via [Resend](https://resend.com) and expires after 1 hour.
+
+Required env vars:
+
+```env
+RESEND_API_KEY=re_your_key_here
+RESEND_FROM_EMAIL=noreply@yourdomain.com  # must be from a verified Resend domain
+```
+
+If `RESEND_API_KEY` is not set, the forgot-password form will appear but emails will not be sent.
+
 ## Environment Variables
 
 | Variable | Description | Default |
@@ -189,5 +202,11 @@ The overlay persists across client-side navigation in SPAs and can be toggled on
 | `CLICKHOUSE_URL` | ClickHouse HTTP endpoint | `http://localhost:8123` |
 | `CLICKHOUSE_USER` | ClickHouse username | `default` |
 | `CLICKHOUSE_PASSWORD` | ClickHouse password | — |
-| `NEXTAUTH_SECRET` | NextAuth session secret | — |
-| `NEXTAUTH_URL` | Public URL for NextAuth | `http://localhost:3000` |
+| `AUTH_SECRET` | NextAuth v5 session secret — generate with `openssl rand -base64 32` | — |
+| `AUTH_URL` | Public URL of the dashboard (optional in most deployments, inferred from headers) | — |
+| `AUTH_GITHUB_ID` | GitHub OAuth App client ID (optional) | — |
+| `AUTH_GITHUB_SECRET` | GitHub OAuth App client secret (optional) | — |
+| `RESEND_API_KEY` | Resend API key for password reset emails | — |
+| `RESEND_FROM_EMAIL` | From address for password reset emails | `noreply@lumitra.co` |
+| `SEED_USER_EMAIL` | Admin user created automatically on `pnpm dev` | `admin@localhost` |
+| `SEED_USER_PASSWORD` | Password for the seed admin user | `admin123` |
