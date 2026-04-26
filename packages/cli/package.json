@@ -1,5 +1,5 @@
 {
-  "name": "lumitra",
+  "name": "@marlinjai/lumitra-cli",
   "version": "1.3.0",
   "description": "CLI for setting up Lumitra Analytics in your project",
   "type": "module",
@@ -18,7 +18,6 @@
     "typescript": "^5.7.0"
   },
   "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
+    "access": "public"
   }
 }
