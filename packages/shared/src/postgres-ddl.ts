@@ -21,12 +21,15 @@ CREATE TABLE IF NOT EXISTS users (
 
 export const CREATE_PROJECTS_TABLE = `
 CREATE TABLE IF NOT EXISTS projects (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name        TEXT NOT NULL,
-    domain      TEXT NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name            TEXT NOT NULL,
+    domain          TEXT NOT NULL,
+    allowed_origins TEXT[] NOT NULL DEFAULT '{}',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_projects_allowed_origins ON projects USING GIN (allowed_origins);
 `;
 
 export const CREATE_MEMBERSHIPS_TABLE = `

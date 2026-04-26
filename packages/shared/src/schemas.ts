@@ -116,9 +116,25 @@ export const pageSnapshotQuerySchema = z.object({
 
 // ── Project Schemas ──────────────────────────────────────────
 
+const allowedOriginEntrySchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .regex(
+    /^(https?:\/\/)?(\*\.)?[a-zA-Z0-9.-]+(:\d+)?$/,
+    'Must be a hostname like example.com, *.example.com, or http://localhost:3000'
+  );
+
 export const createProjectSchema = z.object({
   name: z.string().min(1).max(128),
   domain: z.string().min(1).max(256),
+  allowedOrigins: z.array(allowedOriginEntrySchema).max(20).default([]),
+});
+
+export const updateProjectSchema = z.object({
+  name: z.string().min(1).max(128).optional(),
+  domain: z.string().min(1).max(256).optional(),
+  allowedOrigins: z.array(allowedOriginEntrySchema).max(20).optional(),
 });
 
 export const createApiKeySchema = z.object({

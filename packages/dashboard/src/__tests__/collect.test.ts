@@ -20,6 +20,13 @@ vi.mock('@/lib/rate-limit', () => ({
   checkRateLimit: vi.fn().mockReturnValue(true),
 }));
 
+vi.mock('@/lib/db', () => ({
+  getDb: vi.fn(() =>
+    ((..._args: unknown[]) =>
+      Promise.resolve([{ allowed_origins: [] }])) as unknown as ReturnType<typeof import('@/lib/db').getDb>
+  ),
+}));
+
 // ── Import mocked deps & the route handler ────────────────────────────────────
 
 import { validateApiKey } from '@/lib/api-key';
@@ -115,10 +122,21 @@ describe('POST /api/collect', () => {
     });
 
     it('includes CORS headers in the response', async () => {
-      const req = makeRequest(makeValidEvents());
+      // New route echoes the request origin back (not wildcard) when an origin is present.
+      // With allowed_origins: [] (allow-all), the origin is echoed as-is.
+      const req = new NextRequest('http://localhost/api/collect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': VALID_API_KEY,
+          origin: 'https://example.com',
+        },
+        body: JSON.stringify(makeValidEvents()),
+      });
       const res = await POST(req);
 
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://example.com');
+      expect(res.headers.get('Access-Control-Allow-Methods')).toMatch(/POST/);
     });
   });
 

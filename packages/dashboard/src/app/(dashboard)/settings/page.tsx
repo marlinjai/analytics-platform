@@ -38,6 +38,7 @@ interface Project {
   id: string;
   name: string;
   domain: string;
+  allowed_origins: string[];
 }
 
 interface ApiKey {
@@ -293,6 +294,17 @@ export default function SettingsPage() {
   const [newInviteUrl, setNewInviteUrl] = useState<string | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
 
+  // Allowed origins state
+  const [allowedOriginsText, setAllowedOriginsText] = useState<string>('');
+  const [allowedOriginsStatus, setAllowedOriginsStatus] = useState<string>('');
+
+  useEffect(() => {
+    const project = projects.find((p) => p.id === selectedProjectId);
+    setAllowedOriginsText((project?.allowed_origins ?? []).join('\n'));
+    setAllowedOriginsStatus('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- projects intentionally omitted; saves update state directly
+  }, [selectedProjectId]);
+
   async function copyToClipboard(text: string) {
     await navigator.clipboard.writeText(text);
     setCopied(true);
@@ -483,6 +495,37 @@ export default function SettingsPage() {
     }
   }
 
+  // Save allowed origins
+  async function saveAllowedOrigins() {
+    if (!selectedProjectId) return;
+    const lines = allowedOriginsText
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    setAllowedOriginsStatus('Saving...');
+    const res = await fetch(`/api/projects/${selectedProjectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allowedOrigins: lines }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setAllowedOriginsStatus(`Error: ${data.error ?? res.statusText}`);
+      return;
+    }
+    const data = await res.json();
+    setProjects((prev) =>
+      prev.map((p) =>
+        p.id === selectedProjectId
+          ? { ...p, allowed_origins: data.project?.allowed_origins ?? [] }
+          : p
+      )
+    );
+    setAllowedOriginsStatus('Saved');
+    setTimeout(() => setAllowedOriginsStatus(''), 2000);
+  }
+
   // Revoke key
   async function handleRevokeKey(keyId: string) {
     if (!confirm('Revoke this API key? This cannot be undone.')) return;
@@ -611,6 +654,53 @@ export default function SettingsPage() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      {/* Allowed Origins section */}
+      <section className="rounded-xl border border-gray-800 bg-gray-900 p-6">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-100">Allowed Origins</h2>
+          <p className="mt-0.5 text-xs text-gray-400">
+            Restrict event ingestion to specific origins. One per line. Supports exact hosts (
+            <code className="text-gray-300">app.example.com</code>), wildcard subdomains (
+            <code className="text-gray-300">*.example.com</code>), and dev hosts (
+            <code className="text-gray-300">localhost:3000</code>). Leave empty to accept events from any origin.
+          </p>
+        </div>
+
+        {!selectedProjectId ? (
+          <p className="text-sm text-gray-400">Select a project above to configure allowed origins.</p>
+        ) : (
+          <div className="space-y-3">
+            <label htmlFor="allowed-origins" className="sr-only">Allowed origins</label>
+            <textarea
+              id="allowed-origins"
+              rows={5}
+              className="w-full rounded-md border border-gray-700 bg-gray-950 px-3 py-2 font-mono text-sm text-gray-100 focus:border-gray-500 focus:outline-none"
+              value={allowedOriginsText}
+              onChange={(e) => setAllowedOriginsText(e.target.value)}
+              placeholder={'app.example.com\n*.example.com\nlocalhost:3000'}
+            />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={saveAllowedOrigins}
+                className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500"
+              >
+                Save
+              </button>
+              {allowedOriginsStatus && (
+                <span
+                  className={`text-xs ${
+                    allowedOriginsStatus.startsWith('Error') ? 'text-red-400' : 'text-gray-400'
+                  }`}
+                >
+                  {allowedOriginsStatus}
+                </span>
+              )}
+            </div>
+          </div>
         )}
       </section>
 

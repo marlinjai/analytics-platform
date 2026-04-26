@@ -165,6 +165,7 @@ export interface Project {
   id: string;
   name: string;
   domain: string;
+  allowedOrigins: string[];
   createdAt: string;
   updatedAt: string;
 }
