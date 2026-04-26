@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { updateProjectSchema } from '@analytics-platform/shared';
 import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
 import { getDb } from '@/lib/db';
 
@@ -35,13 +36,22 @@ async function updateProject(request: NextRequest, params: Promise<{ projectId: 
     return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
-  const body = await request.json();
-  const db = getDb();
+  const rawBody = await request.json();
+  const parsed = updateProjectSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Validation failed', details: parsed.error.issues },
+      { status: 400 }
+    );
+  }
+  const { name, domain, allowedOrigins } = parsed.data;
 
+  const db = getDb();
   const [project] = await db`
     UPDATE projects
-    SET name = COALESCE(${body.name ?? null}, name),
-        domain = COALESCE(${body.domain ?? null}, domain),
+    SET name = COALESCE(${name ?? null}, name),
+        domain = COALESCE(${domain ?? null}, domain),
+        allowed_origins = COALESCE(${allowedOrigins ?? null}, allowed_origins),
         updated_at = now()
     WHERE id = ${projectId}
     RETURNING *

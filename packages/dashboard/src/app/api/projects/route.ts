@@ -42,11 +42,11 @@ export async function POST(request: NextRequest) {
   }
 
   const db = getDb();
-  const { name, domain } = parsed.data;
+  const { name, domain, allowedOrigins } = parsed.data;
 
   const [project] = await db`
-    INSERT INTO projects (name, domain)
-    VALUES (${name}, ${domain})
+    INSERT INTO projects (name, domain, allowed_origins)
+    VALUES (${name}, ${domain}, ${allowedOrigins})
     RETURNING *
   `;
 
