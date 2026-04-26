@@ -30,6 +30,11 @@ describe('originIsAllowed', () => {
     expect(originIsAllowed('http://localhost:9999', ['localhost:3100'])).toBe(false);
   });
 
+  it('matches when the input is a full URL with path (Referer fallback)', () => {
+    expect(originIsAllowed('https://example.com/dashboard?q=1', ['example.com'])).toBe(true);
+    expect(originIsAllowed('https://app.lolastories.com/path', ['*.lolastories.com'])).toBe(true);
+  });
+
   it('rejects malformed origins', () => {
     expect(originIsAllowed('not-a-url', ['example.com'])).toBe(false);
     expect(originIsAllowed('', ['example.com'])).toBe(false);

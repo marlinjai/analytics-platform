@@ -6,6 +6,13 @@
  * `originIsAllowed` parses the request Origin/Referer and matches it.
  *
  * Empty allowlist means "no restriction" so legacy projects keep working.
+ *
+ * Notes:
+ * - Browsers omit default ports from the Origin header. An entry like
+ *   `example.com:443` will never match `https://example.com` because the
+ *   parsed request port is empty. Store the bare host instead.
+ * - The `origin` argument may be a full URL (e.g. a Referer with path and
+ *   query string). `new URL()` extracts the hostname cleanly in both shapes.
  */
 
 export function normalizeOriginEntry(input: string): string {
