@@ -561,7 +561,7 @@ function printNextSteps(fw: Framework): void {
 
   log('');
   log(`  ${DIM}The .claude/skills/lumitra.md file teaches Claude Code how to`);
-  log(`  create and manage A/B tests via the Lumitra API.${RESET}`);
+  log(`  create and manage A/B tests via the Lumitra Analytics API.${RESET}`);
   log('');
 }
 
@@ -572,7 +572,7 @@ function printNextSteps(fw: Framework): void {
 async function runInit(cwd: string, skillOnly: boolean, infisicalEnvOverride?: string): Promise<void> {
   const fw = detectFramework(cwd);
 
-  heading(`Lumitra Analytics — init`);
+  heading(`Lumitra — analytics init`);
   log(`  Detected framework: ${BOLD}${frameworkLabel(fw)}${RESET}`);
   log(`  Project root: ${DIM}${cwd}${RESET}`);
   log('');
@@ -613,18 +613,18 @@ async function runLogout(): Promise<void> {
 
 function printHelp(): void {
   log('');
-  log(`${BOLD}Lumitra Analytics CLI${RESET}`);
+  log(`${BOLD}Lumitra CLI${RESET}`);
   log('');
   log('Usage:');
-  log(`  ${CYAN}lumitra init${RESET}                          Set up Lumitra in the current project`);
-  log(`  ${CYAN}lumitra init --skill${RESET}                  Only install the Claude Code skill file`);
-  log(`  ${CYAN}lumitra init --infisical-env=prod${RESET}     Write secrets to Infisical instead of .env.local`);
-  log(`  ${CYAN}lumitra logout${RESET}                        Remove cached credentials`);
-  log(`  ${CYAN}lumitra --help${RESET}                        Show this help message`);
-  log(`  ${CYAN}lumitra --version${RESET}                     Show version`);
+  log(`  ${CYAN}lumitra analytics init${RESET}                          Set up Lumitra Analytics in the current project`);
+  log(`  ${CYAN}lumitra analytics init --skill${RESET}                  Only install the Claude Code skill file`);
+  log(`  ${CYAN}lumitra analytics init --infisical-env=prod${RESET}     Write secrets to Infisical instead of .env.local`);
+  log(`  ${CYAN}lumitra logout${RESET}                                   Remove cached credentials`);
+  log(`  ${CYAN}lumitra --help${RESET}                                   Show this help message`);
+  log(`  ${CYAN}lumitra --version${RESET}                                Show version`);
   log('');
   log('Authentication:');
-  log(`  On first run, ${CYAN}lumitra init${RESET} opens your browser to authenticate.`);
+  log(`  On first run, ${CYAN}lumitra analytics init${RESET} opens your browser to authenticate.`);
   log(`  Credentials are cached in ~/.lumitra/credentials.json.`);
   log('');
   log(`  ${DIM}You can also set LUMITRA_ACCOUNT_KEY and LUMITRA_ENDPOINT${RESET}`);
@@ -651,10 +651,12 @@ async function main(): Promise<void> {
   }
 
   const command = args[0];
+  const subcommand = args[1];
 
-  if (command === 'init') {
-    const skillOnly = args.includes('--skill');
-    const infisicalEnvFlag = args.find((a) => a.startsWith('--infisical-env='));
+  if (command === 'analytics' && subcommand === 'init') {
+    const flags = args.slice(2);
+    const skillOnly = flags.includes('--skill');
+    const infisicalEnvFlag = flags.find((a) => a.startsWith('--infisical-env='));
     const infisicalEnv = infisicalEnvFlag ? infisicalEnvFlag.split('=')[1] : undefined;
     await runInit(cwd, skillOnly, infisicalEnv);
     return;
@@ -670,7 +672,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  log(`Unknown command: ${command}`);
+  log(`Unknown command: ${[command, subcommand].filter(Boolean).join(' ')}`);
   printHelp();
   process.exit(1);
 }
