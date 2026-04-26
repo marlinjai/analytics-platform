@@ -71,6 +71,7 @@ export {
   sessionListQuerySchema,
   replayQuerySchema,
   createProjectSchema,
+  updateProjectSchema,
   createApiKeySchema,
   pageVersionQuerySchema,
   pageSnapshotQuerySchema,
