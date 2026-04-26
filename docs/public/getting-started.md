@@ -39,7 +39,44 @@ Opens at [http://localhost:3000](http://localhost:3000).
 
 The tracker is **cookie-free** and does not fingerprint users — no consent banner required under GDPR/ePrivacy.
 
-### Install via npm
+### Quick setup via CLI (recommended)
+
+The `lumitra` CLI creates your analytics project, generates an API key, and writes the required environment variables in one command.
+
+```bash
+npx @marlinjai/lumitra-cli analytics init
+```
+
+On first run it opens your browser to authenticate against your dashboard. Credentials are cached at `~/.lumitra/credentials.json` for subsequent runs.
+
+**What it does:**
+
+1. Authenticates via device code flow (browser, one-time)
+2. Creates an analytics project for the current directory (or reuses one if the domain already exists)
+3. Generates an `ap_live_` API key
+4. Writes `NEXT_PUBLIC_ANALYTICS_PROJECT_ID`, `NEXT_PUBLIC_ANALYTICS_API_KEY`, and `NEXT_PUBLIC_ANALYTICS_ENDPOINT` to `.env.local`
+
+**Infisical users** — if `.infisical.json` is present in the project directory, the CLI writes directly to Infisical instead of `.env.local`:
+
+```bash
+# Single app
+npx @marlinjai/lumitra-cli analytics init --infisical-env=prod
+
+# Monorepo with per-app Infisical folders — run from the app subdirectory
+npx @marlinjai/lumitra-cli analytics init --infisical-env=prod --infisical-path=/landing
+```
+
+The `--infisical-path` flag maps to the folder path within your Infisical project, so secrets for each app land in the right place and Vercel sync picks them up automatically without any manual copy-paste.
+
+**All flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--skill` | Only install the Claude Code skill file, skip credentials |
+| `--infisical-env=<env>` | Write to this Infisical environment (default: project's `defaultEnvironment`) |
+| `--infisical-path=<path>` | Write to this Infisical folder path (e.g. `/landing`) |
+
+### Install via npm (manual)
 
 ```bash
 pnpm add @marlinjai/analytics-tracker
