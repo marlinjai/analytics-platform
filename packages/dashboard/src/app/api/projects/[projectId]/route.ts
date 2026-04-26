@@ -47,6 +47,8 @@ async function updateProject(request: NextRequest, params: Promise<{ projectId: 
   const { name, domain, allowedOrigins } = parsed.data;
 
   const db = getDb();
+  // An explicit allowedOrigins: [] clears the list (revert to legacy allow-all).
+  // Omitted (undefined) leaves the column unchanged via the COALESCE fallback.
   const [project] = await db`
     UPDATE projects
     SET name = COALESCE(${name ?? null}, name),
