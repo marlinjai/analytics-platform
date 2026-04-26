@@ -391,8 +391,50 @@ async function ensureProjectKey(
 }
 
 // ---------------------------------------------------------------------------
-// Step 4: Write env vars
+// Step 4: Write env vars — .env.local or Infisical
 // ---------------------------------------------------------------------------
+
+interface InfisicalConfig {
+  workspaceId: string;
+  defaultEnvironment: string;
+}
+
+function readInfisicalConfig(cwd: string): InfisicalConfig | null {
+  const p = join(cwd, '.infisical.json');
+  if (!existsSync(p)) return null;
+  try {
+    const data = JSON.parse(readFileSync(p, 'utf-8'));
+    if (data.workspaceId) return data as InfisicalConfig;
+  } catch { /* ignore */ }
+  return null;
+}
+
+async function installViaInfisical(
+  cwd: string,
+  projectId: string,
+  apiKey: string,
+  endpoint: string,
+  infisicalConfig: InfisicalConfig,
+  infisicalEnv: string,
+): Promise<void> {
+  const { execSync } = await import('node:child_process');
+  const wid = infisicalConfig.workspaceId;
+
+  const vars: Record<string, string> = {
+    NEXT_PUBLIC_ANALYTICS_PROJECT_ID: projectId,
+    NEXT_PUBLIC_ANALYTICS_API_KEY: apiKey,
+    NEXT_PUBLIC_ANALYTICS_ENDPOINT: `${endpoint}/api/collect`,
+  };
+
+  for (const [key, value] of Object.entries(vars)) {
+    execSync(
+      `infisical secrets set "${key}=${value}" --env=${infisicalEnv} --projectId=${wid}`,
+      { stdio: 'pipe' },
+    );
+  }
+
+  success(`Set 3 variables in Infisical (env: ${infisicalEnv}) — Vercel sync will pick them up automatically`);
+}
 
 function installEnvFile(
   cwd: string,
@@ -527,7 +569,7 @@ function printNextSteps(fw: Framework): void {
 // Commands
 // ---------------------------------------------------------------------------
 
-async function runInit(cwd: string, skillOnly: boolean): Promise<void> {
+async function runInit(cwd: string, skillOnly: boolean, infisicalEnvOverride?: string): Promise<void> {
   const fw = detectFramework(cwd);
 
   heading(`Lumitra Analytics — init`);
@@ -541,7 +583,20 @@ async function runInit(cwd: string, skillOnly: boolean): Promise<void> {
     const { accountKey, endpoint } = await ensureAccountKey();
     const { projectId, projectName } = await ensureProject(accountKey, endpoint, cwd);
     const apiKey = await ensureProjectKey(accountKey, endpoint, projectId, projectName, cwd);
-    installEnvFile(cwd, projectId, apiKey, endpoint);
+
+    const infisicalConfig = readInfisicalConfig(cwd);
+    if (infisicalConfig) {
+      const env = infisicalEnvOverride ?? infisicalConfig.defaultEnvironment ?? 'prod';
+      log(`  ${DIM}Found .infisical.json — writing secrets to Infisical (env: ${env})${RESET}`);
+      try {
+        await installViaInfisical(cwd, projectId, apiKey, endpoint, infisicalConfig, env);
+      } catch (err) {
+        warn(`Infisical write failed (${(err as Error).message}) — falling back to .env.local`);
+        installEnvFile(cwd, projectId, apiKey, endpoint);
+      }
+    } else {
+      installEnvFile(cwd, projectId, apiKey, endpoint);
+    }
   }
 
   printNextSteps(fw);
@@ -561,11 +616,12 @@ function printHelp(): void {
   log(`${BOLD}Lumitra Analytics CLI${RESET}`);
   log('');
   log('Usage:');
-  log(`  ${CYAN}lumitra init${RESET}          Set up Lumitra in the current project`);
-  log(`  ${CYAN}lumitra init --skill${RESET}  Only install the Claude Code skill file`);
-  log(`  ${CYAN}lumitra logout${RESET}        Remove cached credentials`);
-  log(`  ${CYAN}lumitra --help${RESET}        Show this help message`);
-  log(`  ${CYAN}lumitra --version${RESET}     Show version`);
+  log(`  ${CYAN}lumitra init${RESET}                          Set up Lumitra in the current project`);
+  log(`  ${CYAN}lumitra init --skill${RESET}                  Only install the Claude Code skill file`);
+  log(`  ${CYAN}lumitra init --infisical-env=prod${RESET}     Write secrets to Infisical instead of .env.local`);
+  log(`  ${CYAN}lumitra logout${RESET}                        Remove cached credentials`);
+  log(`  ${CYAN}lumitra --help${RESET}                        Show this help message`);
+  log(`  ${CYAN}lumitra --version${RESET}                     Show version`);
   log('');
   log('Authentication:');
   log(`  On first run, ${CYAN}lumitra init${RESET} opens your browser to authenticate.`);
@@ -598,7 +654,9 @@ async function main(): Promise<void> {
 
   if (command === 'init') {
     const skillOnly = args.includes('--skill');
-    await runInit(cwd, skillOnly);
+    const infisicalEnvFlag = args.find((a) => a.startsWith('--infisical-env='));
+    const infisicalEnv = infisicalEnvFlag ? infisicalEnvFlag.split('=')[1] : undefined;
+    await runInit(cwd, skillOnly, infisicalEnv);
     return;
   }
 
