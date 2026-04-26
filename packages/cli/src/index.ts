@@ -416,9 +416,11 @@ async function installViaInfisical(
   endpoint: string,
   infisicalConfig: InfisicalConfig,
   infisicalEnv: string,
+  infisicalPath?: string,
 ): Promise<void> {
   const { execSync } = await import('node:child_process');
   const wid = infisicalConfig.workspaceId;
+  const pathFlag = infisicalPath ? ` --path=${infisicalPath}` : '';
 
   const vars: Record<string, string> = {
     NEXT_PUBLIC_ANALYTICS_PROJECT_ID: projectId,
@@ -428,12 +430,13 @@ async function installViaInfisical(
 
   for (const [key, value] of Object.entries(vars)) {
     execSync(
-      `infisical secrets set "${key}=${value}" --env=${infisicalEnv} --projectId=${wid}`,
+      `infisical secrets set "${key}=${value}" --env=${infisicalEnv} --projectId=${wid}${pathFlag}`,
       { stdio: 'pipe' },
     );
   }
 
-  success(`Set 3 variables in Infisical (env: ${infisicalEnv}) — Vercel sync will pick them up automatically`);
+  const location = infisicalPath ? `env: ${infisicalEnv}, path: ${infisicalPath}` : `env: ${infisicalEnv}`;
+  success(`Set 3 variables in Infisical (${location}) — Vercel sync will pick them up automatically`);
 }
 
 function installEnvFile(
@@ -569,7 +572,7 @@ function printNextSteps(fw: Framework): void {
 // Commands
 // ---------------------------------------------------------------------------
 
-async function runInit(cwd: string, skillOnly: boolean, infisicalEnvOverride?: string): Promise<void> {
+async function runInit(cwd: string, skillOnly: boolean, infisicalEnvOverride?: string, infisicalPath?: string): Promise<void> {
   const fw = detectFramework(cwd);
 
   heading(`Lumitra — analytics init`);
@@ -589,7 +592,7 @@ async function runInit(cwd: string, skillOnly: boolean, infisicalEnvOverride?: s
       const env = infisicalEnvOverride ?? infisicalConfig.defaultEnvironment ?? 'prod';
       log(`  ${DIM}Found .infisical.json — writing secrets to Infisical (env: ${env})${RESET}`);
       try {
-        await installViaInfisical(cwd, projectId, apiKey, endpoint, infisicalConfig, env);
+        await installViaInfisical(cwd, projectId, apiKey, endpoint, infisicalConfig, env, infisicalPath);
       } catch (err) {
         warn(`Infisical write failed (${(err as Error).message}) — falling back to .env.local`);
         installEnvFile(cwd, projectId, apiKey, endpoint);
@@ -616,9 +619,11 @@ function printHelp(): void {
   log(`${BOLD}Lumitra CLI${RESET}`);
   log('');
   log('Usage:');
-  log(`  ${CYAN}lumitra analytics init${RESET}                          Set up Lumitra Analytics in the current project`);
-  log(`  ${CYAN}lumitra analytics init --skill${RESET}                  Only install the Claude Code skill file`);
-  log(`  ${CYAN}lumitra analytics init --infisical-env=prod${RESET}     Write secrets to Infisical instead of .env.local`);
+  log(`  ${CYAN}lumitra analytics init${RESET}                                   Set up Lumitra Analytics in the current project`);
+  log(`  ${CYAN}lumitra analytics init --skill${RESET}                           Only install the Claude Code skill file`);
+  log(`  ${CYAN}lumitra analytics init --infisical-env=prod${RESET}              Write secrets to Infisical instead of .env.local`);
+  log(`  ${CYAN}lumitra analytics init --infisical-path=/landing${RESET}         Write to a specific Infisical folder (monorepo)`);
+  log(`  ${CYAN}lumitra analytics init --infisical-env=prod --infisical-path=/landing${RESET}`);
   log(`  ${CYAN}lumitra logout${RESET}                                   Remove cached credentials`);
   log(`  ${CYAN}lumitra --help${RESET}                                   Show this help message`);
   log(`  ${CYAN}lumitra --version${RESET}                                Show version`);
@@ -658,7 +663,9 @@ async function main(): Promise<void> {
     const skillOnly = flags.includes('--skill');
     const infisicalEnvFlag = flags.find((a) => a.startsWith('--infisical-env='));
     const infisicalEnv = infisicalEnvFlag ? infisicalEnvFlag.split('=')[1] : undefined;
-    await runInit(cwd, skillOnly, infisicalEnv);
+    const infisicalPathFlag = flags.find((a) => a.startsWith('--infisical-path='));
+    const infisicalPath = infisicalPathFlag ? infisicalPathFlag.split('=')[1] : undefined;
+    await runInit(cwd, skillOnly, infisicalEnv, infisicalPath);
     return;
   }
 
