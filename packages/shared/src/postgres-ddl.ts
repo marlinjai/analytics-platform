@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_projects_allowed_origins ON projects USING GIN (allowed_origins);
 `;
 
 export const CREATE_MEMBERSHIPS_TABLE = `
