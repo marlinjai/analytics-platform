@@ -104,6 +104,18 @@ describe('POST /api/collect — origin gating', () => {
     expect(insertEvents).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects with 401 when the project row is missing (deleted project)', async () => {
+    vi.mocked(getDb).mockReturnValue(
+      ((..._args: unknown[]) => Promise.resolve([])) as never
+    );
+
+    const req = makeRequest('https://app.lolastories.com', [makeEvent()]);
+    const res = await POST(req);
+
+    expect(res.status).toBe(401);
+    expect(insertEvents).not.toHaveBeenCalled();
+  });
+
   it('falls back to Referer when Origin header is missing', async () => {
     mockProjectRow(['app.lolastories.com']);
 
