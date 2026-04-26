@@ -302,7 +302,8 @@ export default function SettingsPage() {
     const project = projects.find((p) => p.id === selectedProjectId);
     setAllowedOriginsText((project?.allowed_origins ?? []).join('\n'));
     setAllowedOriginsStatus('');
-  }, [selectedProjectId, projects]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- projects intentionally omitted; saves update state directly
+  }, [selectedProjectId]);
 
   async function copyToClipboard(text: string) {
     await navigator.clipboard.writeText(text);
@@ -517,7 +518,7 @@ export default function SettingsPage() {
     setProjects((prev) =>
       prev.map((p) =>
         p.id === selectedProjectId
-          ? { ...p, allowed_origins: data.project.allowed_origins ?? [] }
+          ? { ...p, allowed_origins: data.project?.allowed_origins ?? [] }
           : p
       )
     );
@@ -672,7 +673,9 @@ export default function SettingsPage() {
           <p className="text-sm text-gray-400">Select a project above to configure allowed origins.</p>
         ) : (
           <div className="space-y-3">
+            <label htmlFor="allowed-origins" className="sr-only">Allowed origins</label>
             <textarea
+              id="allowed-origins"
               rows={5}
               className="w-full rounded-md border border-gray-700 bg-gray-950 px-3 py-2 font-mono text-sm text-gray-100 focus:border-gray-500 focus:outline-none"
               value={allowedOriginsText}
@@ -688,7 +691,13 @@ export default function SettingsPage() {
                 Save
               </button>
               {allowedOriginsStatus && (
-                <span className="text-xs text-gray-400">{allowedOriginsStatus}</span>
+                <span
+                  className={`text-xs ${
+                    allowedOriginsStatus.startsWith('Error') ? 'text-red-400' : 'text-gray-400'
+                  }`}
+                >
+                  {allowedOriginsStatus}
+                </span>
               )}
             </div>
           </div>
