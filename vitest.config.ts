@@ -18,6 +18,8 @@ export default defineConfig({
       },
       // dashboard package tests (uses its own config for @/ alias)
       'packages/dashboard/vitest.config.ts',
+      // tracker package tests (jsdom environment)
+      'packages/tracker/vitest.config.ts',
     ],
   },
 });
