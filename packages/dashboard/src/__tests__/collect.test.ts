@@ -99,9 +99,9 @@ describe('POST /api/collect', () => {
       await POST(req);
 
       expect(insertEvents).toHaveBeenCalledOnce();
-      const [[storedEvents]] = vi.mocked(insertEvents).mock.calls;
+      const [storedEvents] = vi.mocked(insertEvents).mock.calls[0]!;
       expect(storedEvents).toHaveLength(1);
-      expect(storedEvents[0].projectId).toBe(VALID_PROJECT_ID);
+      expect(storedEvents[0]!.projectId).toBe(VALID_PROJECT_ID);
       // Enrichment adds eventId, ipHash, country, receivedAt
       expect(storedEvents[0]).toHaveProperty('eventId');
       expect(storedEvents[0]).toHaveProperty('ipHash');
