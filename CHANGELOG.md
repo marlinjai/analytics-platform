@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **Session replay: sub-10s sessions are no longer lost** (`@marlinjai/analytics-tracker` 1.3.1). The rrweb chunk buffer only flushed on a 10s interval or when it exceeded 512KB, so consented sessions shorter than ~10s produced zero `replay_chunk` events and never appeared in the Replay tab. The tracker now flushes the buffer on `pagehide` and `visibilitychange: hidden`, and `stopReplay()` flushes-then-clears instead of discarding. Added a public `tracker.flush()` so replay can force a send independent of the batcher's own hide listener.
+
 ## [0.7.0] - 2026-04-26
 
 ### Added
