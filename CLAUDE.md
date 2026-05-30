@@ -7,7 +7,7 @@ Self-hosted analytics, heatmap, and session replay platform. Monorepo with pnpm 
 
 ## Package Structure
 - `packages/shared` — Contract layer: TypeScript types, Zod schemas, ClickHouse + Postgres DDL, exported as `@analytics-platform/shared`
-- `packages/tracker` — Browser SDK (`@marlinjai/analytics-tracker`, <5KB gzip, zero runtime deps, rrweb optional peer dep)
+- `packages/tracker` — Browser SDK (`@marlinjai/analytics-tracker`, <6KB gzip, zero runtime deps, rrweb optional peer dep)
 - `packages/dashboard` — Next.js 15 app: both API routes and UI, `@analytics-platform/dashboard`
 - `packages/react` — React hooks for A/B testing and feature flags (`@marlinjai/analytics-react`, published)
 - `packages/cli` — CLI tool for project setup (`@marlinjai/lumitra-cli`, published as `lumitra` bin)
