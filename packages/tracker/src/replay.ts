@@ -19,6 +19,10 @@ export async function initReplay(
     return; // rrweb not installed, graceful no-op
   }
 
+  // rrweb 2.0-alpha ships inconsistent option types across its sub-packages:
+  // `maskAllText` is a real, supported record() option at runtime but is
+  // missing from the `recordOptions` generic that this build resolves, so the
+  // literal needs a cast to the actual parameter type record() expects.
   stopRecording = rrweb.record({
     // Privacy defaults: always mask inputs unless explicitly disabled
     maskAllInputs: privacy?.maskAllInputs !== false,
@@ -44,7 +48,7 @@ export async function initReplay(
         flushChunk(tracker);
       }
     },
-  }) ?? null;
+  } as Parameters<typeof rrweb.record>[0]) ?? null;
 
   replayTimer = setInterval(() => flushChunk(tracker), CHUNK_FLUSH_INTERVAL);
 }
