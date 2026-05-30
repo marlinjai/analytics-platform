@@ -222,6 +222,15 @@ export class AnalyticsTracker {
     this.batcher.add(event);
   }
 
+  /**
+   * Force the event batch to flush now. Used by session replay to drain its
+   * buffered chunks before the page goes away, independent of the batcher's
+   * own pagehide listener (which may have already fired).
+   */
+  flush(useBeacon = false): Promise<void> {
+    return this.batcher.flush(useBeacon);
+  }
+
   destroy(): void {
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups = [];

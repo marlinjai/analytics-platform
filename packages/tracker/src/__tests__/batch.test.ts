@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventBatcher } from '../batch.js';
-import type { TrackerEvent } from '@analytics-platform/shared';
+import type { TrackerEvent } from '../constants';
 
 const makeEvent = (overrides: Partial<TrackerEvent> = {}): TrackerEvent => ({
   type: 'pageview',
