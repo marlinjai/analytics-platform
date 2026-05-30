@@ -8,7 +8,7 @@ Self-hosted analytics, heatmap, and session replay platform.
 
 ## Features
 
-- **Pageview & event tracking** — lightweight browser SDK (<5KB gzip)
+- **Pageview & event tracking** — lightweight browser SDK (<6KB gzip)
 - **Click heatmaps** — visualize where users click on any page
 - **Session replay** — watch real user sessions with rrweb
 - **Privacy-first** — self-hosted, no third-party data sharing, IP hashing

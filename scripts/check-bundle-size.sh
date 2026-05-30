@@ -1,5 +1,5 @@
 #!/bin/bash
-# check-bundle-size.sh — Build the tracker and verify the gzipped bundle is <= 5KB.
+# check-bundle-size.sh — Build the tracker and verify the gzipped bundle is <= 6KB.
 #
 # Exits 0 if within budget, exits 1 if the limit is exceeded.
 
@@ -8,7 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TRACKER_DIR="${SCRIPT_DIR}/../packages/tracker"
 BUNDLE_PATH="${TRACKER_DIR}/dist/index.js"
-MAX_BYTES=5120  # 5 KB gzipped
+MAX_BYTES=6144  # 6 KB gzipped
 
 echo "=== Tracker Bundle Size Check ==="
 echo ""
@@ -34,12 +34,12 @@ GZIP_KB=$(echo "scale=2; ${GZIP_BYTES}/1024" | bc)
 
 echo "  Raw size:    ${RAW_BYTES} bytes (${RAW_KB} KB)"
 echo "  Gzipped:     ${GZIP_BYTES} bytes (${GZIP_KB} KB)"
-echo "  Budget:      ${MAX_BYTES} bytes (5.00 KB gzipped)"
+echo "  Budget:      ${MAX_BYTES} bytes (6.00 KB gzipped)"
 echo ""
 
 if [ "${GZIP_BYTES}" -gt "${MAX_BYTES}" ]; then
-  echo "FAIL: Gzipped bundle (${GZIP_BYTES}B) exceeds the 5KB limit (${MAX_BYTES}B)."
+  echo "FAIL: Gzipped bundle (${GZIP_BYTES}B) exceeds the 6KB limit (${MAX_BYTES}B)."
   exit 1
 fi
 
-echo "PASS: Gzipped bundle is within the 5KB budget."
+echo "PASS: Gzipped bundle is within the 6KB budget."

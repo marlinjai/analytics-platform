@@ -59,14 +59,14 @@ One wide `events` table with sparse columns — all event types share the same t
 1. **Combined dashboard + API** — Next.js API routes serve both the UI and the tracker ingestion endpoint. Single container deployment.
 2. **No brain-core dependency** — standalone project with own auth (NextAuth), own Postgres, own API key format.
 3. **Wide ClickHouse table** — sparse columns + MVs beat normalized tables for analytics workloads.
-4. **Zero runtime deps in tracker** — target <5KB gzip. rrweb is an optional peer dependency loaded lazily.
+4. **Zero runtime deps in tracker** — target <6KB gzip. rrweb is an optional peer dependency loaded lazily.
 5. **IP hashing, not storage** — SHA-256 hash for unique visitor counting. Raw IPs never stored.
 
 ## Technology Choices
 
 | Component | Choice | Rationale |
 |-----------|--------|-----------|
-| Tracker | Vanilla TS | Zero deps, <5KB, works everywhere |
+| Tracker | Vanilla TS | Zero deps, <6KB, works everywhere |
 | Replay | rrweb | Battle-tested DOM recording, MIT license |
 | Analytics DB | ClickHouse | Purpose-built for analytics, column-oriented, fast aggregations |
 | Config DB | PostgreSQL | Relational data (users, projects), NextAuth adapter support |

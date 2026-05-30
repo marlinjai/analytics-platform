@@ -4,7 +4,7 @@ Self-hosted analytics, heatmap, and session replay platform.
 
 ## Features
 
-- **Lightweight tracker** — <5KB gzip browser SDK, zero runtime dependencies
+- **Lightweight tracker** — <6KB gzip browser SDK, zero runtime dependencies
 - **Click heatmaps** — canvas-based visualization of click patterns
 - **Session replay** — rrweb-powered DOM recording and playback
 - **Privacy-first** — self-hosted, IP hashing (never stored raw), no third-party data sharing

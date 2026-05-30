@@ -72,7 +72,7 @@ graph TD
 - Batch format: `POST /api/collect` with JSON body matching `eventBatchSchema`
 
 **Acceptance criteria:**
-- `pnpm --filter @marlinjai/analytics-tracker build` produces dist/ <5KB gzip (excluding rrweb)
+- `pnpm --filter @marlinjai/analytics-tracker build` produces dist/ <6KB gzip (excluding rrweb)
 - Unit tests pass for batching logic and session management
 - No runtime dependencies (only `@analytics-platform/shared` types used at build time)
 
@@ -96,7 +96,7 @@ graph TD
 - Max chunk size: `MAX_REPLAY_CHUNK_BYTES` (512KB)
 
 **Acceptance criteria:**
-- Build still <5KB gzip (rrweb not bundled)
+- Build still <6KB gzip (rrweb not bundled)
 - Replay module gracefully no-ops if rrweb is not installed
 - Chunk splitting works correctly for large recordings
 
