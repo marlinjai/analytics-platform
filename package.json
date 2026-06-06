@@ -26,5 +26,10 @@
   "packageManager": "pnpm@9.15.4",
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "overrides": {
+      "@marlinjai/auth-brain-shared": "file:../lumitra-infra/auth-brain/packages/shared"
+    }
   }
 }

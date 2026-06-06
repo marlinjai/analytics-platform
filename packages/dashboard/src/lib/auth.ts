@@ -1,71 +1,46 @@
-import NextAuth from 'next-auth';
-import GitHub from 'next-auth/providers/github';
-import Credentials from 'next-auth/providers/credentials';
-import bcrypt from 'bcryptjs';
-import { getDb } from './db';
-import { createPostgresAdapter } from './auth-adapter';
+/**
+ * auth.ts — shim replacing NextAuth with auth-brain session verification.
+ *
+ * Exports a drop-in `auth()` function that reads the lumitra_session cookie
+ * and returns a session object in the same shape the rest of the codebase
+ * expects: `{ user: { id, email, name, image } } | null`.
+ *
+ * All existing `const session = await auth(); session?.user?.id` call-sites
+ * continue to work unchanged.
+ */
 
-declare module 'next-auth' {
-  interface Session {
-    user: {
-      id: string;
-      email: string;
-      name?: string | null;
-      image?: string | null;
-    };
-  }
+import { cookies } from 'next/headers';
+import { authBrainClient } from './auth-brain';
+
+export interface CompatSession {
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+    image: string | null;
+  };
 }
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  trustHost: true,
-  adapter: createPostgresAdapter(),
-  session: { strategy: 'jwt' },
-  pages: {
-    signIn: '/login',
-  },
-  providers: [
-    GitHub,
-    Credentials({
-      name: 'Email',
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+export async function auth(): Promise<CompatSession | null> {
+  const jar = await cookies();
+  const cookie = jar.get('lumitra_session')?.value;
+  if (!cookie) return null;
 
-        const db = getDb();
-        const [user] = await db`
-          SELECT id, email, name, avatar_url, password_hash
-          FROM users
-          WHERE email = ${credentials.email as string}
-        `;
+  const session = await authBrainClient.verifySession(cookie);
+  if (!session) return null;
 
-        if (!user?.password_hash) return null;
-
-        const valid = await bcrypt.compare(
-          credentials.password as string,
-          user.password_hash as string
-        );
-        if (!valid) return null;
-
-        return {
-          id: user.id as string,
-          email: user.email as string,
-          name: (user.name as string) ?? null,
-          image: (user.avatar_url as string) ?? null,
-        };
-      },
-    }),
-  ],
-  callbacks: {
-    jwt({ token, user }) {
-      if (user?.id) token.id = user.id;
-      return token;
+  return {
+    user: {
+      id: session.user.id,
+      email: session.user.email,
+      name: session.user.name ?? null,
+      image: session.user.picture ?? null,
     },
-    session({ session, token }) {
-      if (token.id) session.user.id = token.id as string;
-      return session;
-    },
-  },
-});
+  };
+}
+
+// Stubs — no longer used; kept so any import of `signIn`/`signOut`/`handlers`
+// does not break at build time. Remove once all call-sites are cleaned up.
+export const signIn = () => { throw new Error('Use auth-brain login instead'); };
+export const signOut = () => { throw new Error('Use auth-brain logout instead'); };
+export const handlers = { GET: signIn, POST: signIn };

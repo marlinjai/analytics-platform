@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
-import { auth } from '@/lib/auth';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { cookies } from 'next/headers';
+import { authBrainClient } from '@/lib/auth-brain';
+import { checkProjectAccess } from '@/lib/auth-check';
 import { validateApiKey } from '@/lib/api-key';
 
 type AuthSuccess = {
@@ -17,56 +18,57 @@ type AuthFailure = {
 
 type AuthResult = AuthSuccess | AuthFailure;
 
+async function getSessionUserId(): Promise<string | null> {
+  const jar = await cookies();
+  const cookie = jar.get('lumitra_session')?.value;
+  if (!cookie) return null;
+  const session = await authBrainClient.verifySession(cookie);
+  return session?.user?.id ?? null;
+}
+
 /**
- * Authenticate a request via session (cookie) or API key (X-API-Key header).
+ * Authenticate a request via session (lumitra_session cookie) or API key.
  *
- * 1. Try session auth first (existing auth() + checkProjectMembership())
+ * 1. Try session cookie -> verifySession() -> checkProjectAccess() via OpenFGA
  * 2. If no session, try API key from X-API-Key header
- * 3. For project keys: verify the key's projectId matches the route's projectId
- * 4. For account keys: verify the user has membership to the route's project
- * 5. API keys get implicit 'admin' role (they can create/manage experiments)
+ * 3. Project keys: verify the key's projectId matches the route's projectId
+ * 4. Account keys: verify user has workspace access to the route's project
+ * 5. API keys carry implicit "admin" access level
+ *
+ * requiredRole maps old role strings to auth-brain workspace roles:
+ *   ['viewer']         -> 'workspace.viewer'
+ *   ['admin', 'owner'] -> 'workspace.admin'
+ *   default            -> 'workspace.viewer'
  */
 export async function authenticateRequest(
   request: NextRequest,
   projectId: string,
   requiredRoles?: string[],
 ): Promise<AuthResult> {
-  // --- Try session auth first ---
-  const session = await auth();
-  if (session?.user?.id) {
-    const hasAccess = await checkProjectMembership(
-      session.user.id,
-      projectId,
-      requiredRoles,
-    );
-    if (!hasAccess) {
-      return { authenticated: false, error: 'Forbidden', status: 403 };
-    }
-    return { authenticated: true, userId: session.user.id, projectId };
+  const requiredRole =
+    requiredRoles && requiredRoles.every((r) => r === 'admin' || r === 'owner')
+      ? 'workspace.admin'
+      : 'workspace.viewer';
+
+  // --- Try session auth ---
+  const userId = await getSessionUserId();
+  if (userId) {
+    const hasAccess = await checkProjectAccess(userId, projectId, requiredRole);
+    if (!hasAccess) return { authenticated: false, error: 'Forbidden', status: 403 };
+    return { authenticated: true, userId, projectId };
   }
 
-  // --- Fall back to API key auth ---
+  // --- Fall back to API key ---
   const apiKey = request.headers.get('x-api-key');
-  if (!apiKey) {
-    return { authenticated: false, error: 'Unauthorized', status: 401 };
-  }
+  if (!apiKey) return { authenticated: false, error: 'Unauthorized', status: 401 };
 
   const keyInfo = await validateApiKey(apiKey);
   if (!keyInfo) {
-    return {
-      authenticated: false,
-      error: 'Invalid or revoked API key',
-      status: 401,
-    };
+    return { authenticated: false, error: 'Invalid or revoked API key', status: 401 };
   }
 
   if (keyInfo.kind === 'account') {
-    // Account key: verify user has membership to this project
-    const hasAccess = await checkProjectMembership(
-      keyInfo.userId,
-      projectId,
-      requiredRoles,
-    );
+    const hasAccess = await checkProjectAccess(keyInfo.userId, projectId, requiredRole);
     if (!hasAccess) {
       return {
         authenticated: false,
@@ -77,22 +79,12 @@ export async function authenticateRequest(
     return { authenticated: true, userId: keyInfo.userId, projectId };
   }
 
-  // Project key: verify it belongs to the project in the route
   if (keyInfo.projectId !== projectId) {
-    return {
-      authenticated: false,
-      error: 'API key does not belong to this project',
-      status: 403,
-    };
+    return { authenticated: false, error: 'API key does not belong to this project', status: 403 };
   }
 
-  // API keys get implicit 'admin' role — if required roles are specified,
-  // check that 'admin' (or 'owner') is among them.
-  if (requiredRoles && requiredRoles.length > 0) {
-    const apiKeyRole = 'admin';
-    if (!requiredRoles.includes(apiKeyRole)) {
-      return { authenticated: false, error: 'Forbidden', status: 403 };
-    }
+  if (requiredRoles && requiredRoles.length > 0 && !requiredRoles.includes('admin')) {
+    return { authenticated: false, error: 'Forbidden', status: 403 };
   }
 
   return { authenticated: true, userId: `apikey:${keyInfo.keyId}`, projectId };
@@ -105,22 +97,14 @@ export async function authenticateRequest(
 export async function authenticateAccountRequest(
   request: NextRequest,
 ): Promise<{ authenticated: true; userId: string } | AuthFailure> {
-  // Try session auth
-  const session = await auth();
-  if (session?.user?.id) {
-    return { authenticated: true, userId: session.user.id };
-  }
+  const userId = await getSessionUserId();
+  if (userId) return { authenticated: true, userId };
 
-  // Try account API key
   const apiKey = request.headers.get('x-api-key');
-  if (!apiKey) {
-    return { authenticated: false, error: 'Unauthorized', status: 401 };
-  }
+  if (!apiKey) return { authenticated: false, error: 'Unauthorized', status: 401 };
 
   const keyInfo = await validateApiKey(apiKey);
-  if (!keyInfo) {
-    return { authenticated: false, error: 'Invalid or revoked API key', status: 401 };
-  }
+  if (!keyInfo) return { authenticated: false, error: 'Invalid or revoked API key', status: 401 };
 
   if (keyInfo.kind !== 'account') {
     return {

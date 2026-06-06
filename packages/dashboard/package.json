@@ -12,10 +12,11 @@
   },
   "dependencies": {
     "@analytics-platform/shared": "workspace:*",
+    "@marlinjai/auth-brain-sdk": "file:../../../lumitra-infra/auth-brain/packages/sdk",
+    "@marlinjai/auth-brain-shared": "file:../../../lumitra-infra/auth-brain/packages/shared",
     "@clickhouse/client": "^1.18.2",
     "bcryptjs": "^3.0.3",
     "next": "^15.1.6",
-    "next-auth": "5.0.0-beta.30",
     "postgres": "^3.4.8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
