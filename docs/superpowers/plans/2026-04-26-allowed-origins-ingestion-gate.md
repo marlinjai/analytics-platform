@@ -1,7 +1,7 @@
 ---
 title: Allowed Origins Ingestion Gate
 type: plan
-status: draft
+status: completed
 date: 2026-04-26
 tags: [ingestion, security, cors, projects]
 summary: Per-project allowed origins list. Tracker initializes everywhere (so flags/experiments work in dev/staging), but /api/collect silently drops events whose Origin doesn't match.

@@ -1,7 +1,7 @@
 ---
 title: Decision — Organization Auth Model (auth-brain vs Standalone)
 type: plan
-status: draft
+status: completed
 date: 2026-05-30
 tags: [decision, adr, auth, organizations, auth-brain]
 summary: The one strategic call that gates the multi-user/organizations work. Adopt the suite-wide auth-brain service now, build a standalone org layer, or build a standalone layer deliberately shaped to migrate onto auth-brain later. Decision PENDING — Marlin.

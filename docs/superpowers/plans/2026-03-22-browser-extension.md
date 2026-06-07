@@ -2,7 +2,7 @@
 title: "Browser Extension for Heatmap Overlay"
 summary: "Chrome/Firefox extension replacing the bookmarklet — works on any site regardless of CSP, React, or SPA stack"
 type: plan
-status: decided
+status: completed
 date: 2026-03-22
 tags: [extension, heatmap, chrome, firefox, browser-extension, overlay]
 projects: [analytics-platform]
