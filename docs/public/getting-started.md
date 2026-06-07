@@ -44,7 +44,7 @@ The tracker is **cookie-free** and does not fingerprint users — no consent ban
 The `lumitra` CLI creates your analytics project, generates an API key, and writes the required environment variables in one command.
 
 ```bash
-npx @marlinjai/lumitra-cli analytics init
+npx @marlinjai/analytics-cli analytics init
 ```
 
 On first run it opens your browser to authenticate against your dashboard. Credentials are cached at `~/.lumitra/credentials.json` for subsequent runs.
@@ -60,10 +60,10 @@ On first run it opens your browser to authenticate against your dashboard. Crede
 
 ```bash
 # Single app
-npx @marlinjai/lumitra-cli analytics init --infisical-env=prod
+npx @marlinjai/analytics-cli analytics init --infisical-env=prod
 
 # Monorepo with per-app Infisical folders — run from the app subdirectory
-npx @marlinjai/lumitra-cli analytics init --infisical-env=prod --infisical-path=/landing
+npx @marlinjai/analytics-cli analytics init --infisical-env=prod --infisical-path=/landing
 ```
 
 The `--infisical-path` flag maps to the folder path within your Infisical project, so secrets for each app land in the right place and Vercel sync picks them up automatically without any manual copy-paste.

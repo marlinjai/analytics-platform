@@ -1,5 +1,5 @@
 {
-  "name": "@marlinjai/lumitra-cli",
+  "name": "@marlinjai/analytics-cli",
   "version": "1.4.0",
   "description": "CLI for setting up Lumitra Analytics in your project",
   "type": "module",
