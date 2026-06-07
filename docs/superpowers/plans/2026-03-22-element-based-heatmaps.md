@@ -2,7 +2,7 @@
 title: "Element-Based Heatmap Tracking"
 summary: "Replace x/y coordinate heatmaps with CSS selector-based element tracking for responsive, industry-standard heatmap overlays"
 type: plan
-status: decided
+status: completed
 date: 2026-03-22
 tags: [extension, heatmap, selector, element-tracking]
 projects: [analytics-platform]
