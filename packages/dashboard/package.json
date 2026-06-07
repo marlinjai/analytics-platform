@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@analytics-platform/shared": "workspace:*",
-    "@marlinjai/auth-brain-sdk": "file:../../../lumitra-infra/auth-brain/packages/sdk",
-    "@marlinjai/auth-brain-shared": "file:../../../lumitra-infra/auth-brain/packages/shared",
+    "@marlinjai/auth-brain-sdk": "^1.0.0",
+    "@marlinjai/auth-brain-shared": "^1.0.0",
     "@clickhouse/client": "^1.18.2",
     "bcryptjs": "^3.0.3",
     "next": "^15.1.6",
