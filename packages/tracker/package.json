@@ -1,5 +1,8 @@
 {
   "name": "@marlinjai/analytics-tracker",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "1.3.1",
   "description": "Lightweight browser analytics tracker — pageviews, clicks, heatmaps, session replay",
   "type": "module",

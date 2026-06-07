@@ -10,7 +10,7 @@ Self-hosted analytics, heatmap, and session replay platform. Monorepo with pnpm 
 - `packages/tracker` — Browser SDK (`@marlinjai/analytics-tracker`, <6KB gzip, zero runtime deps, rrweb optional peer dep)
 - `packages/dashboard` — Next.js 15 app: both API routes and UI, `@analytics-platform/dashboard`
 - `packages/react` — React hooks for A/B testing and feature flags (`@marlinjai/analytics-react`, published)
-- `packages/cli` — CLI tool for project setup (`@marlinjai/lumitra-cli`, published as `lumitra` bin)
+- `packages/cli` — CLI tool for project setup (`@marlinjai/analytics-cli`, published as `lumitra` bin)
 - `packages/extension` — Chrome extension with heatmap overlay (content script + background script)
 - `packages/demo` — Static demo site
 
