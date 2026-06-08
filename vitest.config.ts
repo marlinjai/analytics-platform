@@ -20,6 +20,10 @@ export default defineConfig({
       'packages/dashboard/vitest.config.ts',
       // tracker package tests (jsdom environment)
       'packages/tracker/vitest.config.ts',
+      // core package tests (deterministic assignment parity)
+      'packages/core/vitest.config.ts',
+      // node SDK tests
+      'packages/node/vitest.config.ts',
     ],
   },
 });

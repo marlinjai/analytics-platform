@@ -1,0 +1,30 @@
+{
+  "name": "@marlinjai/analytics-core",
+  "version": "1.0.0",
+  "description": "Runtime-agnostic deterministic experiment assignment and feature-flag evaluation for Lumitra Analytics",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "license": "MIT"
+}

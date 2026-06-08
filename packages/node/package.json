@@ -1,0 +1,33 @@
+{
+  "name": "@marlinjai/analytics-node",
+  "version": "1.0.0",
+  "description": "Node server SDK for Lumitra Analytics: server-side experiment assignment, feature flags, and server event ingest",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@marlinjai/analytics-core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "license": "MIT"
+}

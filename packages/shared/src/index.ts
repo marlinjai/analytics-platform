@@ -65,6 +65,8 @@ export {
   dateRangeSchema,
   trackerEventSchema,
   eventBatchSchema,
+  serverEventSchema,
+  serverEventBatchSchema,
   statsQuerySchema,
   heatmapQuerySchema,
   selectorHeatmapQuerySchema,
