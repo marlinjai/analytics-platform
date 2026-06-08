@@ -48,6 +48,15 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/core:
+    devDependencies:
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.8)(typescript@5.9.3)(yaml@2.8.2)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   packages/dashboard:
     dependencies:
       '@analytics-platform/shared':
@@ -144,6 +153,19 @@ importers:
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
+  packages/node:
+    dependencies:
+      '@marlinjai/analytics-core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.8)(typescript@5.9.3)(yaml@2.8.2)
       typescript:
         specifier: ^5.7.3
         version: 5.9.3

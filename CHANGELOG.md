@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Server-side experiments, Phase 1 (platform foundation)** — backends can now assign variants and emit per-variant events that match the browser tracker's assignment exactly.
+  - **`@marlinjai/analytics-core`** — new runtime-agnostic, zero-side-effect package holding the canonical deterministic assignment: `assign(experiment, unitId)` and `evaluateFlag(flag, unitId)`, ported byte-for-byte from the tracker's MurmurHash3 + bucket-by-weight algorithm. A parity test drives the real tracker `ExperimentManager` to prove server and client agree for the same `(experimentKey, unitId)`.
+  - **`@marlinjai/analytics-node`** — new Node server SDK (depends on analytics-core): `init()`, `fetchConfig()` with a 60s in-process cache (mirrors the remote-config TTL), `getVariant()` / `getFlag()` (no browser APIs), and `track()` posting to the server-ingest path with the project API key.
+  - **Server-ingest route** (`POST /api/ingest`) — accepts events authenticated purely by the project API key with no Origin/CORS gating (server-to-server), requires an explicit caller-supplied `unitId`, and persists `experiment_id` + `variant` to ClickHouse via the existing key-auth, enrich, and insert helpers.
+
 ### Fixed
 - **Session replay: sub-10s sessions are no longer lost** (`@marlinjai/analytics-tracker` 1.3.1). The rrweb chunk buffer only flushed on a 10s interval or when it exceeded 512KB, so consented sessions shorter than ~10s produced zero `replay_chunk` events and never appeared in the Replay tab. The tracker now flushes the buffer on `pagehide` and `visibilitychange: hidden`, and `stopReplay()` flushes-then-clears instead of discarding. Added a public `tracker.flush()` so replay can force a send independent of the batcher's own hide listener.
 

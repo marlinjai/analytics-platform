@@ -70,6 +70,26 @@ export const eventBatchSchema = z
   .min(1)
   .max(MAX_BATCH_SIZE);
 
+// ── Server Event (server-to-server ingest) ───────────────────
+// Server SDK events are authenticated by the project API key on a no-Origin
+// path. The caller supplies a stable unitId (familyId/userId); url/sessionId
+// are not meaningful server-side, so only unitId + eventName are required.
+
+export const serverEventSchema = z.object({
+  eventName: z.string().min(1).max(128),
+  unitId: z.string().min(1).max(256),
+  timestamp: z.number().int().positive().optional(),
+  url: z.string().url().optional(),
+  experimentId: z.string().max(128).optional(),
+  variant: z.string().max(128).optional(),
+  properties: z.record(z.unknown()).optional(),
+});
+
+export const serverEventBatchSchema = z
+  .array(serverEventSchema)
+  .min(1)
+  .max(MAX_BATCH_SIZE);
+
 // ── Query Schemas ────────────────────────────────────────────
 
 export const statsQuerySchema = z.object({
