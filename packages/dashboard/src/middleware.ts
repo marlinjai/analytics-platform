@@ -24,12 +24,12 @@ export const config = {
   matcher: [
     // Match all request paths except public routes and API routes that use
     // API key auth or accept public traffic:
-    // - /api/collect, /api/health (public ingestion + health)
+    // - /api/collect, /api/ingest, /api/health (public/API-key ingestion + health)
     // - /api/invitations/accept (public invitation accept flow)
     // - /api/account (account-level API key routes)
     // - /api/projects (supports API key auth)
     // - /api/cli-auth/device, /api/cli-auth/poll (device flow, public)
     // - /_next/static, /_next/image, favicon.ico, robots.txt
-    '/((?!api/collect|api/health|api/invitations/accept|api/account|api/projects|api/cli-auth/device|api/cli-auth/poll|_next/static|_next/image|favicon.ico|robots.txt).*)',
+    '/((?!api/collect|api/ingest|api/health|api/invitations/accept|api/account|api/projects|api/cli-auth/device|api/cli-auth/poll|_next/static|_next/image|favicon.ico|robots.txt).*)',
   ],
 };
