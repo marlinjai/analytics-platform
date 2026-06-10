@@ -182,4 +182,25 @@ describe('track', () => {
     const client = makeClient(fetchImpl);
     await expect(client.track('evt', { unitId: 'u' })).rejects.toThrow(/track/);
   });
+
+  it('surfaces a redirect as an actionable error instead of following it', async () => {
+    // An auth gate / misconfigured endpoint 307s to /login. Without manual
+    // redirect handling, fetch would follow it (preserving POST) and the SDK
+    // would report a baffling 405 from the login page. We want a clear message.
+    const fetchImpl = vi.fn(async (url: string) =>
+      String(url).endsWith('/api/ingest')
+        ? new Response(null, { status: 307, headers: { location: 'https://auth.example/login' } })
+        : new Response(JSON.stringify(CONFIG), { status: 200 }),
+    ) as unknown as typeof fetch;
+    const client = makeClient(fetchImpl);
+    await expect(client.track('evt', { unitId: 'u' })).rejects.toThrow(/redirect.*307.*login/i);
+  });
+
+  it('passes redirect:manual so a 3xx is never silently followed', async () => {
+    const fetchImpl = makeFetch();
+    const client = makeClient(fetchImpl);
+    await client.track('evt', { unitId: 'u' });
+    const ingestCall = fetchImpl.mock.calls.find(([u]) => String(u).endsWith('/api/ingest'))!;
+    expect((ingestCall[1] as RequestInit).redirect).toBe('manual');
+  });
 });

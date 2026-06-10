@@ -69,6 +69,25 @@ export class AnalyticsNode {
   }
 
   /**
+   * Surface a 3xx as a clear, actionable error instead of letting fetch
+   * silently follow it. A redirect on an API-key endpoint almost always means
+   * a misconfigured endpoint or an auth gate bouncing the request to a login
+   * page; following it (a 307 preserves the method) just turns the symptom
+   * into a baffling 405 on the redirect target. Callers pass redirect:'manual'
+   * so this check can run.
+   */
+  private assertNotRedirected(res: Response, url: string): void {
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location') ?? '(no Location header)';
+      throw new Error(
+        `analytics-node: ${url} returned a redirect (HTTP ${res.status} -> ${location}). ` +
+          `This endpoint expects API-key auth and must not be behind a session gate ` +
+          `or a redirecting proxy. Check the endpoint and any auth middleware.`,
+      );
+    }
+  }
+
+  /**
    * Fetch the project's remote config, cached in-process for the TTL.
    * Defaults to the SDK's own projectId; only that project's config is cached.
    */
@@ -107,7 +126,9 @@ export class AnalyticsNode {
     const res = await this.fetchImpl(url, {
       method: 'GET',
       headers: { 'x-api-key': this.apiKey },
+      redirect: 'manual',
     });
+    this.assertNotRedirected(res, url);
     if (!res.ok) {
       throw new Error(`analytics-node: failed to fetch config (HTTP ${res.status})`);
     }
@@ -157,7 +178,9 @@ export class AnalyticsNode {
         'x-api-key': this.apiKey,
       },
       body: JSON.stringify([event]),
+      redirect: 'manual',
     });
+    this.assertNotRedirected(res, url);
     if (!res.ok) {
       throw new Error(`analytics-node: failed to track event (HTTP ${res.status})`);
     }
