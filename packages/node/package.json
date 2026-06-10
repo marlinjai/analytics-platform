@@ -1,6 +1,6 @@
 {
   "name": "@marlinjai/analytics-node",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Node server SDK for Lumitra Analytics: server-side experiment assignment, feature flags, and server event ingest",
   "type": "module",
   "exports": {
