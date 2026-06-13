@@ -9,6 +9,9 @@ summary: Add an organization layer above projects so multiple users can collabor
 
 # Multi-User and Organizations Implementation Plan
 
+> [!info] Reality update (2026-06-13)
+> The blocking decision (auth-brain vs standalone) is now resolvable toward **auth-brain**: the service is live at `auth.lumitra.co`, the `lumitra-analytics` workspace exists (provisioned 2026-06-13 under tenant `lumitra-core`, owner marlinjaipohl@gmail.com), and lumitra-studio has already cut over and verified live using the exact same SDK pattern (studio spec `2026-06-12-auth-brain-session-integration.md`, now completed). The analytics cutover is the documented next step: copy `ADMIN_API_KEY` -> analytics `AUTH_BRAIN_ADMIN_KEY` server-side via the secrets proxy, set `AUTH_BRAIN_URL`, run `migrate-to-auth-brain.ts` + migration 014, and gate on `lumitra-analytics` workspace membership. Tracked operator-side in `knowledge-base/backlog/intents/auth-brain-operator-followups-checklist.md`.
+
 **Goal:** Let several people work in the analytics platform under a shared ownership boundary (an organization), instead of the current flat "users are attached directly to projects." An org owns projects, invites members, and is the unit billing and account-level API keys hang off.
 
 This is a planning document. No code yet. The point is to frame the one decision that blocks everything else (auth-brain vs standalone) and lay out the schema/migration either way.
