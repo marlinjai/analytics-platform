@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from 'node:fs';
-import { homedir, platform } from 'node:os';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { exec } from 'node:child_process';
 import { SKILL_TEMPLATE } from './skill-template.js';
 
 // ---------------------------------------------------------------------------
@@ -138,18 +137,6 @@ function detectDomain(cwd: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Browser opener
-// ---------------------------------------------------------------------------
-
-function openBrowser(url: string): void {
-  const cmd =
-    platform() === 'darwin' ? 'open' : platform() === 'win32' ? 'start' : 'xdg-open';
-  exec(`${cmd} "${url}"`, () => {
-    // Ignore errors — we print the URL as fallback
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Credential management
 // ---------------------------------------------------------------------------
 
@@ -169,80 +156,12 @@ function loadCredentials(): StoredCredentials | null {
   return null;
 }
 
-function saveCredentials(creds: StoredCredentials): void {
-  mkdirSync(CREDENTIALS_DIR, { recursive: true });
-  writeFileSync(CREDENTIALS_PATH, JSON.stringify(creds, null, 2) + '\n', {
-    encoding: 'utf-8',
-    mode: 0o600,
-  });
-}
-
 function deleteCredentials(): void {
   try {
     if (existsSync(CREDENTIALS_PATH)) unlinkSync(CREDENTIALS_PATH);
   } catch {
     // ignore
   }
-}
-
-// ---------------------------------------------------------------------------
-// Device auth flow
-// ---------------------------------------------------------------------------
-
-async function pollForAuth(
-  endpoint: string,
-  pollSecret: string,
-  timeoutMs = 600_000,
-): Promise<string> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    await new Promise((r) => setTimeout(r, 3000));
-    try {
-      const res = await fetch(`${endpoint}/api/cli-auth/poll?secret=${pollSecret}`);
-      const data = (await res.json()) as { status: string; account_key?: string };
-      if (data.status === 'approved' && data.account_key) return data.account_key;
-      if (data.status === 'expired') throw new Error('Device code expired');
-    } catch (err) {
-      if ((err as Error).message === 'Device code expired') throw err;
-      // Network hiccup — keep polling
-    }
-  }
-  throw new Error('Authentication timed out');
-}
-
-async function deviceAuthFlow(endpoint: string): Promise<string> {
-  log(`  ${DIM}Requesting device code...${RESET}`);
-
-  const res = await fetch(`${endpoint}/api/cli-auth/device`, { method: 'POST' });
-  if (!res.ok) {
-    throw new Error(`Failed to create device code (HTTP ${res.status})`);
-  }
-
-  const data = (await res.json()) as {
-    device_code: string;
-    poll_secret: string;
-    expires_in: number;
-  };
-
-  log('');
-  log(`  Your device code is: ${BOLD}${data.device_code.toUpperCase()}${RESET}`);
-  log('');
-
-  const authUrl = `${endpoint}/cli-auth?code=${data.device_code}`;
-  log(`  ${DIM}Opening browser to authenticate...${RESET}`);
-  log(`  ${DIM}If it doesn't open, visit: ${authUrl}${RESET}`);
-  log('');
-
-  openBrowser(authUrl);
-
-  process.stdout.write(`  Waiting for authorization...`);
-
-  const accountKey = await pollForAuth(endpoint, data.poll_secret);
-
-  // Clear the "Waiting..." line
-  process.stdout.write('\r' + ' '.repeat(40) + '\r');
-
-  return accountKey;
 }
 
 // ---------------------------------------------------------------------------
@@ -276,14 +195,14 @@ async function ensureAccountKey(): Promise<StoredCredentials> {
     return { accountKey: envKey, endpoint: envEndpoint };
   }
 
-  // 3. Device auth flow
-  const endpoint = DEFAULT_ENDPOINT;
-  const accountKey = await deviceAuthFlow(endpoint);
-  const creds = { accountKey, endpoint };
-  saveCredentials(creds);
-  success('Authenticated');
-
-  return creds;
+  // 3. No interactive login. The legacy browser device-flow was retired with
+  // the auth-brain cutover; account keys are issued from the dashboard. (The
+  // eventual home for a machine credential is an auth-brain service-account
+  // key, validated via the SDK's verifyApiKey.)
+  throw new Error(
+    'Not authenticated. Create an account key in the analytics dashboard, then ' +
+      'set LUMITRA_ACCOUNT_KEY (and optionally LUMITRA_ENDPOINT) and re-run.',
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -629,8 +548,8 @@ function printHelp(): void {
   log(`  ${CYAN}lumitra --version${RESET}                                Show version`);
   log('');
   log('Authentication:');
-  log(`  On first run, ${CYAN}lumitra analytics init${RESET} opens your browser to authenticate.`);
-  log(`  Credentials are cached in ~/.lumitra/credentials.json.`);
+  log(`  Set ${CYAN}LUMITRA_ACCOUNT_KEY${RESET} to an account key from the analytics dashboard.`);
+  log(`  ${DIM}(A cached ~/.lumitra/credentials.json from an earlier version is still honored.)${RESET}`);
   log('');
   log(`  ${DIM}You can also set LUMITRA_ACCOUNT_KEY and LUMITRA_ENDPOINT${RESET}`);
   log(`  ${DIM}environment variables for CI/CD or non-interactive use.${RESET}`);
