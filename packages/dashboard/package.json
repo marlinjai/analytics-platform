@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "lint": "next lint"
+    "lint": "next lint",
+    "migrate:auth-brain": "node scripts/migrate-to-auth-brain.mjs"
   },
   "dependencies": {
     "@analytics-platform/shared": "workspace:*",
