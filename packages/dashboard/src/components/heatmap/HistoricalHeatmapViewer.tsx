@@ -10,6 +10,9 @@ interface Props {
   url: string;
   dateRange: { from: string; to: string };
   deviceType?: string;
+  /** Scope clicks to a single experiment arm via the by-variant MV. */
+  experimentId?: string;
+  variant?: string;
 }
 
 export function HistoricalHeatmapViewer({
@@ -17,6 +20,8 @@ export function HistoricalHeatmapViewer({
   url,
   dateRange,
   deviceType,
+  experimentId,
+  variant,
 }: Props) {
   const [versions, setVersions] = useState<PageVersion[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(true);
@@ -67,9 +72,20 @@ export function HistoricalHeatmapViewer({
     if (deviceType) params.set('deviceType', deviceType);
     if (dateRange.from) params.set('from', dateRange.from);
     if (dateRange.to) params.set('to', dateRange.to);
+    // Arm scoping: both must be present for the by-variant MV to engage.
+    if (experimentId && variant) {
+      params.set('experiment_id', experimentId);
+      params.set('variant', variant);
+    }
+
+    // The snapshot itself is the same archived DOM regardless of arm; only the
+    // clicks are arm-scoped. Don't send experiment params to the snapshot endpoint.
+    const snapshotParams = new URLSearchParams(params);
+    snapshotParams.delete('experiment_id');
+    snapshotParams.delete('variant');
 
     Promise.all([
-      fetch(`/api/heatmap/snapshot?${params}`).then((r) => r.json()),
+      fetch(`/api/heatmap/snapshot?${snapshotParams}`).then((r) => r.json()),
       fetch(`/api/heatmap/by-selector/clicks?${params}`).then((r) => r.json()),
     ])
       .then(([snapshotData, clicksData]) => {
@@ -89,7 +105,7 @@ export function HistoricalHeatmapViewer({
         setClicks([]);
       })
       .finally(() => setLoadingData(false));
-  }, [selectedHash, projectId, url, deviceType, dateRange.from, dateRange.to]);
+  }, [selectedHash, projectId, url, deviceType, dateRange.from, dateRange.to, experimentId, variant]);
 
   return (
     <div className="space-y-4">

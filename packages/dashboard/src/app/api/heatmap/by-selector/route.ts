@@ -69,6 +69,7 @@ export async function GET(request: NextRequest) {
 
   const experimentId = params.experiment_id || undefined;
   const variant = params.variant || undefined;
+  const pageHash = params.pageHash || undefined;
 
   const selectors = await getHeatmapBySelector(
     projectId,
@@ -78,6 +79,7 @@ export async function GET(request: NextRequest) {
     limit,
     experimentId,
     variant,
+    pageHash,
   );
 
   return NextResponse.json(
