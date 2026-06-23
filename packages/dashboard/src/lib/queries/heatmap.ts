@@ -42,9 +42,6 @@ export async function getHeatmapBySelector(
   const ch = getClickHouse();
   const urls = urlVariants(url);
 
-  const deviceFilter = deviceType
-    ? 'AND device_type = {deviceType: String}'
-    : '';
   const useVariantMv = !!(experimentId && variant);
   // When pageHash is provided (without variant), use the version MV
   const useVersionMv = !!pageHash && !useVariantMv;
@@ -53,9 +50,20 @@ export async function getHeatmapBySelector(
     : useVersionMv
       ? 'analytics.heatmap_selectors_by_version_mv'
       : 'analytics.heatmap_selectors_mv';
+
+  // The variant MV (heatmap_selectors_by_variant_mv) aggregates only by
+  // (project_id, url, experiment_id, variant, selector, day): it carries NO
+  // device_type and NO page_hash column. Emitting `AND device_type = …` or
+  // `AND page_hash = …` against it is a ClickHouse "missing column" error that
+  // surfaces in the UI as empty data. So when scoping to a variant, device and
+  // page-version filters do not apply and are dropped. The base MV and the
+  // version MV both carry device_type; only the version MV carries page_hash.
+  const deviceFilter =
+    deviceType && !useVariantMv ? 'AND device_type = {deviceType: String}' : '';
   const experimentFilter = useVariantMv ? 'AND experiment_id = {experimentId: String}' : '';
   const variantFilter = useVariantMv ? 'AND variant = {variant: String}' : '';
-  const pageHashFilter = pageHash ? 'AND page_hash = {pageHash: String}' : '';
+  const pageHashFilter =
+    pageHash && !useVariantMv ? 'AND page_hash = {pageHash: String}' : '';
 
   const result = await ch.query({
     query: `
@@ -83,10 +91,10 @@ export async function getHeatmapBySelector(
       url2: urls[2],
       url3: urls[3],
       ...chDateParams(dateRange),
-      ...(deviceType && { deviceType }),
+      ...(deviceType && !useVariantMv && { deviceType }),
       ...(useVariantMv && experimentId && { experimentId }),
       ...(useVariantMv && variant && { variant }),
-      ...(pageHash && { pageHash }),
+      ...(pageHash && !useVariantMv && { pageHash }),
       limit,
     },
     format: 'JSONEachRow',

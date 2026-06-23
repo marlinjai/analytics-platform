@@ -1,6 +1,7 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { DeviceType, TopPage } from '@analytics-platform/shared';
 import { SkeletonUrlList } from '@/components/ui/Skeleton';
 import { UrlSelector } from '@/components/heatmap/UrlSelector';
@@ -11,6 +12,13 @@ import { ScrollDepthChart } from '@/components/charts/ScrollDepthChart';
 import { RageClicksTable } from '@/components/charts/RageClicksTable';
 import { EngagementZonesTable } from '@/components/charts/EngagementZonesTable';
 import { HistoricalHeatmapViewer } from '@/components/heatmap/HistoricalHeatmapViewer';
+import {
+  VariantPicker,
+  COMPARE_ALL,
+  type ExperimentSummary,
+} from '@/components/heatmap/VariantPicker';
+import { VariantHeatmapCompare } from '@/components/heatmap/VariantHeatmapCompare';
+import { loadHeatmapExperiments } from '@/lib/heatmap-experiments';
 import type { ScrollDepthRow, RageClickRow } from '@/lib/queries/advanced';
 
 export default function HeatmapPage() {
@@ -19,6 +27,8 @@ export default function HeatmapPage() {
 
 function HeatmapPageInner() {
   const projectId = useCurrentProjectId();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [from, setFrom] = useState(() => new Date(Date.now() - 7 * 86400000).toISOString());
   const [to, setTo] = useState(() => new Date().toISOString());
   const [urls, setUrls] = useState<string[]>([]);
@@ -26,6 +36,52 @@ function HeatmapPageInner() {
   const [selectedUrl, setSelectedUrl] = useState('');
   const [deviceType, setDeviceType] = useState<DeviceType | ''>('');
   const [bookmarkletHref, setBookmarkletHref] = useState('');
+
+  // Experiment-arm scoping, driven by the URL query (so the experiments-page
+  // links land here pre-filtered and back/forward navigation works).
+  const experimentId = searchParams.get('experiment_id') ?? '';
+  const variant = searchParams.get('variant') ?? '';
+
+  const [experiments, setExperiments] = useState<ExperimentSummary[]>([]);
+  const [loadingExperiments, setLoadingExperiments] = useState(false);
+
+  // Write the arm selection back into the URL query.
+  const setArm = useCallback(
+    (expId: string, varKey: string) => {
+      const next = new URLSearchParams(searchParams.toString());
+      if (expId) {
+        next.set('experiment_id', expId);
+        if (varKey) next.set('variant', varKey);
+        else next.delete('variant');
+      } else {
+        next.delete('experiment_id');
+        next.delete('variant');
+      }
+      const qs = next.toString();
+      router.replace(qs ? `/heatmap?${qs}` : '/heatmap', { scroll: false });
+    },
+    [router, searchParams],
+  );
+
+  const selectedExperiment = experiments.find((e) => e.id === experimentId);
+  // A picked experiment with no concrete arm (or the explicit sentinel) means
+  // "show every arm side-by-side".
+  const compareAll =
+    !!selectedExperiment && (variant === '' || variant === COMPARE_ALL);
+  // A concrete arm is set only when it actually exists on the experiment.
+  const singleArm =
+    selectedExperiment && variant && variant !== COMPARE_ALL
+      ? selectedExperiment.variants.find((v) => v.key === variant)?.key
+      : undefined;
+  // A non-empty, non-sentinel variant that resolves to no arm is a stale deep
+  // link (renamed/removed arm). We must NOT silently fall back to the overall
+  // heatmap: that shows non-scoped data for a request that explicitly asked for
+  // a specific arm, with no signal to the user. Surface it as an explicit state.
+  const unknownVariant =
+    !!selectedExperiment &&
+    !!variant &&
+    variant !== COMPARE_ALL &&
+    singleArm === undefined;
 
   // Scroll depth state
   const [scrollData, setScrollData] = useState<ScrollDepthRow[]>([]);
@@ -79,6 +135,29 @@ function HeatmapPageInner() {
       .catch(() => {})
       .finally(() => setLoadingRageClicks(false));
   }, [projectId, from, to]);
+
+  // Fetch experiments for the variant picker / compare grid
+  useEffect(() => {
+    if (!projectId) {
+      setExperiments([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingExperiments(true);
+    loadHeatmapExperiments(projectId)
+      .then((list) => {
+        if (!cancelled) setExperiments(list);
+      })
+      .catch(() => {
+        if (!cancelled) setExperiments([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingExperiments(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   return (
     <div className="space-y-6">
@@ -140,6 +219,21 @@ function HeatmapPageInner() {
               </div>
               <DeviceToggle selected={deviceType} onChange={setDeviceType} />
             </div>
+
+            {/* Experiment-arm scoping */}
+            <div className="mt-4 border-t border-gray-800 pt-4">
+              <p className="mb-3 text-sm text-gray-400">
+                Scope the heatmap to an experiment arm to compare where clicks land per variant.
+              </p>
+              <VariantPicker
+                experiments={experiments}
+                loading={loadingExperiments}
+                experimentId={experimentId}
+                variant={variant}
+                onChange={setArm}
+              />
+            </div>
+
             {loadingUrls ? (
               <SkeletonUrlList rows={5} />
             ) : urls.length > 0 ? (
@@ -186,12 +280,22 @@ function HeatmapPageInner() {
                   Most-clicked elements on the selected page, ranked by total clicks.
                 </p>
               </div>
-              <EngagementZonesTable
-                projectId={projectId}
-                url={selectedUrl}
-                dateRange={{ from, to }}
-                deviceType={deviceType}
-              />
+              {unknownVariant ? (
+                <UnknownVariantNotice
+                  experimentName={selectedExperiment!.name}
+                  variant={variant}
+                  onCompareAll={() => setArm(experimentId, COMPARE_ALL)}
+                />
+              ) : (
+                <EngagementZonesTable
+                  projectId={projectId}
+                  url={selectedUrl}
+                  dateRange={{ from, to }}
+                  deviceType={deviceType}
+                  experimentId={singleArm ? experimentId : undefined}
+                  variant={singleArm}
+                />
+              )}
             </div>
           )}
 
@@ -199,21 +303,90 @@ function HeatmapPageInner() {
           {selectedUrl && (
             <div className="rounded-xl border border-gray-800 bg-gray-900 p-6">
               <div className="mb-4">
-                <h2 className="text-lg font-semibold text-white">Historical Heatmaps</h2>
+                <h2 className="text-lg font-semibold text-white">
+                  {selectedExperiment
+                    ? compareAll
+                      ? `Variant Comparison: ${selectedExperiment.name}`
+                      : unknownVariant
+                        ? `Historical Heatmap: ${selectedExperiment.name}`
+                        : `Historical Heatmap: ${selectedExperiment.name} (${singleArm})`
+                    : 'Historical Heatmaps'}
+                </h2>
                 <p className="mt-1 text-sm text-gray-400">
-                  View heatmaps rendered on archived page snapshots. Select a page version to see how it looked when clicks were recorded.
+                  {selectedExperiment
+                    ? compareAll
+                      ? 'Each arm rendered side-by-side on its archived snapshot. Pick a matching page version per card to compare where clicks land across variants.'
+                      : unknownVariant
+                        ? 'The requested variant is no longer part of this experiment.'
+                        : 'Heatmap scoped to this experiment arm, rendered on the archived page snapshot.'
+                    : 'View heatmaps rendered on archived page snapshots. Select a page version to see how it looked when clicks were recorded.'}
                 </p>
               </div>
-              <HistoricalHeatmapViewer
-                projectId={projectId}
-                url={selectedUrl}
-                dateRange={{ from, to }}
-                deviceType={deviceType || undefined}
-              />
+
+              {unknownVariant ? (
+                <UnknownVariantNotice
+                  experimentName={selectedExperiment!.name}
+                  variant={variant}
+                  onCompareAll={() => setArm(experimentId, COMPARE_ALL)}
+                />
+              ) : selectedExperiment && compareAll ? (
+                <VariantHeatmapCompare
+                  experiment={selectedExperiment}
+                  projectId={projectId}
+                  url={selectedUrl}
+                  dateRange={{ from, to }}
+                  deviceType={deviceType || undefined}
+                />
+              ) : (
+                <HistoricalHeatmapViewer
+                  projectId={projectId}
+                  url={selectedUrl}
+                  dateRange={{ from, to }}
+                  deviceType={deviceType || undefined}
+                  experimentId={singleArm ? experimentId : undefined}
+                  variant={singleArm}
+                />
+              )}
             </div>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Explicit empty state for a stale/renamed variant deep link: the URL asked for
+ * a specific arm that no longer exists on the experiment. We surface this rather
+ * than silently rendering the overall heatmap, and offer the side-by-side
+ * compare view as the obvious next action.
+ */
+function UnknownVariantNotice({
+  experimentName,
+  variant,
+  onCompareAll,
+}: {
+  experimentName: string;
+  variant: string;
+  onCompareAll: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-gray-800 bg-gray-950 px-6 py-10 text-center">
+      <p className="text-sm text-gray-300">
+        Variant <span className="font-mono text-gray-100">{variant}</span> is no longer part of
+        the experiment{' '}
+        <span className="font-medium text-gray-100">{experimentName}</span>.
+      </p>
+      <p className="text-xs text-gray-500">
+        It may have been renamed or removed. Pick an arm above, or compare all arms side-by-side.
+      </p>
+      <button
+        type="button"
+        onClick={onCompareAll}
+        className="rounded-lg border border-blue-500 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-500"
+      >
+        Compare all arms
+      </button>
     </div>
   );
 }

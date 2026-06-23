@@ -14,6 +14,9 @@ interface Props {
   url: string;
   dateRange: { from: string; to: string };
   deviceType: DeviceType | '';
+  /** Scope the ranked elements to a single experiment arm via the by-variant MV. */
+  experimentId?: string;
+  variant?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +110,14 @@ function heatColor(ratio: number): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export function EngagementZonesTable({ projectId, url, dateRange, deviceType }: Props) {
+export function EngagementZonesTable({
+  projectId,
+  url,
+  dateRange,
+  deviceType,
+  experimentId,
+  variant,
+}: Props) {
   const [data, setData] = useState<SelectorRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -127,6 +137,10 @@ export function EngagementZonesTable({ projectId, url, dateRange, deviceType }: 
       to: dateRange.to,
     });
     if (deviceType) params.set('deviceType', deviceType);
+    if (experimentId && variant) {
+      params.set('experiment_id', experimentId);
+      params.set('variant', variant);
+    }
 
     fetch(`/api/heatmap/by-selector?${params}`)
       .then((r) => r.json())
@@ -144,7 +158,7 @@ export function EngagementZonesTable({ projectId, url, dateRange, deviceType }: 
       })
       .catch(() => setData([]))
       .finally(() => setLoading(false));
-  }, [projectId, url, dateRange.from, dateRange.to, deviceType]);
+  }, [projectId, url, dateRange.from, dateRange.to, deviceType, experimentId, variant]);
 
   // Loading skeleton
   if (loading) {
