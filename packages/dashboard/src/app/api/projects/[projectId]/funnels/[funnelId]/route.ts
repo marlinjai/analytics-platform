@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
 import { computeFunnelResults, type FunnelStep } from '@/lib/queries/funnels';
 
 type Params = { params: Promise<{ projectId: string; funnelId: string }> };
 
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request.headers.get('origin')) });
+}
+
 export async function GET(request: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const { projectId, funnelId } = await params;
-
-  if (!(await checkProjectMembership(session.user.id, projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authResult = await authenticateRequest(request, projectId);
+  if (!authResult.authenticated) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
   const db = getDb();
@@ -39,16 +37,11 @@ export async function GET(request: NextRequest, { params }: Params) {
   return NextResponse.json({ funnel, results });
 }
 
-export async function DELETE(_request: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export async function DELETE(request: NextRequest, { params }: Params) {
   const { projectId, funnelId } = await params;
-
-  if (!(await checkProjectMembership(session.user.id, projectId, ['owner', 'admin']))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authResult = await authenticateRequest(request, projectId, ['owner', 'admin']);
+  if (!authResult.authenticated) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
   const db = getDb();

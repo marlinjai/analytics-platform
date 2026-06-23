@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { auth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
 
 type Params = { params: Promise<{ projectId: string }> };
+
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request.headers.get('origin')) });
+}
 
 const funnelStepSchema = z.union([
   z.object({ type: z.literal('pageview'), url: z.string().min(1) }),
@@ -16,16 +19,11 @@ const createFunnelSchema = z.object({
   steps: z.array(funnelStepSchema).min(2).max(10),
 });
 
-export async function GET(_request: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export async function GET(request: NextRequest, { params }: Params) {
   const { projectId } = await params;
-
-  if (!(await checkProjectMembership(session.user.id, projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authResult = await authenticateRequest(request, projectId);
+  if (!authResult.authenticated) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
   const db = getDb();
@@ -40,15 +38,10 @@ export async function GET(_request: NextRequest, { params }: Params) {
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const { projectId } = await params;
-
-  if (!(await checkProjectMembership(session.user.id, projectId, ['owner', 'admin']))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authResult = await authenticateRequest(request, projectId, ['owner', 'admin']);
+  if (!authResult.authenticated) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
   const body = await request.json();
