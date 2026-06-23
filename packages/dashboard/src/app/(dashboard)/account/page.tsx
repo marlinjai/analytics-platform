@@ -202,7 +202,23 @@ export default function AccountPage() {
 
         <div className="mt-6 border-t border-gray-800 pt-4">
           <button
-            onClick={() => { window.location.href = '/api/auth/signout'; }}
+            onClick={() => {
+              // Sign-out must end the SHARED auth-brain session, not just bounce
+              // to /login. Submit a POST to auth-brain's logout endpoint: it
+              // revokes the session server-side, clears the `.lumitra.co` cookie,
+              // and redirects back here (where middleware then sends us to login).
+              // A same-site form POST carries the cookie; a plain link (GET) can't
+              // reach the POST-only logout route.
+              const authBrainUrl =
+                process.env.NEXT_PUBLIC_AUTH_BRAIN_URL ?? 'https://auth.lumitra.co';
+              const form = document.createElement('form');
+              form.method = 'POST';
+              form.action = `${authBrainUrl}/api/auth/logout?return_to=${encodeURIComponent(
+                window.location.origin,
+              )}`;
+              document.body.appendChild(form);
+              form.submit();
+            }}
             className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-gray-100 transition"
           >
             Sign out

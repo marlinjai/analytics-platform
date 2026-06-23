@@ -50,46 +50,6 @@ interface ApiKey {
   revoked_at: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Team types
-// ---------------------------------------------------------------------------
-interface Member {
-  id: string;
-  email: string;
-  name: string | null;
-  role: string;
-  joinedAt: string;
-}
-
-interface Invitation {
-  id: string;
-  email: string;
-  role: string;
-  token: string;
-  created_at: string;
-  expires_at: string;
-  invited_by_name: string | null;
-  invited_by_email: string;
-}
-
-// ---------------------------------------------------------------------------
-// Role badge helper
-// ---------------------------------------------------------------------------
-function RoleBadge({ role }: { role: string }) {
-  const colours: Record<string, string> = {
-    owner: 'bg-purple-500/10 text-purple-400',
-    admin: 'bg-blue-500/10 text-blue-400',
-    viewer: 'bg-gray-500/10 text-gray-400',
-  };
-  return (
-    <span
-      className={`rounded px-1.5 py-0.5 text-xs font-medium ${colours[role] ?? colours.viewer}`}
-    >
-      {role}
-    </span>
-  );
-}
-
 // ── Developer Tools Section ────────────────────────────────────────────────
 
 function DeveloperToolsSection({ projectId }: { projectId: string }) {
@@ -254,15 +214,6 @@ When checking results, call the results endpoint and report the Bayesian analysi
 }
 
 export default function SettingsPage() {
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch('/api/me')
-      .then((r) => r.json())
-      .then((d) => { if (d.id) setCurrentUserId(d.id); })
-      .catch(() => {});
-  }, []);
-
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
 
@@ -283,17 +234,6 @@ export default function SettingsPage() {
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
-  // Team state
-  const [members, setMembers] = useState<Member[]>([]);
-  const [loadingMembers, setLoadingMembers] = useState(false);
-  const [invitations, setInvitations] = useState<Invitation[]>([]);
-  const [loadingInvitations, setLoadingInvitations] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'admin' | 'viewer'>('viewer');
-  const [sendingInvite, setSendingInvite] = useState(false);
-  const [newInviteUrl, setNewInviteUrl] = useState<string | null>(null);
-  const [inviteCopied, setInviteCopied] = useState(false);
-
   // Allowed origins state
   const [allowedOriginsText, setAllowedOriginsText] = useState<string>('');
   const [allowedOriginsStatus, setAllowedOriginsStatus] = useState<string>('');
@@ -309,12 +249,6 @@ export default function SettingsPage() {
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }
-
-  async function copyInviteUrl(url: string) {
-    await navigator.clipboard.writeText(url);
-    setInviteCopied(true);
-    setTimeout(() => setInviteCopied(false), 2000);
   }
 
   /** Derive environment from stored prefix value */
@@ -429,57 +363,11 @@ export default function SettingsPage() {
     }
   }, []);
 
-  // Fetch team members
-  const fetchMembers = useCallback(async (projectId: string) => {
-    if (!projectId) {
-      setMembers([]);
-      return;
-    }
-    setLoadingMembers(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/members`);
-      if (!res.ok) throw new Error('Failed to fetch members');
-      const data = await res.json();
-      setMembers(data.members ?? []);
-    } catch {
-      setMembers([]);
-    } finally {
-      setLoadingMembers(false);
-    }
-  }, []);
-
-  // Fetch pending invitations
-  const fetchInvitations = useCallback(async (projectId: string) => {
-    if (!projectId) {
-      setInvitations([]);
-      return;
-    }
-    setLoadingInvitations(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/invitations`);
-      // 403 means user is not owner/admin — silently hide invitations
-      if (res.status === 403) {
-        setInvitations([]);
-        return;
-      }
-      if (!res.ok) throw new Error('Failed to fetch invitations');
-      const data = await res.json();
-      setInvitations(data.invitations ?? []);
-    } catch {
-      setInvitations([]);
-    } finally {
-      setLoadingInvitations(false);
-    }
-  }, []);
-
   useEffect(() => {
     setRevealedKey(null);
-    setNewInviteUrl(null);
     fetchKeys(selectedProjectId);
     fetchSettings(selectedProjectId);
-    fetchMembers(selectedProjectId);
-    fetchInvitations(selectedProjectId);
-  }, [selectedProjectId, fetchKeys, fetchSettings, fetchMembers, fetchInvitations]);
+  }, [selectedProjectId, fetchKeys, fetchSettings]);
 
   // Delete project
   async function handleDeleteProject(project: Project) {
@@ -558,64 +446,6 @@ export default function SettingsPage() {
       setCreatingKey(false);
     }
   }
-
-  // Remove a member
-  async function handleRemoveMember(member: Member) {
-    if (!confirm(`Remove ${member.name ?? member.email} from this project?`)) return;
-    const res = await fetch(
-      `/api/projects/${selectedProjectId}/members?userId=${member.id}`,
-      { method: 'DELETE' }
-    );
-    if (res.ok) {
-      fetchMembers(selectedProjectId);
-    }
-  }
-
-  // Send invitation
-  async function handleSendInvite(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedProjectId || !inviteEmail.trim()) return;
-    setSendingInvite(true);
-    setNewInviteUrl(null);
-    try {
-      const res = await fetch(`/api/projects/${selectedProjectId}/invitations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error ?? 'Failed to create invitation');
-        return;
-      }
-      const data = await res.json();
-      setNewInviteUrl(data.acceptUrl);
-      setInviteEmail('');
-      fetchInvitations(selectedProjectId);
-    } catch {
-      // ignore
-    } finally {
-      setSendingInvite(false);
-    }
-  }
-
-  // Revoke invitation
-  async function handleRevokeInvitation(invitationId: string) {
-    if (!confirm('Revoke this invitation?')) return;
-    const res = await fetch(
-      `/api/projects/${selectedProjectId}/invitations?invitationId=${invitationId}`,
-      { method: 'DELETE' }
-    );
-    if (res.ok) {
-      fetchInvitations(selectedProjectId);
-      if (newInviteUrl) setNewInviteUrl(null);
-    }
-  }
-
-  // Derive the current user's role in the selected project
-  const currentUserRole = members.find((m) => m.id === currentUserId)?.role ?? null;
-  const isOwner = currentUserRole === 'owner';
-  const isOwnerOrAdmin = isOwner || currentUserRole === 'admin';
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-6">
@@ -760,164 +590,24 @@ export default function SettingsPage() {
         )}
       </section>
 
-      {/* Team section */}
+      {/* Team section — membership is owned by auth-brain (Lumitra accounts) */}
       <section className="rounded-xl border border-gray-800 bg-gray-900 p-6">
         <h2 className="mb-1 text-lg font-semibold text-gray-100">Team</h2>
         <p className="mb-4 text-xs text-gray-400">
-          Manage who has access to this project.
+          Project access is managed centrally in your Lumitra account. Each project maps to a
+          workspace there: invite teammates, change roles, and remove access from the account portal.
         </p>
-
-        {!selectedProjectId ? (
-          <p className="text-sm text-gray-400">Select a project above to manage its team.</p>
-        ) : (
-          <div className="space-y-6">
-            {/* Member list */}
-            <div>
-              <h3 className="mb-3 text-sm font-medium text-gray-300">Members</h3>
-              {loadingMembers ? (
-                <div className="space-y-2">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="h-10 animate-pulse rounded-lg bg-gray-800" />
-                  ))}
-                </div>
-              ) : members.length === 0 ? (
-                <p className="text-sm text-gray-400">No members found.</p>
-              ) : (
-                <ul className="divide-y divide-gray-800">
-                  {members.map((member) => {
-                    const isSelf = member.id === currentUserId;
-                    return (
-                      <li key={member.id} className="flex items-center justify-between py-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-gray-100">
-                              {member.name ?? member.email}
-                              {isSelf && (
-                                <span className="ml-1.5 text-xs text-gray-500">(you)</span>
-                              )}
-                            </p>
-                            <RoleBadge role={member.role} />
-                          </div>
-                          {member.name && (
-                            <p className="text-xs text-gray-400">{member.email}</p>
-                          )}
-                        </div>
-                        {isOwner && !isSelf && member.role !== 'owner' && (
-                          <button
-                            onClick={() => handleRemoveMember(member)}
-                            className="shrink-0 rounded px-3 py-1 text-sm font-medium text-red-400 hover:bg-red-400/10 transition"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-
-            {/* Invite form — visible to owner and admin */}
-            {isOwnerOrAdmin && (
-              <div>
-                <h3 className="mb-3 text-sm font-medium text-gray-300">Invite a team member</h3>
-                <form onSubmit={handleSendInvite} className="flex flex-wrap items-end gap-3">
-                  <div className="flex-1 min-w-48">
-                    <label htmlFor="invite-email" className="mb-1 block text-sm text-gray-400">
-                      Email address
-                    </label>
-                    <input
-                      id="invite-email"
-                      type="email"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="colleague@example.com"
-                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="invite-role" className="mb-1 block text-sm text-gray-400">
-                      Role
-                    </label>
-                    <select
-                      id="invite-role"
-                      value={inviteRole}
-                      onChange={(e) => setInviteRole(e.target.value as 'admin' | 'viewer')}
-                      className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
-                    >
-                      <option value="viewer">Viewer</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={sendingInvite || !inviteEmail.trim()}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 transition"
-                  >
-                    {sendingInvite ? 'Sending…' : 'Send Invite'}
-                  </button>
-                </form>
-
-                {/* New invite URL to copy */}
-                {newInviteUrl && (
-                  <div className="mt-4 rounded-lg border border-blue-600/30 bg-blue-500/5 p-4">
-                    <p className="mb-2 text-sm font-semibold text-blue-300">
-                      Invitation created — share this link with the invitee
-                    </p>
-                    <p className="mb-2 text-xs text-gray-400">
-                      No email was sent. Copy the link below and share it directly.
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <code className="block flex-1 break-all rounded bg-gray-800 px-3 py-2 text-xs text-gray-100">
-                        {newInviteUrl}
-                      </code>
-                      <button
-                        onClick={() => copyInviteUrl(newInviteUrl)}
-                        className="shrink-0 rounded-lg bg-gray-700 px-3 py-2 text-sm font-medium text-gray-100 hover:bg-gray-600 transition"
-                      >
-                        {inviteCopied ? 'Copied!' : 'Copy'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Pending invitations */}
-            {isOwnerOrAdmin && (
-              <div>
-                <h3 className="mb-3 text-sm font-medium text-gray-300">Pending invitations</h3>
-                {loadingInvitations ? (
-                  <div className="h-10 animate-pulse rounded-lg bg-gray-800" />
-                ) : invitations.length === 0 ? (
-                  <p className="text-sm text-gray-400">No pending invitations.</p>
-                ) : (
-                  <ul className="divide-y divide-gray-800">
-                    {invitations.map((inv) => (
-                      <li key={inv.id} className="flex items-center justify-between py-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-gray-100">{inv.email}</p>
-                            <RoleBadge role={inv.role} />
-                          </div>
-                          <p className="text-xs text-gray-400">
-                            Expires {new Date(inv.expires_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleRevokeInvitation(inv.id)}
-                          className="shrink-0 rounded px-3 py-1 text-sm font-medium text-red-400 hover:bg-red-400/10 transition"
-                        >
-                          Revoke
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        <a
+          href={process.env.NEXT_PUBLIC_AUTH_BRAIN_URL ?? 'https://auth.lumitra.co'}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-gray-100 transition"
+        >
+          Manage team access
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </a>
       </section>
 
       {/* API Keys section */}
