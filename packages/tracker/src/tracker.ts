@@ -10,6 +10,7 @@ import { attachPageviewListener, attachClickListener, attachScrollListener } fro
 import { getCachedPageHash } from './dom-hash.js';
 import { ExperimentManager } from './experiment.js';
 import type { RemoteConfig } from './experiment.js';
+import { readServerVariants } from './server-variants.js';
 
 const CONFIG_TIMEOUT_MS = 3000;
 
@@ -32,6 +33,19 @@ export class AnalyticsTracker {
     this.sessionId = sessionId;
 
     this.experimentManager = new ExperimentManager(sessionId);
+
+    // WS-A.2: if the middleware decided variants server-side, honor that decision
+    // by seeding the manager from the unsigned lumitra_variants_pub mirror cookie.
+    // getVariant() then returns the SERVER value immediately, and the later
+    // remote-config self-assignment will not override it. Absent cookie -> no-op,
+    // leaving the existing client self-assign behavior unchanged.
+    const serverDecision = readServerVariants();
+    if (serverDecision) {
+      this.experimentManager.hydrateFromServer(
+        serverDecision.experiments,
+        serverDecision.flags,
+      );
+    }
 
     this.readyPromise = new Promise<void>((resolve) => {
       this.resolveReady = resolve;
