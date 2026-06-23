@@ -14,8 +14,10 @@ export interface ExperimentSummary {
   variants: ExperimentVariant[];
 }
 
-/** Special sentinel for the "all arms side-by-side" mode (no single variant set). */
-export const COMPARE_ALL = '__compare_all__';
+// Re-exported from the pure-logic lib so the sentinel has a single source of
+// truth shared by the page, the picker, and the unit tests.
+export { COMPARE_ALL } from '@/lib/heatmap-arm';
+import { COMPARE_ALL } from '@/lib/heatmap-arm';
 
 const VARIANT_COLORS = ['#3b82f6', '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
 
