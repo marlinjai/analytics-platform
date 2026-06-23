@@ -4,12 +4,18 @@ import {
   assignAllFlags,
   encodeVariants,
   encodeVariantsPublic,
+  decodeOverride,
+  encodeOverride,
+  parseOverrideQuery,
   LUMITRA_VARIANTS_COOKIE,
   LUMITRA_VARIANTS_PUBLIC_COOKIE,
   LUMITRA_UID_COOKIE,
+  LUMITRA_VARIANT_OVERRIDE_COOKIE,
+  LUMITRA_VARIANT_QUERY_PARAM,
   type ExperimentDefinition,
   type FlagDefinition,
   type RemoteConfig,
+  type VariantOverride,
 } from '@marlinjai/analytics-core';
 
 /**
@@ -33,6 +39,39 @@ import {
  *      evaluations, plus a non-signed `lumitra_variants_pub` mirror
  *      (client-readable, not HttpOnly) so the client can honor the decision
  *      without the secret.
+ *
+ * ## QA / admin forced-variant override (WS-F / D4)
+ *
+ * A QA/admin can preview a specific arm of a live experiment by visiting any
+ * page with `?lumitra_variant=experimentKey:variantKey` (comma-separated or
+ * repeated for several experiments; `?lumitra_variant=clear` removes it). The
+ * middleware:
+ *   - reads the existing `lumitra_variant_override` cookie (carried across
+ *     navigation so the forced arm sticks without re-passing the query),
+ *   - applies the query: a new/changed override is written to the
+ *     `lumitra_variant_override` cookie, the clear sentinel deletes it.
+ *
+ * The forced arm lives ONLY in the session-scoped `lumitra_variant_override`
+ * cookie, it is NEVER baked into the persistent signed `lumitra_variants` cookie
+ * or its public `lumitra_variants_pub` mirror. Those two persistent cookies always
+ * carry the REAL deterministic `assignAll` arm. The display side reads the
+ * override cookie directly and first: RSC `getVariant` (server.ts) checks the
+ * override cookie before the signed cookie, and the client tracker checks the
+ * override cookie before the public mirror, so both render the forced arm without
+ * it ever entering the persistent cookies.
+ *
+ * Results-pollution gate: keeping the forced arm out of the persistent cookies and
+ * the override-as-suppression signal on the SAME session-scoped lifetime is what
+ * makes the gate watertight. The un-signed `lumitra_variant_override` cookie
+ * travels to the browser, and the tracker uses it to SUPPRESS attribution for the
+ * overridden experiments (it emits no experimentId/variant for them), so a forced
+ * session never enters experiment results. Because that suppression cookie is
+ * session-scoped, if it evaporates (browser restart) the persistent cookies still
+ * hold the REAL arm, not the forced one, so a later request that loads the
+ * tracker without re-running the middleware (a non-matched route, a CDN/ISR-cached
+ * HTML response) attributes the visitor's real bucket, never the forced preview.
+ * See packages/core/src/override.ts and the tracker's experiment.ts for the full
+ * semantics.
  *
  * Reuses analytics-core entirely. Edge-runtime safe: assignAll/assignAllFlags/
  * encodeVariants run on Web Crypto, and crypto.randomUUID exists in the edge
@@ -67,6 +106,38 @@ export interface LumitraMiddlewareOptions {
 
 function normalizeEndpoint(endpoint: string): string {
   return endpoint.replace(/\/+$/, '');
+}
+
+/**
+ * Resolve the effective forced-variant override for this request and decide what
+ * to do with the override cookie.
+ *
+ * Precedence: the `?lumitra_variant=` query wins over the persisted cookie.
+ *   - query is the clear sentinel  -> override = none, action = 'clear'
+ *   - query has valid pairs        -> override = those pairs, action = 'set'
+ *     (a fresh override REPLACES the cookie rather than merging, so a QA user can
+ *     swap arms cleanly; passing several pairs at once still forces several
+ *     experiments together)
+ *   - no usable query              -> override = the decoded cookie (if any),
+ *     action = 'none' (sticky across navigation, no Set-Cookie churn)
+ */
+function resolveOverride(request: NextRequest): {
+  override: VariantOverride | null;
+  action: 'set' | 'clear' | 'none';
+} {
+  const queryValues = request.nextUrl.searchParams.getAll(LUMITRA_VARIANT_QUERY_PARAM);
+  const fromQuery = parseOverrideQuery(queryValues);
+
+  if (fromQuery === 'clear') {
+    return { override: null, action: 'clear' };
+  }
+  if (fromQuery !== null) {
+    return { override: fromQuery, action: 'set' };
+  }
+  const fromCookie = decodeOverride(
+    request.cookies.get(LUMITRA_VARIANT_OVERRIDE_COOKIE)?.value,
+  );
+  return { override: fromCookie, action: 'none' };
 }
 
 /**
@@ -159,7 +230,32 @@ export function createLumitraMiddleware(
   }
 
   return async function lumitraMiddleware(request: NextRequest): Promise<NextResponse> {
-    const response = NextResponse.next();
+    // 1b. Resolve the QA/admin forced-variant override (query > sticky cookie)
+    //     up front, so its decision can be forwarded onto the request headers
+    //     that the RSC render reads (making getVariant() see the forced arm on
+    //     the very same request the override is first applied).
+    const { override, action } = resolveOverride(request);
+
+    // Forward (possibly mutated) request cookies onto the downstream RSC render.
+    // Next.js exposes mutated request headers via NextResponse.next({ request }):
+    // setting the override cookie on the forwarded request lets server.ts's
+    // getVariant() honor the override on the FIRST request that carries the query,
+    // not just on the next navigation.
+    const requestHeaders = new Headers(request.headers);
+    function syncOverrideCookieHeader(value: string | null): void {
+      // Rebuild the Cookie header with the override cookie set/removed so the RSC
+      // sees the same value the browser will after the Set-Cookie lands.
+      const pairs: string[] = [];
+      for (const [name, c] of request.cookies) {
+        if (name === LUMITRA_VARIANT_OVERRIDE_COOKIE) continue;
+        pairs.push(`${name}=${c.value}`);
+      }
+      if (value !== null) pairs.push(`${LUMITRA_VARIANT_OVERRIDE_COOKIE}=${value}`);
+      if (pairs.length > 0) requestHeaders.set('cookie', pairs.join('; '));
+      else requestHeaders.delete('cookie');
+    }
+
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
 
     // 1. Sticky uid: reuse the incoming cookie, else mint one.
     let uid = request.cookies.get(LUMITRA_UID_COOKIE)?.value;
@@ -175,6 +271,36 @@ export function createLumitraMiddleware(
       });
     }
 
+    // Persist/clear the override cookie on the RESPONSE (so it sticks across
+    // navigation) AND mirror the same decision onto the forwarded REQUEST headers
+    // (so the current RSC render honors it). Done BEFORE the config fetch so a
+    // `?lumitra_variant=clear` still takes effect even if the config endpoint is down.
+    if (action === 'set' && override) {
+      const encoded = encodeOverride(override);
+      // Session cookie (NO maxAge): the forced arm sticks across navigation for
+      // this browser session, then evaporates when the browser closes, a QA
+      // preview must not silently outlive the session. Client-readable (not
+      // HttpOnly) so the tracker can read it to suppress attribution; forging it
+      // only de-attributes the forger's own events (see override.ts docblock).
+      response.cookies.set(LUMITRA_VARIANT_OVERRIDE_COOKIE, encoded, {
+        httpOnly: false,
+        sameSite: 'lax',
+        secure: true,
+        path: '/',
+        // no maxAge -> session cookie
+      });
+      syncOverrideCookieHeader(encoded);
+    } else if (action === 'clear') {
+      response.cookies.set(LUMITRA_VARIANT_OVERRIDE_COOKIE, '', {
+        httpOnly: false,
+        sameSite: 'lax',
+        secure: true,
+        path: '/',
+        maxAge: 0, // delete
+      });
+      syncOverrideCookieHeader(null);
+    }
+
     // 2. Fetch config (cached). A config failure must not break the request:
     //    pass it through unchanged so the client tracker can still self-assign.
     let config: RemoteConfig;
@@ -187,6 +313,14 @@ export function createLumitraMiddleware(
     // 3. Deterministic assignment over the running experiments AND flags
     //    (canonical core). Flags are evaluated here too, otherwise the cookie
     //    carries zero flag keys and every server/client flag read returns false.
+    //    The forced override is NOT merged in here: the persistent signed +
+    //    public cookies must always carry the REAL deterministic arm. The forced
+    //    arm lives only in the session-scoped `lumitra_variant_override` cookie
+    //    (set above), which the RSC `getVariant` and the client tracker read
+    //    first for display. Baking the forced arm into the 1-year persistent
+    //    cookies would outlive the session-scoped suppression signal and leak the
+    //    forced arm into results on any request that loads the tracker without
+    //    re-running this middleware (non-matched route, CDN/ISR-cached HTML).
     const assignments = assignAll(config.experiments, uid);
     const flagAssignments = assignAllFlags(config.flags, uid);
     const epoch = configEpoch(config.experiments, config.flags);
@@ -194,6 +328,9 @@ export function createLumitraMiddleware(
     // 4. Set the signed cookie (server-authoritative) + public mirror (client).
     //    Skip rewriting an unchanged cookie unless we just minted the uid, to
     //    avoid churning Set-Cookie on every request once a visitor is stable.
+    //    (existingSigned !== signed self-heals a cookie that drifted from the
+    //    real deterministic arm, e.g. one written by a prior version that baked
+    //    in a forced override, back to the real arm.)
     const signed = await encodeVariants(assignments, flagAssignments, { secret, epoch });
     const existingSigned = request.cookies.get(LUMITRA_VARIANTS_COOKIE)?.value;
     if (uidIsNew || existingSigned !== signed) {

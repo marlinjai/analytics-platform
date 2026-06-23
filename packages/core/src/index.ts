@@ -24,3 +24,12 @@ export type {
   EncodeVariantsOptions,
   DecodeVariantsOptions,
 } from './variants.js';
+export {
+  LUMITRA_VARIANT_OVERRIDE_COOKIE,
+  LUMITRA_VARIANT_QUERY_PARAM,
+  LUMITRA_VARIANT_CLEAR,
+  parseOverrideQuery,
+  encodeOverride,
+  decodeOverride,
+} from './override.js';
+export type { VariantOverride } from './override.js';
