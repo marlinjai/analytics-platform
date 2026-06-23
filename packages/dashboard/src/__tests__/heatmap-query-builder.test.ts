@@ -97,4 +97,27 @@ describe('getHeatmapBySelector, table + filter selection', () => {
     expect(query).not.toContain('page_hash');
     expect(query_params.deviceType).toBe('tablet');
   });
+
+  it('does NOT use the variant MV when only experimentId is given (variant missing)', async () => {
+    // The variant MV is keyed on (experiment_id, variant); a half-specified arm
+    // must fall back to the base MV rather than querying with a bound but unused
+    // experiment filter.
+    await getHeatmapBySelector(
+      PROJECT_ID,
+      URL,
+      RANGE,
+      undefined,
+      100,
+      'exp-123',
+      undefined, // variant missing
+    );
+
+    const { query, query_params } = queryCalls[0]!;
+    expect(query).toContain('analytics.heatmap_selectors_mv');
+    expect(query).not.toContain('heatmap_selectors_by_variant_mv');
+    expect(query).not.toContain('experiment_id');
+    expect(query).not.toContain('variant');
+    expect(query_params).not.toHaveProperty('experimentId');
+    expect(query_params).not.toHaveProperty('variant');
+  });
 });
