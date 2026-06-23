@@ -259,6 +259,68 @@ describe('public mirror cookie (client-readable, no secret)', () => {
   });
 });
 
+describe('public mirror carries the experiment key -> id map (WS-A.2 follow-up)', () => {
+  it('round-trips the experiment ids alongside variants', () => {
+    const experiments = assignAll([TWO_WAY, THREE_WAY], 'abc123');
+    const flags = assignAllFlags([FLAG_ON, FLAG_OFF], 'abc123');
+    const ids = { [TWO_WAY.key]: TWO_WAY.id, [THREE_WAY.key]: THREE_WAY.id };
+    const pub = encodeVariantsPublic(experiments, flags, ids);
+    const decoded = decodeVariantsPublic(pub);
+    expect(decoded).toEqual({ experiments, flags, experimentIds: ids });
+  });
+
+  it('a cookie WITHOUT ids still decodes and degrades exactly as today', () => {
+    const experiments = assignAll([TWO_WAY], 'user-2');
+    const flags = assignAllFlags([FLAG_ON], 'user-2');
+    // No ids passed: payload omits `i` and decode leaves experimentIds undefined,
+    // so the variant is still known but id-tagging waits for remote config.
+    const pub = encodeVariantsPublic(experiments, flags);
+    const decoded = decodeVariantsPublic(pub);
+    expect(decoded).toEqual({ experiments, flags });
+    expect(decoded?.experimentIds).toBeUndefined();
+  });
+
+  it('an empty ids map is treated as no ids (legacy payload shape)', () => {
+    const experiments = assignAll([TWO_WAY], 'user-2');
+    const withEmpty = encodeVariantsPublic(experiments, {}, {});
+    const without = encodeVariantsPublic(experiments, {});
+    // Identical bytes: an empty map must not inflate the cookie or change shape.
+    expect(withEmpty).toBe(without);
+    expect(decodeVariantsPublic(withEmpty)?.experimentIds).toBeUndefined();
+  });
+
+  it('the SIGNED cookie is unchanged by ids (no id leak into the signed payload)', async () => {
+    const experiments = assignAll([TWO_WAY, THREE_WAY], 'user-1');
+    const flags = assignAllFlags([FLAG_ON], 'user-1');
+    const signed = await encodeVariants(experiments, flags, { secret: SECRET, epoch: EPOCH });
+    const decodedSigned = await decodeVariants(signed, { secret: SECRET });
+    // The signed cookie never carries ids.
+    expect(decodedSigned).toEqual({ experiments, flags });
+    expect(decodedSigned?.experimentIds).toBeUndefined();
+  });
+
+  it('PARITY: the id-carrying mirror still agrees with the signed cookie on v + f', async () => {
+    const experiments = assignAll([TWO_WAY, THREE_WAY], 'user-1');
+    const flags = assignAllFlags([FLAG_ON, FLAG_OFF, FLAG_ROLLOUT], 'user-1');
+    const ids = { [TWO_WAY.key]: TWO_WAY.id, [THREE_WAY.key]: THREE_WAY.id };
+    const signed = await encodeVariants(experiments, flags, { secret: SECRET, epoch: EPOCH });
+    const pub = encodeVariantsPublic(experiments, flags, ids);
+    const decodedSigned = await decodeVariants(signed, { secret: SECRET });
+    const decodedPub = decodeVariantsPublic(pub);
+    expect(decodedPub?.experiments).toEqual(decodedSigned?.experiments);
+    expect(decodedPub?.flags).toEqual(decodedSigned?.flags);
+  });
+
+  it('fails closed when the ids map has a non-string value', () => {
+    // Hand-craft a payload whose `i` carries a number; decode must reject it.
+    const bad = btoa(JSON.stringify({ v: { writer: 'control' }, i: { writer: 1 } }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    expect(decodeVariantsPublic(bad)).toBeNull();
+  });
+});
+
 describe('PARITY: decoded cookie variant === assign() === tracker getVariant()', () => {
   function trackerVariant(exp: ExperimentDefinition, unitId: string): string | null {
     const mgr = new ExperimentManager(unitId);

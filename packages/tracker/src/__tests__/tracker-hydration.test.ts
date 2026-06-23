@@ -27,16 +27,26 @@ const REMOTE_CONFIG: RemoteConfig = {
   flags: [],
 };
 
-function encodePub(experiments: Record<string, string>): string {
-  const json = JSON.stringify({ v: experiments });
+function encodePub(
+  experiments: Record<string, string>,
+  experimentIds?: Record<string, string>,
+): string {
+  const payload: { v: Record<string, string>; i?: Record<string, string> } = {
+    v: experiments,
+  };
+  if (experimentIds) payload.i = experimentIds;
+  const json = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(json);
   let binary = '';
   for (const b of bytes) binary += String.fromCharCode(b);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function setPubCookie(experiments: Record<string, string>): void {
-  document.cookie = `lumitra_variants_pub=${encodeURIComponent(encodePub(experiments))}`;
+function setPubCookie(
+  experiments: Record<string, string>,
+  experimentIds?: Record<string, string>,
+): void {
+  document.cookie = `lumitra_variants_pub=${encodeURIComponent(encodePub(experiments, experimentIds))}`;
 }
 
 function clearCookies(): void {
@@ -133,6 +143,51 @@ describe('tracker honors the server variant decision from lumitra_variants_pub',
 
     const probe = postedEvents.find((e) => e.type === 'ws_a_probe');
     expect(probe).toBeDefined();
+    expect(probe!.experimentId).toBe('exp-uuid-1');
+    expect(probe!.variant).toBe('blue');
+    tracker.destroy();
+  });
+
+  it('tags the FIRST constructor-fired event with experimentId+variant when ids are in the cookie', async () => {
+    // The pub cookie carries the key->id map, so the session_start the constructor
+    // fires BEFORE the async remote config resolves is already attributed.
+    setPubCookie({ checkout_cta: 'blue' }, { checkout_cta: 'exp-uuid-1' });
+    const tracker = new AnalyticsTracker({
+      projectId: PROJECT_ID,
+      endpoint: ENDPOINT,
+      apiKey: 'ap_live_x',
+      coreOnly: true,
+    });
+    // Flush WITHOUT awaiting ready(): prove attribution exists pre-config.
+    await tracker.flush();
+    const constructorEvent = postedEvents.find((e) => e.type === 'session_start');
+    expect(constructorEvent).toBeDefined();
+    expect(constructorEvent!.experimentId).toBe('exp-uuid-1');
+    expect(constructorEvent!.variant).toBe('blue');
+    tracker.destroy();
+  });
+
+  it('without ids in the cookie, the first event degrades cleanly (no crash, variant still known)', async () => {
+    // Legacy cookie shape: variant present, no ids. The constructor event carries
+    // the variant for display but no experimentId until config supplies the map.
+    setPubCookie({ checkout_cta: 'blue' });
+    const tracker = new AnalyticsTracker({
+      projectId: PROJECT_ID,
+      endpoint: ENDPOINT,
+      apiKey: 'ap_live_x',
+      coreOnly: true,
+    });
+    expect(tracker.getVariant('checkout_cta')).toBe('blue');
+    await tracker.flush();
+    const constructorEvent = postedEvents.find((e) => e.type === 'session_start');
+    expect(constructorEvent).toBeDefined();
+    // No id map pre-config -> no attribution on the early event, but no crash.
+    expect(constructorEvent!.experimentId).toBeUndefined();
+    // After config, the id mapping fills in and later events attribute correctly.
+    await tracker.ready();
+    tracker.track({ type: 'ws_a_probe', url: 'https://shop.example.com/' });
+    await tracker.flush();
+    const probe = postedEvents.find((e) => e.type === 'ws_a_probe');
     expect(probe!.experimentId).toBe('exp-uuid-1');
     expect(probe!.variant).toBe('blue');
     tracker.destroy();

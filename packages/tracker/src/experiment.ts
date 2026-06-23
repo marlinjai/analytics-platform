@@ -99,14 +99,19 @@ export class ExperimentManager {
    * `lumitra_variants_pub` mirror cookie the WS-A middleware sets. These are
    * AUTHORITATIVE: getVariant returns them immediately, and a later
    * setDefinitions() from remote config will NOT re-derive them with the
-   * client's own murmur hash. Experiment definitions are still loaded so
-   * getActiveExperiments() can map experiment-key -> id for event tagging.
+   * client's own murmur hash.
+   *
+   * When the cookie carries `experimentIds` (key -> id), they are recorded so
+   * getActiveExperiments() can tag events with experimentId BEFORE remote config
+   * loads, i.e. on the tracker's first constructor-fired event. Absent ids fall
+   * back to the remote-config key->id map exactly as before.
    *
    * Call before setDefinitions(). Absent/empty cookie -> no-op (legacy behavior).
    */
   hydrateFromServer(
     experiments: Record<string, string>,
     flags?: Record<string, boolean>,
+    experimentIds?: Record<string, string>,
   ): void {
     for (const key in experiments) {
       const variant = experiments[key];
@@ -121,6 +126,18 @@ export class ExperimentManager {
       for (const key in flags) {
         const value = flags[key];
         if (typeof value === 'boolean') this.serverFlags.set(key, value);
+      }
+    }
+    // When the cookie carried the key->id map, seed a minimal experiment
+    // definition per hydrated experiment (empty variants: the server already
+    // decided, so resolveAssignment short-circuits on serverAssignments and never
+    // touches variants). This lets the UNCHANGED getActiveExperiments() map
+    // key->id and tag the first constructor-fired event with experimentId+variant
+    // BEFORE remote config loads. setDefinitions() later REPLACES this.experiments
+    // with the real (same key+id) defs, so the seeds are transparently superseded.
+    if (experimentIds) {
+      for (const key in experimentIds) {
+        this.experiments.push({ id: experimentIds[key]!, key, variants: [] });
       }
     }
   }
@@ -221,6 +238,11 @@ export class ExperimentManager {
    * emitted events and therefore never enters heatmap_selectors_by_variant_mv /
    * experiment_conversions_mv. Non-overridden experiments in the same session
    * still attribute normally.
+   *
+   * Key->id is read from this.experiments, which holds the remote-config defs once
+   * loaded and, BEFORE config loads, the minimal seeds hydrateFromServer pushes
+   * from the pub cookie's `i` map. So the tracker's first constructor-fired event
+   * is tagged with experimentId+variant even pre-config.
    */
   getActiveExperiments(): Record<string, string> {
     const active: Record<string, string> = {};

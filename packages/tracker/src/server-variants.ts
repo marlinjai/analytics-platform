@@ -6,20 +6,28 @@
  * `lumitra_variants` (server-authoritative, secret-backed) and a non-signed,
  * client-readable mirror `lumitra_variants_pub`. The mirror's value is exactly:
  *
- *   base64url(JSON.stringify({ v: experiments, f: flags }))
+ *   base64url(JSON.stringify({ v: experiments, f: flags, i: experimentIds }))
  *
  *   v = { [experimentKey]: variantKey }   (string -> string)
  *   f = { [flagKey]: boolean }            (string -> boolean, may be absent)
+ *   i = { [experimentKey]: experimentId } (string -> string, may be absent)
  *
  * base64url == standard base64 with `+`->`-`, `/`->`_`, and `=` padding stripped.
  * No signature, no epoch (the signature lives only in the HttpOnly cookie, which
  * the browser cannot read, and which the client must never trust anyway).
+ *
+ * The `i` map (experiment key -> id) lets the tracker tag events with
+ * `experimentId` on its FIRST constructor-fired event, before remote config (the
+ * usual key->id source) loads. It is optional: a cookie minted before ids were
+ * shipped omits it, and the tracker degrades to id-after-config exactly as before.
  *
  * This is parsed INLINE here rather than importing decodeVariantsPublic from
  * @marlinjai/analytics-core so the tracker stays zero-runtime-dep and inside the
  * <6KB gzip budget. The parser fails closed (returns null) on a missing cookie,
  * malformed base64url, invalid JSON, or a payload whose `v`/`f` shapes don't
  * match, in which case the tracker falls back to its own client self-assignment.
+ * A malformed `i` (the optional id layer) degrades to "no ids" without failing
+ * the whole decode, since the `v`/`f` decision still stands.
  */
 
 /** The server decision carried by `lumitra_variants_pub`. */
@@ -28,6 +36,12 @@ export interface ServerVariantDecision {
   experiments: Record<string, string>;
   /** flag key -> evaluated boolean (every flag the server saw, incl. false) */
   flags: Record<string, boolean>;
+  /**
+   * experiment key -> experiment id, when the cookie carried the `i` map. Lets
+   * the tracker tag events with experimentId before remote config loads. Absent
+   * (undefined) for legacy cookies minted without ids.
+   */
+  experimentIds?: Record<string, string>;
 }
 
 /** Name of the non-signed, client-readable mirror cookie the middleware writes. */
@@ -105,10 +119,17 @@ export function readServerVariants(): ServerVariantDecision | null {
     return null;
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
-  const obj = parsed as { v?: unknown; f?: unknown };
+  const obj = parsed as { v?: unknown; f?: unknown; i?: unknown };
   if (!isStringMap(obj.v)) return null;
   if (obj.f !== undefined && !isBooleanMap(obj.f)) return null;
-  return { experiments: obj.v, flags: isBooleanMap(obj.f) ? obj.f : {} };
+  // `i` (experiment key -> id) is an optional optimization layer: a malformed map
+  // degrades to "no ids" (the variant decision still stands) rather than failing
+  // the whole decode closed, the way a bad `v`/`f` does.
+  return {
+    experiments: obj.v,
+    flags: isBooleanMap(obj.f) ? obj.f : {},
+    ...(isStringMap(obj.i) && { experimentIds: obj.i }),
+  };
 }
 
 /**

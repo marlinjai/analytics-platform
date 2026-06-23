@@ -325,6 +325,16 @@ export function createLumitraMiddleware(
     const flagAssignments = assignAllFlags(config.flags, uid);
     const epoch = configEpoch(config.experiments, config.flags);
 
+    // Experiment key -> id, for the PUBLIC mirror only (never the signed cookie).
+    // Carrying ids lets the browser tracker tag its first constructor-fired event
+    // with `experimentId` immediately, before its async remote-config fetch (the
+    // usual key->id source) resolves. Restricted to experiments that actually got
+    // an assignment so the map mirrors `assignments` exactly.
+    const experimentIds: Record<string, string> = {};
+    for (const exp of config.experiments) {
+      if (assignments[exp.key] !== undefined) experimentIds[exp.key] = exp.id;
+    }
+
     // 4. Set the signed cookie (server-authoritative) + public mirror (client).
     //    Skip rewriting an unchanged cookie unless we just minted the uid, to
     //    avoid churning Set-Cookie on every request once a visitor is stable.
@@ -343,7 +353,7 @@ export function createLumitraMiddleware(
       });
       response.cookies.set(
         LUMITRA_VARIANTS_PUBLIC_COOKIE,
-        encodeVariantsPublic(assignments, flagAssignments),
+        encodeVariantsPublic(assignments, flagAssignments, experimentIds),
         {
           httpOnly: false, // intentionally readable by the client (no secret in it)
           sameSite: 'lax',

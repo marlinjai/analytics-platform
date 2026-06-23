@@ -20,6 +20,7 @@ export {
 export type {
   VariantAssignments,
   FlagAssignments,
+  ExperimentIdMap,
   DecodedAssignments,
   EncodeVariantsOptions,
   DecodeVariantsOptions,

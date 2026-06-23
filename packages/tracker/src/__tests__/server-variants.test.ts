@@ -10,15 +10,22 @@ import { ExperimentManager } from '../experiment.js';
  */
 
 /** Replicate the exact wire format the WS-A middleware writes:
- *  base64url(JSON.stringify({ v: experiments, f: flags })), no signature, no epoch. */
+ *  base64url(JSON.stringify({ v: experiments, f: flags, i: experimentIds })),
+ *  no signature, no epoch. */
 function encodePub(
   experiments: Record<string, string>,
   flags?: Record<string, boolean>,
+  experimentIds?: Record<string, string>,
 ): string {
-  const payload: { v: Record<string, string>; f?: Record<string, boolean> } = {
+  const payload: {
+    v: Record<string, string>;
+    f?: Record<string, boolean>;
+    i?: Record<string, string>;
+  } = {
     v: experiments,
   };
   if (flags) payload.f = flags;
+  if (experimentIds) payload.i = experimentIds;
   const json = JSON.stringify(payload);
   // UTF-8 -> binary string -> base64 -> base64url (matches encodeVariantsPublic).
   const bytes = new TextEncoder().encode(json);
@@ -79,6 +86,37 @@ describe('readServerVariants (inline pub-cookie parser)', () => {
     setPubCookie(bad);
     expect(readServerVariants()).toBeNull();
   });
+
+  it('parses the experiment key -> id map from the `i` field', () => {
+    setPubCookie(
+      encodePub({ checkout_cta: 'blue' }, { new_nav: true }, { checkout_cta: 'exp-uuid-1' }),
+    );
+    expect(readServerVariants()).toEqual({
+      experiments: { checkout_cta: 'blue' },
+      flags: { new_nav: true },
+      experimentIds: { checkout_cta: 'exp-uuid-1' },
+    });
+  });
+
+  it('leaves experimentIds undefined when the cookie omits `i` (legacy)', () => {
+    setPubCookie(encodePub({ checkout_cta: 'blue' }));
+    const decoded = readServerVariants();
+    expect(decoded).toEqual({ experiments: { checkout_cta: 'blue' }, flags: {} });
+    expect(decoded?.experimentIds).toBeUndefined();
+  });
+
+  it('degrades to no ids (not fail-closed) when `i` is malformed; v/f still stand', () => {
+    // `i` is an optional optimization layer: a non-string-map `i` is dropped, but
+    // the variant/flag decision is preserved (unlike a malformed v/f, which nulls).
+    const bad = btoa(JSON.stringify({ v: { exp: 'control' }, f: { ff: true }, i: { exp: 1 } }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    setPubCookie(bad);
+    const decoded = readServerVariants();
+    expect(decoded).toEqual({ experiments: { exp: 'control' }, flags: { ff: true } });
+    expect(decoded?.experimentIds).toBeUndefined();
+  });
 });
 
 describe('ExperimentManager.hydrateFromServer (server decision is authoritative)', () => {
@@ -120,6 +158,32 @@ describe('ExperimentManager.hydrateFromServer (server decision is authoritative)
   it('maps server experiment-key -> experiment-id for event tagging once defs load', () => {
     const mgr = new ExperimentManager('session-abc');
     mgr.hydrateFromServer({ checkout_cta: 'blue' });
+    mgr.setDefinitions([EXP], []);
+    expect(mgr.getActiveExperiments()).toEqual({ 'exp-uuid-1': 'blue' });
+  });
+
+  it('tags events with experimentId+variant BEFORE defs load when ids are hydrated', () => {
+    const mgr = new ExperimentManager('session-abc');
+    // The pub cookie carried the key->id map: attribution is available pre-config.
+    mgr.hydrateFromServer({ checkout_cta: 'blue' }, undefined, { checkout_cta: 'exp-uuid-1' });
+    expect(mgr.getActiveExperiments()).toEqual({ 'exp-uuid-1': 'blue' });
+  });
+
+  it('without hydrated ids, attribution is empty until defs load (degrades as today)', () => {
+    const mgr = new ExperimentManager('session-abc');
+    mgr.hydrateFromServer({ checkout_cta: 'blue' });
+    // No ids and no definitions yet -> no key->id map -> no attribution, but the
+    // variant is still known for display.
+    expect(mgr.getActiveExperiments()).toEqual({});
+    expect(mgr.getVariant('checkout_cta')).toBe('blue');
+    // Once definitions arrive the id mapping fills in as before.
+    mgr.setDefinitions([EXP], []);
+    expect(mgr.getActiveExperiments()).toEqual({ 'exp-uuid-1': 'blue' });
+  });
+
+  it('hydrated ids and config ids converge (no double-count after defs load)', () => {
+    const mgr = new ExperimentManager('session-abc');
+    mgr.hydrateFromServer({ checkout_cta: 'blue' }, undefined, { checkout_cta: 'exp-uuid-1' });
     mgr.setDefinitions([EXP], []);
     expect(mgr.getActiveExperiments()).toEqual({ 'exp-uuid-1': 'blue' });
   });

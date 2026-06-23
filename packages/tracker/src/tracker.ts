@@ -41,13 +41,16 @@ export class AnalyticsTracker {
     // WS-A.2: if the middleware decided variants server-side, honor that decision
     // by seeding the manager from the unsigned lumitra_variants_pub mirror cookie.
     // getVariant() then returns the SERVER value immediately, and the later
-    // remote-config self-assignment will not override it. Absent cookie -> no-op,
-    // leaving the existing client self-assign behavior unchanged.
+    // remote-config self-assignment will not override it. The cookie's experiment
+    // key->id map (when present) lets the FIRST constructor-fired event below
+    // (session_start / pageview) carry experimentId+variant before remote config
+    // loads. Absent cookie -> no-op, leaving the client self-assign path unchanged.
     const serverDecision = readServerVariants();
     if (serverDecision) {
       this.experimentManager.hydrateFromServer(
         serverDecision.experiments,
         serverDecision.flags,
+        serverDecision.experimentIds,
       );
     }
 

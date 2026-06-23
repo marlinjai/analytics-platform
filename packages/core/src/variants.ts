@@ -34,9 +34,12 @@ import type { ExperimentDefinition, FlagDefinition } from './types.js';
  * The signed cookie is authoritative server-side only, the secret never reaches
  * the browser. For the client to honor the same decision without the secret, the
  * middleware additionally writes a non-signed public mirror cookie
- * (`lumitra_variants_pub`) carrying base64url(JSON({ v, f })); the client reads
- * that to avoid re-deciding. A client tampering with the mirror only fools its
- * own UI, never server attribution, which always re-verifies the signed cookie.
+ * (`lumitra_variants_pub`) carrying base64url(JSON({ v, f, i })); the client reads
+ * that to avoid re-deciding. The mirror additionally carries `i` (experiment
+ * key -> id), absent from the signed cookie, so the client can tag events with
+ * `experimentId` before remote config loads. A client tampering with the mirror
+ * only fools its own UI, never server attribution, which always re-verifies the
+ * signed cookie.
  */
 
 /** Name of the signed, server-authoritative variant cookie. */
@@ -60,6 +63,14 @@ export type VariantAssignments = Record<string, string>;
 export type FlagAssignments = Record<string, boolean>;
 
 /**
+ * A map of experiment key -> experiment id. Carried ONLY by the public mirror
+ * cookie so the client can tag events with `experimentId` immediately, before
+ * remote config (which is the usual key->id source) arrives. Never part of the
+ * signed cookie.
+ */
+export type ExperimentIdMap = Record<string, string>;
+
+/**
  * The full server decision carried by the variant cookies: experiment variant
  * assignments plus boolean flag evaluations, in two non-colliding namespaces.
  */
@@ -68,6 +79,13 @@ export interface DecodedAssignments {
   experiments: VariantAssignments;
   /** flag key -> evaluated boolean (every flag the server saw, incl. false) */
   flags: FlagAssignments;
+  /**
+   * experiment key -> experiment id. Populated only when decoding the PUBLIC
+   * mirror cookie (and only when it carried ids); the signed cookie never
+   * carries ids, so {@link decodeVariants} leaves this undefined. Optional for
+   * back-compat: a mirror minted before ids were shipped decodes without it.
+   */
+  experimentIds?: ExperimentIdMap;
 }
 
 /** Options for {@link encodeVariants}. */
@@ -110,6 +128,12 @@ interface PublicPayload {
   v: VariantAssignments;
   /** flag assignments (optional for back-compat, see CookiePayload.f) */
   f?: FlagAssignments;
+  /**
+   * experiment key -> experiment id. Optional on the wire: a mirror minted
+   * before ids were carried omits it, and decode treats absence as no ids
+   * (the client falls back to remote config for the key->id map).
+   */
+  i?: ExperimentIdMap;
 }
 
 // ── Web-Crypto / node:crypto bridge ──────────────────────────────────────────
@@ -284,15 +308,25 @@ export async function encodeVariants(
 
 /**
  * Encode the non-signed public mirror cookie value (`lumitra_variants_pub`):
- * base64url(JSON({ v: experiments, f: flags })). No secret, no signature, no
- * epoch, the client reads this to honor the server decision. Never trusted
- * server-side.
+ * base64url(JSON({ v: experiments, f: flags, i: experimentIds })). No secret, no
+ * signature, no epoch, the client reads this to honor the server decision. Never
+ * trusted server-side.
+ *
+ * `experimentIds` (experiment key -> id) is optional and carried ONLY here, not
+ * in the signed cookie. Shipping it lets the browser tracker tag events with
+ * `experimentId` immediately on its first constructor-fired event, before remote
+ * config (the usual key->id source) loads. Omitting it (or passing an empty map)
+ * keeps the legacy payload shape so older clients still decode.
  */
 export function encodeVariantsPublic(
   experiments: VariantAssignments,
   flags: FlagAssignments,
+  experimentIds?: ExperimentIdMap,
 ): string {
   const payload: PublicPayload = { v: experiments, f: flags };
+  if (experimentIds && Object.keys(experimentIds).length > 0) {
+    payload.i = experimentIds;
+  }
   return toBase64Url(encodeUtf8(JSON.stringify(payload)));
 }
 
@@ -311,7 +345,9 @@ export function decodeVariantsPublic(
     const json = new TextDecoder().decode(bytes);
     const parsed = JSON.parse(json) as unknown;
     if (!isPublicPayload(parsed)) return null;
-    return { experiments: parsed.v, flags: parsed.f ?? {} };
+    const decoded: DecodedAssignments = { experiments: parsed.v, flags: parsed.f ?? {} };
+    if (parsed.i) decoded.experimentIds = parsed.i;
+    return decoded;
   } catch {
     return null;
   }
@@ -395,5 +431,6 @@ function isPublicPayload(value: unknown): value is PublicPayload {
   if (typeof value !== 'object' || value === null) return false;
   const obj = value as Record<string, unknown>;
   if (!isStringRecord(obj.v)) return false;
-  return obj.f === undefined || isBooleanRecord(obj.f);
+  if (obj.f !== undefined && !isBooleanRecord(obj.f)) return false;
+  return obj.i === undefined || isStringRecord(obj.i);
 }
