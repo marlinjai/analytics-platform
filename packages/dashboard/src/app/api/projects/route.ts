@@ -55,32 +55,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
 
-  // A new project needs an auth-brain workspace, which is owned by email. We can
-  // only resolve the creator's email from a signed-in session, so account-key
-  // (CLI) creation can't provision one yet — fail loudly with the next action
-  // rather than insert an orphan project with no workspace (which would then be
-  // invisible to everyone, the listing query above filters out workspace-less rows).
-  const jar = await cookies();
-  const sessionCookie = jar.get('lumitra_session')?.value;
-  const user = sessionCookie ? await authBrainClient.getCurrentUser(sessionCookie) : null;
-  if (!user?.email) {
-    return NextResponse.json(
-      {
-        error:
-          'Project creation requires a signed-in dashboard session. Create projects from the dashboard at analytics.lumitra.co.',
-      },
-      { status: 422 },
-    );
-  }
-
   const body = await request.json();
   const parsed = createProjectSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: 'Validation failed', details: parsed.error.issues }, { status: 400 });
   }
 
+  const { name, domain, allowedOrigins, ownerEmail: bodyOwnerEmail } = parsed.data;
+
+  // A new project needs an auth-brain workspace, which is owned by email. The
+  // dashboard resolves the owner from the signed-in session; an account-key
+  // (CLI) caller has no session, so it must pass ownerEmail (an existing
+  // auth-brain account). Without either we fail loudly rather than insert an
+  // orphan project with no workspace — the listing query filters those out, so
+  // it would be invisible to everyone.
+  const jar = await cookies();
+  const sessionCookie = jar.get('lumitra_session')?.value;
+  const sessionUser = sessionCookie ? await authBrainClient.getCurrentUser(sessionCookie) : null;
+  const ownerEmail = sessionUser?.email ?? bodyOwnerEmail;
+  if (!ownerEmail) {
+    return NextResponse.json(
+      {
+        error:
+          'Project creation needs an owner. Sign in to the dashboard, or pass "ownerEmail" (an existing Lumitra account) when creating with an account key.',
+      },
+      { status: 422 },
+    );
+  }
+
   const db = getDb();
-  const { name, domain, allowedOrigins } = parsed.data;
 
   const [project] = await db`
     INSERT INTO projects (name, domain, allowed_origins)
@@ -95,7 +98,7 @@ export async function POST(request: NextRequest) {
   try {
     const workspace = await provisionProjectWorkspace({
       name,
-      ownerEmail: user.email,
+      ownerEmail,
       projectId: project!.id,
     });
     workspaceId = workspace.id;
