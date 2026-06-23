@@ -21,10 +21,11 @@ COPY . .
 
 # Build shared first, then dashboard
 RUN pnpm --filter @analytics-platform/shared build
-# Dummy env vars needed at build time for Next.js page data collection
+# Dummy env vars needed at build time for Next.js page data collection.
+# NEXTAUTH_SECRET is intentionally NOT set here: it is only read at runtime
+# (toolbar-token HMAC signing) and is injected from Infisical by the entrypoint.
 ENV DATABASE_URL=postgres://dummy:dummy@localhost:5432/dummy
 ENV CLICKHOUSE_URL=http://localhost:8123
-ENV NEXTAUTH_SECRET=build-time-placeholder
 RUN pnpm --filter @analytics-platform/dashboard build
 
 FROM base AS runner

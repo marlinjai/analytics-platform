@@ -149,6 +149,11 @@ export const createProjectSchema = z.object({
   name: z.string().min(1).max(128),
   domain: z.string().min(1).max(256),
   allowedOrigins: z.array(allowedOriginEntrySchema).max(20).default([]),
+  // Owner of the project's auth-brain workspace. Only consulted on the
+  // account-key (CLI) path, where there is no session to resolve the email
+  // from; the dashboard always uses the signed-in user. Must be an existing
+  // auth-brain account.
+  ownerEmail: z.string().email().optional(),
 });
 
 export const updateProjectSchema = z.object({
