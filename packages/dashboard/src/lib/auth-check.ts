@@ -8,13 +8,30 @@ import { authBrainClient } from './auth-brain';
  * - Delegates the permission check to auth-brain's can() which evaluates
  *   the full tenant_group -> tenant -> workspace hierarchy transparently.
  *
- * Role mapping from old memberships.role:
- *   viewer -> "workspace.viewer"  (read-only)
- *   admin  -> "workspace.admin"   (can manage project settings, API keys)
- *   owner  -> "workspace.admin"   (same as admin at workspace level)
+ * Role mapping from old memberships.role (verified against the live OpenFGA model,
+ * whose `workspace` type defines only admin / member / viewer, there is NO
+ * `workspace.owner`; ownership lives on tenant/tenant_group):
+ *   viewer | member -> "workspace.viewer"  (read-only)
+ *   admin  | owner  -> "workspace.admin"   (manage settings, keys, destructive ops)
  *
  * requiredRole defaults to "workspace.viewer" (any authenticated member).
  */
+function mapMembershipRole(role: string): 'workspace.admin' | 'workspace.viewer' {
+  switch (role) {
+    case 'owner':
+    case 'admin':
+      return 'workspace.admin';
+    case 'viewer':
+    case 'member':
+      return 'workspace.viewer';
+    default:
+      throw new Error(
+        `checkProjectMembership: unknown required role "${role}". ` +
+          `Valid roles are owner, admin, member, viewer.`,
+      );
+  }
+}
+
 /**
  * @deprecated Use checkProjectAccess() with the workspace.viewer / workspace.admin role strings.
  * Kept as a backward-compat shim so existing routes continue to compile unchanged.
@@ -24,10 +41,15 @@ export async function checkProjectMembership(
   projectId: string,
   requiredRoles?: string[],
 ): Promise<boolean> {
+  // Enforce the LEAST-privileged relation that satisfies the set: a read-only
+  // role anywhere in the list means the route is readable. Unknown roles throw
+  // rather than silently downgrading the check.
   const role =
-    requiredRoles && requiredRoles.every((r) => r === 'admin' || r === 'owner')
-      ? 'workspace.admin'
-      : 'workspace.viewer';
+    !requiredRoles || requiredRoles.length === 0
+      ? 'workspace.viewer'
+      : requiredRoles.map(mapMembershipRole).includes('workspace.viewer')
+        ? 'workspace.viewer'
+        : 'workspace.admin';
   return checkProjectAccess(userId, projectId, role);
 }
 

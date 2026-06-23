@@ -27,6 +27,51 @@ async function getSessionUserId(): Promise<string | null> {
 }
 
 /**
+ * Maps a legacy route role string to the auth-brain OpenFGA workspace relation.
+ *
+ * The auth-brain workspace type only defines three relations: `admin`, `member`,
+ * `viewer` (verified against the live OpenFGA model, there is NO `workspace.owner`
+ * relation). Ownership is modelled one level up, on `tenant`/`tenant_group`, not on
+ * the workspace. So at workspace granularity the most-privileged relation is
+ * `workspace.admin`, and a workspace owner is granted `workspace.admin`.
+ *
+ * Concretely:
+ *   'owner' | 'admin'   -> 'workspace.admin'  (manage settings, keys, destructive ops)
+ *   'viewer' | 'member' -> 'workspace.viewer' (read access)
+ *
+ * Any other string throws: a typo or a non-existent relation must NEVER silently
+ * downgrade an authorization check (which the old `.every(...)` collapse did).
+ */
+function mapToWorkspaceRole(role: string): 'workspace.admin' | 'workspace.viewer' {
+  switch (role) {
+    case 'owner':
+    case 'admin':
+      return 'workspace.admin';
+    case 'viewer':
+    case 'member':
+      return 'workspace.viewer';
+    default:
+      throw new Error(
+        `authenticateRequest: unknown required role "${role}". ` +
+          `Valid roles are owner, admin, member, viewer.`,
+      );
+  }
+}
+
+/**
+ * Resolves an array of required route roles to the single workspace relation to
+ * enforce. We require the LEAST-privileged relation that satisfies the set: if any
+ * listed role is read-only (viewer/member), the route is readable, so we enforce
+ * `workspace.viewer`; only when every listed role is privileged (owner/admin) do we
+ * enforce `workspace.admin`. Unknown roles throw via mapToWorkspaceRole().
+ */
+function resolveRequiredRole(requiredRoles?: string[]): 'workspace.admin' | 'workspace.viewer' {
+  if (!requiredRoles || requiredRoles.length === 0) return 'workspace.viewer';
+  const mapped = requiredRoles.map(mapToWorkspaceRole);
+  return mapped.includes('workspace.viewer') ? 'workspace.viewer' : 'workspace.admin';
+}
+
+/**
  * Authenticate a request via session (lumitra_session cookie) or API key.
  *
  * 1. Try session cookie -> verifySession() -> checkProjectAccess() via OpenFGA
@@ -35,20 +80,18 @@ async function getSessionUserId(): Promise<string | null> {
  * 4. Account keys: verify user has workspace access to the route's project
  * 5. API keys carry implicit "admin" access level
  *
- * requiredRole maps old role strings to auth-brain workspace roles:
- *   ['viewer']         -> 'workspace.viewer'
- *   ['admin', 'owner'] -> 'workspace.admin'
- *   default            -> 'workspace.viewer'
+ * requiredRoles map to auth-brain workspace relations via resolveRequiredRole():
+ *   ['viewer'] / ['member']   -> 'workspace.viewer'
+ *   ['owner'] / ['admin'] / ['owner','admin'] -> 'workspace.admin'
+ *   undefined / []            -> 'workspace.viewer'
+ * An unknown role string throws rather than silently downgrading the check.
  */
 export async function authenticateRequest(
   request: NextRequest,
   projectId: string,
   requiredRoles?: string[],
 ): Promise<AuthResult> {
-  const requiredRole =
-    requiredRoles && requiredRoles.every((r) => r === 'admin' || r === 'owner')
-      ? 'workspace.admin'
-      : 'workspace.viewer';
+  const requiredRole = resolveRequiredRole(requiredRoles);
 
   // --- Try session auth ---
   const userId = await getSessionUserId();
