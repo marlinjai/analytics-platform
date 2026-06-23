@@ -10,6 +10,14 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./server": {
+      "import": "./dist/server.js",
+      "types": "./dist/server.d.ts"
+    },
+    "./middleware": {
+      "import": "./dist/middleware.js",
+      "types": "./dist/middleware.d.ts"
     }
   },
   "files": ["dist"],
@@ -17,13 +25,30 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@marlinjai/analytics-core": "workspace:*",
+    "server-only": "^0.0.1"
+  },
   "peerDependencies": {
     "react": ">=18.0.0",
+    "next": ">=14.0.0",
     "@marlinjai/analytics-tracker": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    },
+    "@marlinjai/analytics-tracker": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "react": "^19.0.0",
     "@types/react": "^19.0.0",
+    "next": "^15.1.6",
     "@marlinjai/analytics-tracker": "workspace:*",
     "tsup": "^8.5.0",
     "typescript": "^5.7.0"

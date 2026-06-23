@@ -68,9 +68,50 @@ export class ExperimentManager {
   private flags: FlagDefinition[] = [];
   private identityId: string;
   private assignments: Map<string, string> = new Map();
+  /**
+   * Server-decided assignments from the `lumitra_variants_pub` cookie. When a
+   * key is present here, the server decision is AUTHORITATIVE: it is returned
+   * immediately (before remote config loads) and is never overridden by the
+   * client's own deterministic murmur assignment when config arrives. Empty
+   * when no pub cookie was seen, in which case the client self-assigns as before.
+   */
+  private serverAssignments: Map<string, string> = new Map();
+  /** Server-decided flag evaluations from the pub cookie (authoritative when present). */
+  private serverFlags: Map<string, boolean> = new Map();
 
   constructor(sessionId: string) {
     this.identityId = sessionId;
+  }
+
+  /**
+   * Seed server-decided assignments (and flag evaluations) from the unsigned
+   * `lumitra_variants_pub` mirror cookie the WS-A middleware sets. These are
+   * AUTHORITATIVE: getVariant returns them immediately, and a later
+   * setDefinitions() from remote config will NOT re-derive them with the
+   * client's own murmur hash. Experiment definitions are still loaded so
+   * getActiveExperiments() can map experiment-key -> id for event tagging.
+   *
+   * Call before setDefinitions(). Absent/empty cookie -> no-op (legacy behavior).
+   */
+  hydrateFromServer(
+    experiments: Record<string, string>,
+    flags?: Record<string, boolean>,
+  ): void {
+    for (const key in experiments) {
+      const variant = experiments[key];
+      if (typeof variant === 'string') {
+        this.serverAssignments.set(key, variant);
+        // Reflect immediately so getVariant() returns the server value before
+        // remote config arrives.
+        this.assignments.set(key, variant);
+      }
+    }
+    if (flags) {
+      for (const key in flags) {
+        const value = flags[key];
+        if (typeof value === 'boolean') this.serverFlags.set(key, value);
+      }
+    }
   }
 
   /** Load experiment & flag definitions from remote config. */
@@ -85,6 +126,12 @@ export class ExperimentManager {
     if (userId === this.identityId) return;
     this.identityId = userId;
     this.assignments.clear();
+    // Re-seed server-authoritative assignments so identify() can't drop the
+    // server decision back to a client murmur. The server keyed on the
+    // lumitra_uid cookie, which identify() does not change.
+    for (const [key, variant] of this.serverAssignments) {
+      this.assignments.set(key, variant);
+    }
     this.resolveAllAssignments();
   }
 
@@ -95,6 +142,10 @@ export class ExperimentManager {
 
   /** Evaluate a feature flag. Returns false if flag not found or disabled. */
   getFlag(key: string): boolean {
+    // Server decision is authoritative when the pub cookie carried this flag.
+    const serverFlag = this.serverFlags.get(key);
+    if (serverFlag !== undefined) return serverFlag;
+
     const flag = this.flags.find((f) => f.key === key);
     if (!flag || !flag.enabled) return false;
 
@@ -130,6 +181,10 @@ export class ExperimentManager {
   /** Return all flag evaluations as { flagKey: boolean }. */
   getAllFlags(): Record<string, boolean> {
     const result: Record<string, boolean> = {};
+    // Server-decided flags first (present even before remote config loads).
+    for (const [key, value] of this.serverFlags) {
+      result[key] = value;
+    }
     for (const flag of this.flags) {
       result[flag.key] = this.getFlag(flag.key);
     }
@@ -151,6 +206,14 @@ export class ExperimentManager {
   }
 
   private resolveAssignment(exp: ExperimentDefinition): void {
+    // Server decision wins: if the pub cookie assigned this experiment, honor it
+    // and never re-derive a (possibly different) client murmur assignment.
+    const serverVariant = this.serverAssignments.get(exp.key);
+    if (serverVariant !== undefined) {
+      this.assignments.set(exp.key, serverVariant);
+      return;
+    }
+
     // Check sessionStorage for a sticky assignment
     const stored = readStoredAssignment(exp.key);
     if (stored && exp.variants.some((v) => v.key === stored)) {
