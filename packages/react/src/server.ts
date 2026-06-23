@@ -3,8 +3,11 @@ import React from 'react';
 import { cookies } from 'next/headers';
 import {
   decodeVariants,
+  decodeOverride,
   LUMITRA_VARIANTS_COOKIE,
+  LUMITRA_VARIANT_OVERRIDE_COOKIE,
   type DecodedAssignments,
+  type VariantOverride,
 } from '@marlinjai/analytics-core';
 
 /**
@@ -20,6 +23,21 @@ import {
  * we want: the variant is per-visitor, so the response must not be statically
  * cached. The `server-only` import makes importing this from a client bundle a
  * build error, so the secret can never leak into client JS.
+ *
+ * ## QA / admin forced-variant override (WS-F / D4)
+ *
+ * `getVariant` is override-aware: it reads the un-signed
+ * `lumitra_variant_override` cookie (set by the middleware from
+ * `?lumitra_variant=experimentKey:variantKey`) and, when present, returns the
+ * forced arm for those experiments. This wins over the signed-cookie assignment
+ * so the server renders the forced arm even before the middleware has re-minted
+ * the signed cookie (e.g. on the same request the override is first applied,
+ * where the middleware forwards the override cookie onto the request headers).
+ * Non-overridden experiments keep their real signed-cookie assignment.
+ *
+ * The override never affects experiment RESULTS, the tracker suppresses
+ * attribution for overridden experiments client-side (see the tracker's
+ * experiment.ts). Server-side, the override is read-only display state.
  */
 
 /** Read + verify the signed variant cookie, returning the decoded maps or null. */
@@ -34,12 +52,28 @@ async function readAssignments(): Promise<DecodedAssignments | null> {
   return decodeVariants(raw, { secret });
 }
 
+/** Read the QA/admin forced-variant override from the un-signed cookie, or null. */
+async function readOverride(): Promise<VariantOverride | null> {
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(LUMITRA_VARIANT_OVERRIDE_COOKIE)?.value;
+  return decodeOverride(raw);
+}
+
 /**
  * Get the server-decided variant for an experiment, or null when no cookie /
  * no decision / tampered. Use this in a Server Component to branch on the
  * assigned arm before the HTML is sent.
+ *
+ * A QA/admin forced override (`?lumitra_variant=experimentKey:variantKey`, sticky
+ * via the `lumitra_variant_override` cookie) takes precedence and returns the
+ * forced arm. Non-overridden experiments resolve to their real signed-cookie
+ * assignment. The override is display-only; it never enters experiment results.
  */
 export async function getVariant(experimentKey: string): Promise<string | null> {
+  const override = await readOverride();
+  if (override && Object.prototype.hasOwnProperty.call(override, experimentKey)) {
+    return override[experimentKey] as string;
+  }
   const decoded = await readAssignments();
   return decoded?.experiments[experimentKey] ?? null;
 }

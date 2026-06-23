@@ -78,6 +78,17 @@ export class ExperimentManager {
   private serverAssignments: Map<string, string> = new Map();
   /** Server-decided flag evaluations from the pub cookie (authoritative when present). */
   private serverFlags: Map<string, boolean> = new Map();
+  /**
+   * QA/admin forced-variant override (WS-F / D4): experiment key -> forced
+   * variant key. When a key is present here it is DISPLAY-authoritative
+   * (getVariant returns it, over the server decision and the client murmur) AND
+   * it is EXCLUDED from getActiveExperiments() so emitted events carry NO
+   * experimentId/variant for it. That exclusion is the results-pollution gate: a
+   * forced experiment's events never reach heatmap_selectors_by_variant_mv /
+   * experiment_conversions_mv, so a QA preview cannot skew live results. Empty
+   * when no override cookie/query was seen.
+   */
+  private forcedOverride: Map<string, string> = new Map();
 
   constructor(sessionId: string) {
     this.identityId = sessionId;
@@ -114,6 +125,43 @@ export class ExperimentManager {
     }
   }
 
+  /**
+   * Apply (or clear) the QA/admin forced-variant override (WS-F / D4).
+   *
+   * For every forced (experimentKey -> variantKey) pair, the variant is shown
+   * immediately by getVariant() and the key is recorded as suppressed for
+   * attribution, so track() emits NO experimentId/variant for that experiment
+   * (the results-pollution gate). Non-overridden experiments are untouched and
+   * attribute normally.
+   *
+   * Pass `'clear'` to drop any active override; the next resolve restores the
+   * server decision / client self-assignment. Call BEFORE setDefinitions() (the
+   * tracker does this in its constructor); calling after also works because the
+   * override is re-applied on top of the resolved assignment.
+   */
+  applyOverride(override: Record<string, string> | 'clear'): void {
+    this.forcedOverride.clear();
+    if (override === 'clear') {
+      // Re-resolve so a previously-forced key falls back to its real assignment.
+      this.resolveAllAssignments();
+      return;
+    }
+    for (const key in override) {
+      const variant = override[key];
+      if (typeof variant === 'string' && variant !== '') {
+        this.forcedOverride.set(key, variant);
+        // Reflect immediately so getVariant() shows the forced arm before
+        // definitions load.
+        this.assignments.set(key, variant);
+      }
+    }
+  }
+
+  /** Whether an experiment key is currently force-overridden (attribution suppressed). */
+  isOverridden(key: string): boolean {
+    return this.forcedOverride.has(key);
+  }
+
   /** Load experiment & flag definitions from remote config. */
   setDefinitions(experiments: ExperimentDefinition[], flags: FlagDefinition[]): void {
     this.experiments = experiments;
@@ -130,6 +178,10 @@ export class ExperimentManager {
     // server decision back to a client murmur. The server keyed on the
     // lumitra_uid cookie, which identify() does not change.
     for (const [key, variant] of this.serverAssignments) {
+      this.assignments.set(key, variant);
+    }
+    // Re-seed the forced override too, identify() must not drop a QA-forced arm.
+    for (const [key, variant] of this.forcedOverride) {
       this.assignments.set(key, variant);
     }
     this.resolveAllAssignments();
@@ -159,10 +211,21 @@ export class ExperimentManager {
     return true;
   }
 
-  /** Return all active experiment assignments as { experimentId: variantKey }. */
+  /**
+   * Return active experiment assignments for EVENT ATTRIBUTION as
+   * { experimentId: variantKey }.
+   *
+   * RESULTS-POLLUTION GATE (WS-F / D4): a force-overridden experiment is OMITTED
+   * here even though getVariant() still shows its forced arm. track() tags events
+   * from this map, so a forced experiment contributes no experimentId/variant to
+   * emitted events and therefore never enters heatmap_selectors_by_variant_mv /
+   * experiment_conversions_mv. Non-overridden experiments in the same session
+   * still attribute normally.
+   */
   getActiveExperiments(): Record<string, string> {
     const active: Record<string, string> = {};
     for (const exp of this.experiments) {
+      if (this.forcedOverride.has(exp.key)) continue; // forced -> suppress attribution
       const variant = this.assignments.get(exp.key);
       if (variant) active[exp.id] = variant;
     }
@@ -206,6 +269,14 @@ export class ExperimentManager {
   }
 
   private resolveAssignment(exp: ExperimentDefinition): void {
+    // QA/admin forced override wins above everything for DISPLAY (getVariant).
+    // Attribution is still suppressed separately in getActiveExperiments().
+    const forced = this.forcedOverride.get(exp.key);
+    if (forced !== undefined) {
+      this.assignments.set(exp.key, forced);
+      return;
+    }
+
     // Server decision wins: if the pub cookie assigned this experiment, honor it
     // and never re-derive a (possibly different) client murmur assignment.
     const serverVariant = this.serverAssignments.get(exp.key);

@@ -10,7 +10,11 @@ import { attachPageviewListener, attachClickListener, attachScrollListener } fro
 import { getCachedPageHash } from './dom-hash.js';
 import { ExperimentManager } from './experiment.js';
 import type { RemoteConfig } from './experiment.js';
-import { readServerVariants } from './server-variants.js';
+import {
+  readServerVariants,
+  readVariantOverride,
+  clearVariantOverrideCookie,
+} from './server-variants.js';
 
 const CONFIG_TIMEOUT_MS = 3000;
 
@@ -45,6 +49,19 @@ export class AnalyticsTracker {
         serverDecision.experiments,
         serverDecision.flags,
       );
+    }
+
+    // WS-F / D4: honor a QA/admin forced-variant override from the
+    // `?lumitra_variant=` query or the persisted `lumitra_variant_override`
+    // cookie. getVariant() then returns the forced arm, and, critically,
+    // track() SUPPRESSES experiment attribution for every overridden experiment
+    // (see ExperimentManager.getActiveExperiments), so a forced session never
+    // pollutes experiment results. `clear` drops the override and deletes the
+    // cookie so normal assignment resumes.
+    const override = readVariantOverride();
+    if (override !== null) {
+      this.experimentManager.applyOverride(override);
+      if (override === 'clear') clearVariantOverrideCookie();
     }
 
     this.readyPromise = new Promise<void>((resolve) => {

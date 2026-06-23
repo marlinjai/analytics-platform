@@ -22,6 +22,8 @@ export default defineConfig({
       'packages/tracker/vitest.config.ts',
       // core package tests (deterministic assignment parity)
       'packages/core/vitest.config.ts',
+      // react package tests (server-side getVariant override honoring)
+      'packages/react/vitest.config.ts',
       // node SDK tests
       'packages/node/vitest.config.ts',
     ],
