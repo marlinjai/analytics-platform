@@ -4,7 +4,7 @@ import { createProjectSchema } from '@analytics-platform/shared';
 import { authenticateAccountRequest, corsHeaders } from '@/lib/auth-api';
 import { authBrainClient } from '@/lib/auth-brain';
 import { provisionProjectWorkspace, WorkspaceProvisionError } from '@/lib/workspace-provisioning';
-import { writeWorkspaceGrant } from '@/lib/openfga-direct';
+import { writeWorkspaceGrant, checkWorkspaceAccess } from '@/lib/openfga-direct';
 import { getDb } from '@/lib/db';
 
 type ProjectRow = { id: string; workspace_id: string | null; [k: string]: unknown };
@@ -41,13 +41,7 @@ export async function GET(request: NextRequest) {
       `;
 
   const allowed = await Promise.all(
-    candidates.map((p) =>
-      authBrainClient.can(authResult.userId, 'workspace.viewer', {
-        type: 'workspace',
-        id: p.workspace_id!,
-        workspaceId: p.workspace_id!,
-      }),
-    ),
+    candidates.map((p) => checkWorkspaceAccess(authResult.userId, p.workspace_id!, 'viewer')),
   );
 
   const projects = candidates.filter((_, i) => allowed[i]);
