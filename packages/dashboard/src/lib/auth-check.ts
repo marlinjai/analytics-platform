@@ -1,5 +1,5 @@
 import { getDb } from './db';
-import { authBrainClient } from './auth-brain';
+import { checkWorkspaceAccess } from './openfga-direct';
 
 /**
  * Checks whether userId has access to a project via auth-brain's OpenFGA.
@@ -64,9 +64,9 @@ export async function checkProjectAccess(
   `;
   if (!project) return false;
 
-  return authBrainClient.can(userId, requiredRole, {
-    type: 'workspace',
-    id: project.workspace_id,
-    workspaceId: project.workspace_id,
-  });
+  // Check OpenFGA directly with the preshared bearer token. The auth-brain SDK's
+  // can() sends no Authorization header, which this token-protected OpenFGA
+  // rejects 401 -> fail-closed false, so it can never grant access here.
+  const relation = requiredRole === 'workspace.admin' ? 'admin' : 'viewer';
+  return checkWorkspaceAccess(userId, project.workspace_id, relation);
 }
