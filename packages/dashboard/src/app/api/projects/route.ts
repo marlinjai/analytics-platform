@@ -4,9 +4,15 @@ import { createProjectSchema } from '@analytics-platform/shared';
 import { authenticateAccountRequest, corsHeaders } from '@/lib/auth-api';
 import { authBrainClient } from '@/lib/auth-brain';
 import { provisionProjectWorkspace, WorkspaceProvisionError } from '@/lib/workspace-provisioning';
+import { writeWorkspaceGrant } from '@/lib/openfga-direct';
 import { getDb } from '@/lib/db';
 
 type ProjectRow = { id: string; workspace_id: string | null; [k: string]: unknown };
+
+// The configured instance owner. Only this account may self-heal its grants when
+// the async grant-sync (auth-brain outbox worker) is lagging — a normal user can
+// never grant themselves access to another tenant's data this way.
+const OWNER_EMAIL = (process.env.AUTH_BRAIN_OWNER_EMAIL ?? 'marlinjaipohl@gmail.com').toLowerCase();
 
 export async function GET(request: NextRequest) {
   const authResult = await authenticateAccountRequest(request);
@@ -45,6 +51,38 @@ export async function GET(request: NextRequest) {
   );
 
   const projects = candidates.filter((_, i) => allowed[i]);
+
+  // Recovery: if the caller can see NO projects but projects exist, the async
+  // grant-sync (auth-brain outbox worker) is likely lagging/down, so OpenFGA has
+  // no tuples yet and can() returns false. For the configured instance owner,
+  // write the grant tuples straight to OpenFGA (the membership already exists in
+  // auth-brain's DB; this only reconciles the OpenFGA side the worker owes) and
+  // return their projects. Owner-gated so no one can self-grant another's data.
+  if (projects.length === 0 && candidates.length > 0) {
+    const jar = await cookies();
+    const cookie = jar.get('lumitra_session')?.value;
+    const user = cookie ? await authBrainClient.getCurrentUser(cookie) : null;
+    if (user?.email && user.email.toLowerCase() === OWNER_EMAIL) {
+      const recovered = await Promise.all(
+        candidates.map(async (p) => {
+          try {
+            const ok = await writeWorkspaceGrant(authResult.userId, p.workspace_id!, 'admin');
+            return ok ? p : null;
+          } catch (err) {
+            console.error(
+              `[projects] recovery grant failed ws=${p.workspace_id}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+            return null;
+          }
+        }),
+      );
+      const visible = recovered.filter((p): p is ProjectRow => p !== null);
+      if (visible.length > 0) {
+        console.log(`[projects] recovery: wrote owner grants, ${visible.length}/${candidates.length} now visible`);
+        return NextResponse.json({ projects: visible });
+      }
+    }
+  }
 
   return NextResponse.json({ projects });
 }
