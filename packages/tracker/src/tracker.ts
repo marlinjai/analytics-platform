@@ -187,11 +187,28 @@ export class AnalyticsTracker {
     if (this.replayActive) return;
     this.replayActive = true;
     import('./replay.js')
-      .then((mod) => mod.initReplay(this, this.config.replayPrivacy))
+      .then((mod) => mod.initReplay(this, this.config.replayPrivacy, this.resolveRecordCanvas()))
       .catch(() => {
         this.replayActive = false;
         if (this.config.debug) console.warn('[analytics] rrweb not available, replay disabled');
       });
+  }
+
+  /**
+   * Resolve whether session replay should capture <canvas>/WebGL content, from
+   * the project's `recordCanvas` remote-config setting:
+   *   'on'   -> always record canvas
+   *   'off'  -> never
+   *   'auto' -> (default) record only when the page currently has a <canvas>,
+   *             so non-canvas pages don't pay the much larger canvas payload.
+   * Remote config is usually loaded by the time replay starts (post-consent);
+   * if it has not arrived yet, we fall back to auto-detection.
+   */
+  private resolveRecordCanvas(): boolean {
+    const mode = (this.remoteConfig?.config?.recordCanvas as string | undefined) ?? 'auto';
+    if (mode === 'on') return true;
+    if (mode === 'off') return false;
+    return typeof document !== 'undefined' && document.querySelector('canvas') !== null;
   }
 
   /**

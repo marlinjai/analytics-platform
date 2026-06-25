@@ -14,6 +14,7 @@ let onVisibilityChange: (() => void) | null = null;
 export async function initReplay(
   tracker: AnalyticsTracker,
   privacy?: ReplayPrivacy,
+  recordCanvas = false,
 ): Promise<void> {
   let rrweb: typeof import('rrweb');
   try {
@@ -41,7 +42,17 @@ export async function initReplay(
     },
     inlineStylesheet: true,    // Inline all CSS into snapshot (fixes cross-origin stylesheet issue)
     collectFonts: true,        // Capture web fonts
-    inlineImages: true,        // Inline images as data URIs
+    // Do NOT inline images. rrweb's inlineImages draws each <img> to a canvas
+    // and calls toDataURL(); for cross-origin images without CORS this taints
+    // the canvas and the read fails, so the replay shows a blank/placeholder
+    // image (the exact "blank product image" symptom). A plain <img src> renders
+    // cross-origin fine on playback without CORS, so recording the original src
+    // is both correct and far smaller. The trade-off (an image whose URL is no
+    // longer reachable at playback time) is closed by the server-side
+    // asset-rehosting pipeline, not by inlining. See
+    // docs/superpowers/plans/2026-06-25-session-replay-asset-rehosting-pipeline.md
+    inlineImages: false,
+    recordCanvas,              // Capture <canvas>/WebGL frames — project `recordCanvas` setting (auto-detected by default)
     emit(event) {
       chunkBuffer.push(event);
 
