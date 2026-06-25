@@ -30,6 +30,34 @@ Legal companion in the Obsidian vault: `Computer Science & Software Development/
 
 ---
 
+## 0. Review corrections (adversarial review, 2026-06-25)
+
+An independent review verified every code claim in this plan against `origin/main` (all confirmed) and found gaps that change the scope. **Read these before implementing: P1 as originally written below would NOT fully make Tier 1 consent-free.**
+
+### 0.1 The A/B middleware writes a 1-year cookie with no consent gate (the biggest gap)
+
+Workstream (a) and the Section 4 "Experiment stickiness" row propose leaning on the existing `lumitra_variants_pub` server path "without any device write." **That is false.** `packages/react/src/middleware.ts` sets three cookies on the response with no consent input: `lumitra_uid` (HttpOnly, **maxAge = 1 year**, a `crypto.randomUUID` stable per-visitor identifier), `lumitra_variants` (signed, 1yr), and `lumitra_variants_pub` (client-readable, 1yr). A server `Set-Cookie` is "storing information on terminal equipment" under Article 5(3) / Section 25 exactly as much as `sessionStorage.setItem`, and `lumitra_uid` is the worst case: a 1-year stable cross-session unique identifier, which is both ePrivacy device storage AND personal data under GDPR. So after P1 removes `sessionStorage`, Tier 1 STILL writes to the device the moment a customer uses the A/B middleware. The Tier table currently (wrongly) lists experiments as consent-free Tier 1.
+
+**Decision required (see 6.D1):** either make A/B assignment genuinely cookieless (deterministic on the daily visitor key, no persistent `lumitra_uid`) and keep it Tier 1, OR reclassify the whole middleware-cookie A/B path as consent-gated Tier 2. A 1-year `lumitra_uid` cannot coexist with a consent-free claim under any reading. **This belongs in P1**, not a later phase.
+
+### 0.2 Raw IP is sent to a US third party over plaintext HTTP at ingestion
+
+The plan says the raw IP is "discarded at ingestion (good)" and "never log raw IP anywhere," and workstream (f) promises EU residency. But `packages/dashboard/src/lib/enrich.ts` calls `lookupCountry(ip)` = `fetch('http://ip-api.com/json/{ip}...')` on every cache-miss IP, on both the `/api/collect` and `/api/ingest` paths. That is a transfer of the raw IP (personal data) to a US-based processor, over unencrypted HTTP, with no Data Processing Agreement / Standard Contractual Clauses. The IP is not stored locally, but it leaves the EU before it is discarded, so the EU-residency and "no raw IP" framing is untrue as implemented. **Add to P1: replace the third-party geo call with a self-hosted local geo database (MaxMind GeoLite2 / DB-IP) bundled in the dashboard container.** (See 6.D5.)
+
+### 0.3 Server-side sessionization is an MV + ingestion rework, not a one-line hash change
+
+Workstream (a) frames the change as "fold the user-agent + project into the key." But `sessions_summary_mv` and the heatmap session counts aggregate on a STORED `session_id` (`uniqExact(session_id)`) computed at insert time. To stitch pageviews into one session within a 30-minute window, ingestion must resolve a real `session_id` at write time (a stateful per-visitorKey last-seen lookup on the hot path), OR sessionization moves to query time (window functions over `ip_hash` + timestamp gaps, reworking the session-based materialized views). Either is materially more than a hash tweak, and the plan must pick one and budget for it. **Recommended (6.D6): query-time gap sessionization, which keeps ingestion a stateless pure hash.**
+
+### 0.4 Smaller items folded in
+
+- **Historical cutover:** existing `ip_hash` values used the date-string salt; after the secret salt the same visitor will not match across the cut, so pre/post-cutover visitor and session metrics are not comparable, and the events table will mix client-minted and server-derived `session_id` schemes. Treat as a hard cutover with a dated dashboard annotation (do not try to re-derive old hashes; that is impossible by design and is the point). Consider a short shadow/dual-compute period to quantify the delta (6.D2).
+- **Consent Management Platform (CMP) integration:** specify a thin `setConsent({analytics, replay})` adapter the customer fires from their CMP's consent-changed callback (Usercentrics / Cookiebot / IAB Transparency and Consent Framework, the German-market default), plus explicit default-deny on the first consent-unknown request and at least one worked TCF/Usercentrics example.
+- **Bot filtering:** with no client id, JavaScript-capable bots collapse by IP+UA and inflate visitor/session counts. Add a server-side user-agent blocklist (the standard known-bots list) at ingestion. Non-JS bots already self-filter by never loading the tracker.
+- **`auto_consent` test links:** `test_links.auto_consent` (default true) would silently bypass the new default-deny gate. Restrict it to internal QA on owned properties; never let a test link grant Tier-2 consent for real visitor traffic (6.D10).
+- **B2B NAT note:** the German Mittelstand target sits behind corporate NAT gateways running standardized browser builds, so IP+UA collisions merge distinct users into one visitor far more than the generic Plausible case. Set customer expectations and consider an inactivity-window tuning knob.
+
+---
+
 ## 1. The Problem (with code evidence)
 
 ### 1.1 The tracker writes to the device before any consent
@@ -99,7 +127,7 @@ Five engineering workstreams plus one docs workstream. Numbered so phases can re
 **Remove** the entire client session mechanism from the Tier-1 path:
 
 - Delete the `sessionStorage` reads/writes in `session.ts` (`getOrCreateSession`, `touchSession`, `getSessionId`, `SESSION_KEY`, `LAST_ACTIVITY_KEY`).
-- Delete the experiment-variant cache (`readStoredAssignment` / `storeAssignment` and the `EXP_STORAGE_PREFIX` `sessionStorage` calls in `experiment.ts`). Pre-consent, experiment assignment becomes a pure function of the server decision (the existing `lumitra_variants_pub` server path) or a stateless per-request murmur, with nothing persisted on the device.
+- Delete the experiment-variant cache (`readStoredAssignment` / `storeAssignment` and the `EXP_STORAGE_PREFIX` `sessionStorage` calls in `experiment.ts`). Pre-consent, experiment assignment becomes a pure function of the server decision or a stateless per-request murmur, with nothing persisted on the device. **CORRECTION (see 0.1): the existing `lumitra_variants_pub` server path is NOT a "no device write" replacement: the A/B middleware sets a 1-year `lumitra_uid` cookie (plus two more) with no consent gate. That cookie path must be made cookieless, or moved to Tier 2, before it can serve the consent-free Tier-1 path. Decision 6.D1.**
 
 **Move sessionization to the server.** Instead of a client-minted `sessionId`, the server stitches pageviews into sessions using a **per-day visitor key**:
 
@@ -230,7 +258,7 @@ Reading `navigator.globalPrivacyControl` / `navigator.doNotTrack` is a property 
 | **Server-side sessionization changes how session counts and duration are computed** (server, from IP+UA+window, not a client UUID). | Numbers may **shift** vs today. Two people behind one corporate NAT (Network Address Translation) gateway with the same browser can merge into one session; one person on two networks can split. Session duration is now bounded by server-seen events, not client liveness. | Document the methodology change as a known, one-time discontinuity. Annotate the dashboard at the cutover date. This is the same trade-off Plausible/Fathom already ship and customers accept. Tune the inactivity window if merges/splits are bad in practice. |
 | **The secret-salt daily rotation resets visitor dedupe at the rotation boundary.** | A visitor active across midnight could be counted twice (once per day's salt), and cross-day "unique visitor" is intentionally not possible (that is the point: no stable cross-day id without consent). | Keep **current + previous** day's salt in memory to bridge sessions that straddle midnight (workstream b). Accept that cross-day uniqueness is a Tier-2 (consented) feature, by design, not a bug. |
 | **Removing the client session id may break features that read it.** | Any code calling `getSessionId()` / `getOrCreateSession()` / reading `SESSION_KEY` breaks. | **Audit before removal.** Grep already shows the only non-test callers are `tracker.ts:6,36,231` and `session.ts` itself (the `ExperimentManager` takes the session id as its identity seed, `experiment.ts:93`). Replace the identity seed with the server-decided id or a stateless per-request value. Update the `session.test.ts` suite. Confirm no consumer in `packages/react`, `packages/node`, or the dashboard reads a client session id before deleting. |
-| **Experiment stickiness changes** (no `sessionStorage` cache pre-consent). | Without the cache, a reload could re-roll a client-self-assigned variant if the server decision is absent. | Lean on the existing server-authoritative `lumitra_variants_pub` path (already implemented, `tracker.ts:46-52`) so assignment is server-decided and stable without any device write. Where no server decision exists, a deterministic murmur on the daily visitor key is stable within the day. |
+| **Experiment stickiness changes** (no `sessionStorage` cache pre-consent). | Without the cache, a reload could re-roll a client-self-assigned variant if the server decision is absent. | A deterministic murmur on the daily visitor key is stable within the day with no device write. **CORRECTION (0.1): the `lumitra_variants_pub` middleware path is NOT "without any device write": it sets a 1-year `lumitra_uid` cookie pre-consent. Make assignment cookieless or reclassify it to Tier 2 (6.D1). Cross-day sticky assignment via a persistent uid is a consented Tier-2 upgrade, by design.** |
 
 ---
 
@@ -247,17 +275,29 @@ Dependencies in one line: **P1 unblocks the truthful claim; P2 builds the consen
 
 ---
 
-## 6. Open Questions for Marlin
+## 6. Decisions for Marlin
 
-1. **Where does the rotating secret salt live?** In-process memory (simplest, but lost on restart and not shared across instances), Redis (shared, fast, needs the dependency), or Postgres (durable, already in the stack)? Multi-instance ingestion makes a shared store the safer default. Pick one.
-2. **What session-metric discontinuity is acceptable?** Server-side sessionization will move the numbers once. Are we OK annotating a one-time break at the cutover, or do we need a side-by-side comparison period (run both, compare, then switch)?
-3. **Do we keep any first-party non-storage signal at all?** Everything proposed here is storage-free, but confirm we are not relying on any other device read/write (for example a meta-tag cache, an in-memory-only fingerprint) that could re-trigger Article 5(3).
-4. **Replay TTL default**: 30, 60, or 90 days as the shipped default (per-tenant overridable)? The note's defensible range is 30 to 90.
-5. **Per-tenant retention UI now or later?** P3 can ship a sane global default first and add the per-tenant config UI in a follow-up, or build the config surface up front. Which?
-6. **Legal counsel**: who signs off on the consent-free claim (external EU/German data-protection lawyer vs a DPO), and what is the timeline? This gates customer-facing "no banner needed" copy.
+Consolidated from the plan's open questions plus the 2026-06-25 review. A recommendation is given for each; the load-bearing ones for "is Tier 1 actually consent-free" are **D1, D5, D6**.
+
+| # | Decision | Recommendation |
+|---|----------|----------------|
+| **D1** | **A/B testing: cookieless Tier-1, or consent-gated Tier-2?** The middleware sets a 1-year `lumitra_uid` (+2) cookie with no consent gate (0.1). | Make assignment **cookieless** (deterministic on the daily visitor key, no persistent `lumitra_uid`) and keep it Tier-1. Offer the 1-year sticky uid only as a Tier-2 (consented) upgrade. A 1-year uid cannot stay on the consent-free path. **Fold into P1.** |
+| **D2** | Session-metric discontinuity at cutover. | Run server-side sessionization in **shadow** alongside client sessions for ~2 to 4 weeks (cheap at B2B volume), compare, then hard-cut with a dated dashboard annotation. State plainly that pre/post numbers are not comparable. |
+| **D3** | Any OTHER device read/write re-triggering Article 5(3)? | Yes: the A/B cookies (D1) and the geo IP transfer (D5). Tier 1 is not storage-free until both are fixed. Answer is "not clean yet": pull both into P1. |
+| **D4** | Where does the rotating secret salt live? | **Postgres** as source of truth (durable, in-stack, shared across instances); each instance caches current + previous salt in memory and refreshes daily. No new Redis dependency for a once-daily 32-byte value; never in-process-only (it would re-roll and split sessions on every restart/deploy). |
+| **D5** | Geo lookup: keep `ip-api.com` (US, HTTP) or self-host? | **Self-host** MaxMind GeoLite2 / DB-IP locally so the raw IP never leaves the EU. Only then are the EU-residency doc and "no raw IP" framing true. **P1.** |
+| **D6** | Sessionization mechanism: ingest-time stateful `session_id` vs query-time gap? | **Query-time gap sessionization** off `ip_hash` (keeps ingestion a stateless hash, no hot-path state store); rework the session-based materialized views. Only go ingest-time-stateful with a concrete query-performance reason, and then use ClickHouse itself as the last-seen store, not Redis. |
+| **D7** | Replay TTL default. | **30 days** shipped default, per-tenant overridable to 90. Replay is the highest-PII data held; minimize by default. |
+| **D8** | Per-tenant retention UI now or later? | Ship sane global defaults now (12-month events, 30-day replay, `page_snapshots` TTL + GC); add the per-tenant config UI as a P3 follow-up. Build the replay/snapshot TTL **enforcement** now (the urgent data-minimization fix); defer only the config surface. |
+| **D9** | Who signs off on the consent-free claim, and when? | An **external German Fachanwalt fuer IT-Recht / Datenschutzrecht** for the public "kein Banner noetig" claim (a Data Protection Officer opinion is necessary but not sufficient for marketing copy). Ship the engineering in parallel; gate all customer-facing no-banner copy on the written external sign-off; get the salted-hash pseudonymous-vs-anonymous question addressed specifically. |
+| **D10** | How do existing `auto_consent` test links interact with the new default-deny gate? | Restrict `auto_consent` to internal QA on owned properties only; never let a test link grant Tier-2 consent for real visitor traffic. Document the boundary. |
+| **D11** | CMP integration shape. | Ship a thin documented `setConsent({analytics, replay})` adapter the customer fires from their CMP callback, plus a TCF/Usercentrics worked example; specify default-deny on the first consent-unknown request. |
+| **D12** | Bot filtering once the client id is gone. | Server-side user-agent blocklist (standard known-bots list) at ingestion; optional known-bot IP-range filtering. Names the gap so visitor counts stay credible. |
 
 ---
 
 ## Summary
 
 Tier 1 is sold as consent-free but writes to `sessionStorage` on `init()` (`session.ts:8-20`, `touchSession()` on every `track()`, plus the experiment cache in `experiment.ts`). Under EDPB Guidelines 2/2023 and German Section 25 TDDDG, any device write triggers the banner obligation, personal data or not, so the consent-free wedge is currently false in code. The fix: client stores nothing pre-consent, sessionization moves server-side onto the existing `ip_hash` primitive with a real secret salt (the current salt is the public date string, `enrich.ts:13`, which is brute-forceable), a default-deny consent signal gates all Tier-2 features, GPC/DNT are honored as opt-outs (not opt-in substitutes), and retention gets a short replay TTL plus a `page_snapshots` TTL. The "consent-free" claim ships only after a qualified EU/German lawyer signs off.
+
+The 2026-06-25 review (Section 0) verified every code claim above and added three scope corrections that must be in P1 or Tier 1 is still not consent-free: the A/B middleware writes a 1-year `lumitra_uid` cookie with no consent gate (make assignment cookieless or move it to Tier 2, D1); the geo lookup ships the raw IP to a US service over plaintext HTTP (self-host the geo database, D5); and server-side sessionization is a materialized-view + ingestion rework, not a one-line hash change (query-time gap sessionization recommended, D6). All decisions are consolidated in Section 6.
