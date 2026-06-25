@@ -69,8 +69,8 @@ importers:
         specifier: ^1.18.2
         version: 1.18.2
       '@marlinjai/auth-brain-sdk':
-        specifier: ^1.0.0
-        version: 1.0.0(zod@3.25.76)
+        specifier: ^1.1.0
+        version: 1.1.0(zod@3.25.76)
       '@marlinjai/auth-brain-shared':
         specifier: ^1.0.0
         version: 1.0.0
@@ -951,8 +951,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@marlinjai/auth-brain-sdk@1.0.0':
-    resolution: {integrity: sha512-IbObLvn8fyGEj+j4TTeHiIwl7TD/hLMC4x6Bjh2ltYHm4jptiM7Z15S1hLFMaNHcNNf/fNwJH7CQ1ScTpnKMwQ==}
+  '@marlinjai/auth-brain-sdk@1.1.0':
+    resolution: {integrity: sha512-9hSHnSbWSmD8PndFK7mOrYS4d8Ree9NpC5gB2PvISlX1dMLf8IFzkhmOSfRQiVt3N7mR7i7h0aWAeVNjsw8D9A==}
     peerDependencies:
       hono: '>=4.0.0'
     peerDependenciesMeta:
@@ -4227,7 +4227,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@marlinjai/auth-brain-sdk@1.0.0(zod@3.25.76)':
+  '@marlinjai/auth-brain-sdk@1.1.0(zod@3.25.76)':
     dependencies:
       '@marlinjai/auth-brain-shared': 1.0.0
       '@marlinjai/brain-core': 0.2.1(zod@3.25.76)

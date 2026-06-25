@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@analytics-platform/shared": "workspace:*",
-    "@marlinjai/auth-brain-sdk": "^1.0.0",
+    "@marlinjai/auth-brain-sdk": "^1.1.0",
     "@marlinjai/auth-brain-shared": "^1.0.0",
     "@clickhouse/client": "^1.18.2",
     "bcryptjs": "^3.0.3",

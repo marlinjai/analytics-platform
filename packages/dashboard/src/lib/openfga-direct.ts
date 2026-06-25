@@ -34,42 +34,6 @@ function headers(): Record<string, string> {
   };
 }
 
-/**
- * Check whether user:<userId> has `relation` on workspace:<workspaceId>.
- *
- * This replaces the auth-brain SDK's can() for analytics, because the SDK sends
- * the OpenFGA /check request with NO Authorization header, and this OpenFGA
- * deployment requires a preshared bearer token — so every SDK can() call is
- * rejected 401 and fail-closes to false. Here we send the token. Fail-closed:
- * returns false on any error so a check failure never grants access.
- */
-export async function checkWorkspaceAccess(
-  userId: string,
-  workspaceId: string,
-  relation: 'viewer' | 'member' | 'admin',
-): Promise<boolean> {
-  if (!configured()) return false;
-  try {
-    const res = await fetch(`${OPENFGA_API_URL}/stores/${STORE_ID}/check`, {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({
-        tuple_key: { user: `user:${userId}`, relation, object: `workspace:${workspaceId}` },
-        ...(MODEL_ID ? { authorization_model_id: MODEL_ID } : {}),
-      }),
-    });
-    if (!res.ok) {
-      console.error(`OpenFGA check ${res.status}: ${(await res.text()).slice(0, 150)}`);
-      return false;
-    }
-    const json = (await res.json()) as { allowed?: boolean };
-    return json.allowed === true;
-  } catch (err) {
-    console.error(`OpenFGA check error: ${err instanceof Error ? err.message : String(err)}`);
-    return false;
-  }
-}
-
 /** List the tuples whose object is workspace:<id>. Empty array if unconfigured. */
 export async function readWorkspaceTuples(workspaceId: string): Promise<FgaTuple[]> {
   if (!configured()) return [];
