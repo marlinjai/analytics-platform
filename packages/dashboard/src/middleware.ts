@@ -27,7 +27,8 @@ export const config = {
     // - /api/collect, /api/ingest, /api/health (public/API-key ingestion + health)
     // - /api/account (account-level API key routes)
     // - /api/projects (supports API key auth)
+    // - /sdk (self-hosted tracker bundle served as public static assets)
     // - /_next/static, /_next/image, favicon.ico, robots.txt
-    '/((?!api/collect|api/ingest|api/health|api/account|api/projects|_next/static|_next/image|favicon.ico|robots.txt).*)',
+    '/((?!api/collect|api/ingest|api/health|api/account|api/projects|sdk|_next/static|_next/image|favicon.ico|robots.txt).*)',
   ],
 };

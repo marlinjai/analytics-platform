@@ -108,6 +108,9 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
+      '@marlinjai/analytics-tracker':
+        specifier: workspace:*
+        version: link:../tracker
       '@tailwindcss/postcss':
         specifier: ^4.2.1
         version: 4.2.1

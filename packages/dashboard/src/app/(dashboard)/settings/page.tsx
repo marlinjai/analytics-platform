@@ -765,7 +765,7 @@ export default function SettingsPage() {
                   <div className="relative">
                     <pre className="overflow-x-auto rounded bg-gray-800 px-3 py-2 text-xs text-gray-300">
 {`<script type="module">
-  import { init } from 'https://analytics.lumitra.co/tracker.js';
+  import { init } from 'https://analytics.lumitra.co/sdk/tracker.js';
   init({
     projectId: '${selectedProjectId}',
     endpoint: 'https://analytics.lumitra.co/api/collect',
@@ -774,7 +774,7 @@ export default function SettingsPage() {
                     </pre>
                     <button
                       onClick={() => copyToClipboard(`<script type="module">
-  import { init } from 'https://analytics.lumitra.co/tracker.js';
+  import { init } from 'https://analytics.lumitra.co/sdk/tracker.js';
   init({
     projectId: '${selectedProjectId}',
     endpoint: 'https://analytics.lumitra.co/api/collect',

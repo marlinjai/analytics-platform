@@ -1,6 +1,9 @@
 node_modules/
 dist/
 .next/
+
+# Self-hosted tracker bundle (build artifact, copied from packages/tracker/dist)
+packages/dashboard/public/sdk/
 .turbo/
 *.tsbuildinfo
 
