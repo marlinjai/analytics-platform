@@ -100,4 +100,33 @@ describe('rewriteAssetUrls', () => {
     expect((kids[1]!.attributes as Record<string, unknown>).src).toBe(`${CDN}/vid`);
     expect((kids[2]!.attributes as Record<string, unknown>).src).toBe(`${CDN}/aud`);
   });
+
+  it('rewrites SVG use href and a srcset whose URLs contain commas', () => {
+    const events = [
+      fullSnapshot(
+        el('div', {}, [
+          el('use', { href: 'https://cdn.x/sprite.svg' }),
+          el('img', { srcset: 'https://res.cloudinary.com/d/w_1,h_2/a.jpg 1x' }),
+        ]),
+      ),
+    ];
+    const map = new Map([
+      ['https://cdn.x/sprite.svg', `${CDN}/sp`],
+      ['https://res.cloudinary.com/d/w_1,h_2/a.jpg', `${CDN}/cl`],
+    ]);
+    const out = rewriteAssetUrls(events, map, PAGE);
+    const kids = out[0]!.data!.node!.childNodes!;
+    expect((kids[0]!.attributes as Record<string, unknown>).href).toBe(`${CDN}/sp`);
+    expect((kids[1]!.attributes as Record<string, unknown>).srcset).toBe(`${CDN}/cl 1x`);
+  });
+
+  it('rewrites lazy-loaded src in incremental attribute mutations', () => {
+    const events: RrwebEvent[] = [
+      { type: 3, data: { source: 0, attributes: [{ id: 5, attributes: { src: 'https://cdn.x/lazy.png' } }] } },
+    ];
+    const map = new Map([['https://cdn.x/lazy.png', `${CDN}/lz`]]);
+    const out = rewriteAssetUrls(events, map, PAGE);
+    const mod = out[0]!.data!.attributes![0]!;
+    expect((mod.attributes as Record<string, unknown>).src).toBe(`${CDN}/lz`);
+  });
 });

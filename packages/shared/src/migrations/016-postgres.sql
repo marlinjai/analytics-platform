@@ -10,14 +10,16 @@ CREATE TABLE IF NOT EXISTS replay_assets (
   r2_key       TEXT,                       -- sha256(content); null until fetched
   content_type TEXT,
   bytes        INTEGER,
-  status       TEXT NOT NULL DEFAULT 'pending',  -- pending | ready | failed | skipped
+  status       TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'ready', 'failed', 'skipped')),
   attempts     INTEGER NOT NULL DEFAULT 0,
   fetched_at   TIMESTAMPTZ,
   last_error   TEXT,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- The fetch worker drains pending rows oldest-first.
-CREATE INDEX IF NOT EXISTS idx_replay_assets_status
-  ON replay_assets (status, created_at)
+-- The fetch worker drains pending rows oldest-first. Partial index on the
+-- pending subset; status is constant in the predicate so the key is created_at.
+CREATE INDEX IF NOT EXISTS idx_replay_assets_pending
+  ON replay_assets (created_at)
   WHERE status = 'pending';

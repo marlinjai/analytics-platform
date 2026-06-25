@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractAssetUrls, parseSrcset } from '@/lib/replay-assets/extract';
+import { extractAssetUrls, parseSrcsetCandidates } from '@/lib/replay-assets/extract';
 import type { RrwebEvent, SerializedNode } from '@/lib/replay-assets/types';
 
 const PAGE = 'https://shop.example.com/products';
@@ -15,6 +15,9 @@ function fullSnapshot(root: SerializedNode): RrwebEvent {
 }
 function mutationAdd(...nodes: SerializedNode[]): RrwebEvent {
   return { type: 3, data: { source: 0, adds: nodes.map((node) => ({ node })) } };
+}
+function mutationAttr(...mods: Array<{ id?: number; attributes: Record<string, unknown> }>): RrwebEvent {
+  return { type: 3, data: { source: 0, attributes: mods } };
 }
 
 describe('extractAssetUrls', () => {
@@ -41,32 +44,66 @@ describe('extractAssetUrls', () => {
   });
 
   it('parses every srcset candidate and drops descriptors', () => {
-    const evt = fullSnapshot(
-      el('img', { srcset: '/a.png 1x, https://cdn.x/b.png 2x, /c.png 800w' }),
-    );
+    const evt = fullSnapshot(el('img', { srcset: '/a.png 1x, https://cdn.x/b.png 2x, /c.png 800w' }));
     expect(extractAssetUrls([evt], PAGE).sort()).toEqual(
-      [
-        'https://cdn.x/b.png',
-        'https://shop.example.com/a.png',
-        'https://shop.example.com/c.png',
-      ].sort(),
+      ['https://cdn.x/b.png', 'https://shop.example.com/a.png', 'https://shop.example.com/c.png'].sort(),
     );
   });
 
-  it('collects stylesheet/icon/preload <link> hrefs but skips dns-prefetch', () => {
+  it('parses srcset URLs that contain commas (Cloudinary/imgix transform URLs)', () => {
+    const evt = fullSnapshot(
+      el('img', {
+        srcset:
+          'https://res.cloudinary.com/d/w_300,h_200/a.jpg 1x, https://res.cloudinary.com/d/w_600,h_400/a.jpg 2x',
+      }),
+    );
+    expect(extractAssetUrls([evt], PAGE).sort()).toEqual(
+      ['https://res.cloudinary.com/d/w_300,h_200/a.jpg', 'https://res.cloudinary.com/d/w_600,h_400/a.jpg'].sort(),
+    );
+  });
+
+  it('collects stylesheet/icon/manifest <link> hrefs but skips dns-prefetch', () => {
     const evt = fullSnapshot(
       el('head', {}, [
         el('link', { rel: 'stylesheet', href: '/styles/app.css' }),
         el('link', { rel: 'icon', href: 'https://cdn.x/favicon.ico' }),
-        el('link', { rel: 'preload', href: '/fonts/x.woff2' }),
+        el('link', { rel: 'preload', as: 'font', href: '/fonts/x.woff2' }),
         el('link', { rel: 'dns-prefetch', href: 'https://cdn.x' }),
       ]),
     );
     expect(extractAssetUrls([evt], PAGE).sort()).toEqual(
+      ['https://cdn.x/favicon.ico', 'https://shop.example.com/fonts/x.woff2', 'https://shop.example.com/styles/app.css'].sort(),
+    );
+  });
+
+  it('skips preload links whose `as` is not a render asset (script/fetch/none)', () => {
+    const evt = fullSnapshot(
+      el('head', {}, [
+        el('link', { rel: 'preload', as: 'script', href: '/app.js' }),
+        el('link', { rel: 'preload', href: '/no-as.js' }),
+      ]),
+    );
+    expect(extractAssetUrls([evt], PAGE)).toEqual([]);
+  });
+
+  it('collects SVG <use>/<image> href+xlink:href, <object> data, <embed>/<input> src', () => {
+    const evt = fullSnapshot(
+      el('div', {}, [
+        el('use', { href: 'https://cdn.x/sprite.svg', 'xlink:href': 'https://cdn.x/old-sprite.svg' }),
+        el('image', { href: '/svg/photo.png' }),
+        el('object', { data: 'https://cdn.x/doc.pdf' }),
+        el('embed', { src: '/media/clip.swf' }),
+        el('input', { type: 'image', src: '/btn/go.png' }),
+      ]),
+    );
+    expect(extractAssetUrls([evt], PAGE).sort()).toEqual(
       [
-        'https://cdn.x/favicon.ico',
-        'https://shop.example.com/fonts/x.woff2',
-        'https://shop.example.com/styles/app.css',
+        'https://cdn.x/doc.pdf',
+        'https://cdn.x/old-sprite.svg',
+        'https://cdn.x/sprite.svg',
+        'https://shop.example.com/btn/go.png',
+        'https://shop.example.com/media/clip.swf',
+        'https://shop.example.com/svg/photo.png',
       ].sort(),
     );
   });
@@ -90,11 +127,7 @@ describe('extractAssetUrls', () => {
       ]),
     );
     expect(extractAssetUrls([evt], PAGE).sort()).toEqual(
-      [
-        'https://cdn.x/v.mp4',
-        'https://shop.example.com/a/clip.mp3',
-        'https://shop.example.com/v/poster.jpg',
-      ].sort(),
+      ['https://cdn.x/v.mp4', 'https://shop.example.com/a/clip.mp3', 'https://shop.example.com/v/poster.jpg'].sort(),
     );
   });
 
@@ -103,15 +136,24 @@ describe('extractAssetUrls', () => {
     expect(extractAssetUrls([evt], PAGE)).toEqual(['https://cdn.x/late.png']);
   });
 
+  it('collects lazy-loaded src from incremental ATTRIBUTE mutations (the blank-image case)', () => {
+    const evt = mutationAttr(
+      { id: 5, attributes: { src: 'https://cdn.x/lazy.png' } },
+      { id: 6, attributes: { srcset: '/r.png 1x, https://cdn.x/r2.png 2x' } },
+      { id: 7, attributes: { style: 'background:url(https://cdn.x/bg.png)' } },
+    );
+    expect(extractAssetUrls([evt], PAGE).sort()).toEqual(
+      ['https://cdn.x/bg.png', 'https://cdn.x/lazy.png', 'https://cdn.x/r2.png', 'https://shop.example.com/r.png'].sort(),
+    );
+  });
+
   it('ignores non-mutation incremental events', () => {
     const evt: RrwebEvent = { type: 3, data: { source: 2, adds: [] } };
     expect(extractAssetUrls([evt], PAGE)).toEqual([]);
   });
 
   it('dedupes the same asset referenced multiple times', () => {
-    const evt = fullSnapshot(
-      el('div', {}, [el('img', { src: '/dup.png' }), el('img', { src: '/dup.png' })]),
-    );
+    const evt = fullSnapshot(el('div', {}, [el('img', { src: '/dup.png' }), el('img', { src: '/dup.png' })]));
     expect(extractAssetUrls([evt], PAGE)).toEqual(['https://shop.example.com/dup.png']);
   });
 
@@ -122,13 +164,24 @@ describe('extractAssetUrls', () => {
   });
 });
 
-describe('parseSrcset', () => {
-  it('returns [] for empty/invalid input', () => {
-    expect(parseSrcset('')).toEqual([]);
-    expect(parseSrcset(undefined)).toEqual([]);
-    expect(parseSrcset(42)).toEqual([]);
+describe('parseSrcsetCandidates', () => {
+  it('returns [] for empty input', () => {
+    expect(parseSrcsetCandidates('')).toEqual([]);
+    expect(parseSrcsetCandidates('   ')).toEqual([]);
   });
-  it('extracts URLs, dropping descriptors', () => {
-    expect(parseSrcset('a.png 1x, b.png 2x')).toEqual(['a.png', 'b.png']);
+  it('splits candidates and keeps descriptors', () => {
+    expect(parseSrcsetCandidates('a.png 1x, b.png 2x')).toEqual([
+      { url: 'a.png', descriptor: '1x' },
+      { url: 'b.png', descriptor: '2x' },
+    ]);
+  });
+  it('preserves commas inside URLs', () => {
+    expect(parseSrcsetCandidates('https://x/w_1,h_2/a.jpg 1x, /b.png 2x')).toEqual([
+      { url: 'https://x/w_1,h_2/a.jpg', descriptor: '1x' },
+      { url: '/b.png', descriptor: '2x' },
+    ]);
+  });
+  it('handles a single url with no descriptor', () => {
+    expect(parseSrcsetCandidates('a.png')).toEqual([{ url: 'a.png', descriptor: '' }]);
   });
 });
