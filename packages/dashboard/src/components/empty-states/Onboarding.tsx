@@ -97,7 +97,7 @@ const FRAMEWORKS: { id: Framework; label: string }[] = [
 ];
 
 function buildSnippet(framework: Framework, projectId: string): string {
-  const base = `import { init } from 'https://analytics.lumitra.co/tracker.js';
+  const base = `import { init } from 'https://analytics.lumitra.co/sdk/tracker.js';
 init({
   projectId: '${projectId}',
   endpoint: 'https://analytics.lumitra.co/api/collect',

@@ -10,6 +10,9 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/dashboard/package.json ./packages/dashboard/
+# tracker is a workspace devDependency of the dashboard (built so its bundle can
+# be self-hosted at /sdk/tracker.js), so its manifest must be present to install.
+COPY packages/tracker/package.json ./packages/tracker/
 RUN pnpm install --frozen-lockfile --prod=false
 
 FROM base AS builder
@@ -17,10 +20,13 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=deps /app/packages/dashboard/node_modules ./packages/dashboard/node_modules
+COPY --from=deps /app/packages/tracker/node_modules ./packages/tracker/node_modules
 COPY . .
 
-# Build shared first, then dashboard
+# Build shared, then the tracker (whose bundle the dashboard prebuild copies into
+# public/sdk/), then the dashboard.
 RUN pnpm --filter @analytics-platform/shared build
+RUN pnpm --filter @marlinjai/analytics-tracker build
 # Dummy env vars needed at build time for Next.js page data collection.
 # NEXTAUTH_SECRET is intentionally NOT set here: it is only read at runtime
 # (toolbar-token HMAC signing) and is injected from Infisical by the entrypoint.
@@ -43,6 +49,10 @@ RUN adduser --system --uid 1001 nextjs
 RUN mkdir -p ./packages/dashboard/public
 COPY --from=builder --chown=nextjs:nodejs /app/packages/dashboard/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/packages/dashboard/.next/static ./packages/dashboard/.next/static
+# Serve the public dir: the self-hosted tracker bundle (public/sdk/) AND
+# robots.txt. The standalone output does NOT bundle public, so it must be copied
+# explicitly or these static assets 404 in prod.
+COPY --from=builder --chown=nextjs:nodejs /app/packages/dashboard/public ./packages/dashboard/public
 
 # Migration SQL files (read by instrumentation hook on startup)
 COPY --from=builder --chown=nextjs:nodejs /app/packages/shared/src/migrations ./packages/shared/src/migrations

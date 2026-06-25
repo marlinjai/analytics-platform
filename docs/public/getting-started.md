@@ -125,6 +125,23 @@ Set `NEXT_PUBLIC_ANALYTICS_PROJECT_ID` in your `.env.local` to the project ID sh
 
 ### Plain HTML integration
 
+Import the self-hosted tracker bundle (served from the analytics platform itself, so there is no third-party runtime dependency):
+
+```html
+<script type="module">
+  import { init } from 'https://analytics.lumitra.co/sdk/tracker.js';
+
+  init({
+    projectId: 'your-project-uuid',
+    endpoint: 'https://analytics.lumitra.co/api/collect',
+  });
+</script>
+```
+
+The bundle is code-split: `/sdk/tracker.js` lazily imports sibling chunks (session replay, etc.) from the same `/sdk/` path at runtime, so always point at `/sdk/tracker.js` and let it resolve the rest.
+
+Alternatively, you can load the published package from the unpkg CDN (a third-party dependency):
+
 ```html
 <script type="module">
   import { init } from 'https://unpkg.com/@marlinjai/analytics-tracker/dist/index.js';
