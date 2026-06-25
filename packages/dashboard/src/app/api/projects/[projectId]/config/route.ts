@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 
-// Default SDK feature-toggle settings
-const DEFAULT_SETTINGS: Record<string, boolean> = {
+// Default SDK feature-toggle settings. `recordCanvas` is tri-state
+// ('auto' | 'on' | 'off'): 'auto' records <canvas>/WebGL only when the page
+// actually has a canvas, keeping the replay payload small on pages that don't.
+const DEFAULT_SETTINGS: Record<string, boolean | string> = {
   replay: false,
   heatmap: true,
   scrollDepth: true,
+  recordCanvas: 'auto',
 };
 
 type Params = { params: Promise<{ projectId: string }> };

@@ -233,6 +233,9 @@ export default function SettingsPage() {
   const [sdkSettings, setSdkSettings] = useState<SdkSettings>(SDK_DEFAULTS);
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  // Canvas/WebGL replay capture is tri-state: auto (record only when a canvas
+  // is present on the page), on (always), off (never).
+  const [recordCanvas, setRecordCanvas] = useState<'auto' | 'on' | 'off'>('auto');
 
   // Allowed origins state
   const [allowedOriginsText, setAllowedOriginsText] = useState<string>('');
@@ -290,6 +293,7 @@ export default function SettingsPage() {
   const fetchSettings = useCallback(async (projectId: string) => {
     if (!projectId) {
       setSdkSettings(SDK_DEFAULTS);
+      setRecordCanvas('auto');
       return;
     }
     setLoadingSettings(true);
@@ -297,9 +301,12 @@ export default function SettingsPage() {
       const res = await fetch(`/api/projects/${projectId}/settings`);
       if (!res.ok) throw new Error('Failed to fetch settings');
       const data = await res.json();
-      setSdkSettings({ ...SDK_DEFAULTS, ...(data.settings ?? {}) });
+      const s = (data.settings ?? {}) as Record<string, unknown>;
+      setSdkSettings({ ...SDK_DEFAULTS, ...s });
+      setRecordCanvas(s.recordCanvas === 'on' || s.recordCanvas === 'off' ? s.recordCanvas : 'auto');
     } catch {
       setSdkSettings(SDK_DEFAULTS);
+      setRecordCanvas('auto');
     } finally {
       setLoadingSettings(false);
     }
@@ -320,6 +327,25 @@ export default function SettingsPage() {
     } catch {
       // Revert optimistic update on failure
       setSdkSettings((prev) => ({ ...prev, [key]: !newValue }));
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  // Set the tri-state Canvas/WebGL replay capture mode
+  async function handleSetCanvas(mode: 'auto' | 'on' | 'off') {
+    if (!selectedProjectId) return;
+    const prev = recordCanvas;
+    setRecordCanvas(mode);
+    setSavingSettings(true);
+    try {
+      await fetch(`/api/projects/${selectedProjectId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordCanvas: mode }),
+      });
+    } catch {
+      setRecordCanvas(prev);
     } finally {
       setSavingSettings(false);
     }
@@ -557,36 +583,65 @@ export default function SettingsPage() {
             ))}
           </div>
         ) : (
-          <ul className="divide-y divide-gray-800">
-            {(Object.keys(SDK_DEFAULTS) as (keyof SdkSettings)[]).map((key) => {
-              const { label, description } = SDK_TOGGLE_LABELS[key];
-              const enabled = sdkSettings[key];
-              return (
-                <li key={key} className="flex items-center justify-between py-4">
-                  <div className="min-w-0 pr-4">
-                    <p className="text-sm font-medium text-gray-100">{label}</p>
-                    <p className="text-xs text-gray-400">{description}</p>
-                  </div>
+          <>
+            <ul className="divide-y divide-gray-800">
+              {(Object.keys(SDK_DEFAULTS) as (keyof SdkSettings)[]).map((key) => {
+                const { label, description } = SDK_TOGGLE_LABELS[key];
+                const enabled = sdkSettings[key];
+                return (
+                  <li key={key} className="flex items-center justify-between py-4">
+                    <div className="min-w-0 pr-4">
+                      <p className="text-sm font-medium text-gray-100">{label}</p>
+                      <p className="text-xs text-gray-400">{description}</p>
+                    </div>
+                    <button
+                      role="switch"
+                      aria-checked={enabled}
+                      aria-label={`Toggle ${label}`}
+                      onClick={() => handleToggle(key)}
+                      disabled={savingSettings}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                        enabled ? 'bg-blue-600' : 'bg-gray-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                          enabled ? 'translate-x-4' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Canvas / WebGL replay capture (tri-state) */}
+            <div className="mt-2 flex items-center justify-between border-t border-gray-800 py-4">
+              <div className="min-w-0 pr-4">
+                <p className="text-sm font-medium text-gray-100">Canvas / WebGL recording</p>
+                <p className="text-xs text-gray-400">
+                  Capture {'<canvas>'} / WebGL content in session replay (charts, games, 3D). Auto records only
+                  when the page has a canvas; On always records (larger payloads); Off never. Only applies when
+                  Session Replay is on.
+                </p>
+              </div>
+              <div className="inline-flex shrink-0 rounded-lg border border-gray-700 bg-gray-800 p-0.5">
+                {(['auto', 'on', 'off'] as const).map((mode) => (
                   <button
-                    role="switch"
-                    aria-checked={enabled}
-                    aria-label={`Toggle ${label}`}
-                    onClick={() => handleToggle(key)}
+                    key={mode}
+                    onClick={() => handleSetCanvas(mode)}
                     disabled={savingSettings}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
-                      enabled ? 'bg-blue-600' : 'bg-gray-700'
+                    aria-pressed={recordCanvas === mode}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors disabled:opacity-50 ${
+                      recordCanvas === mode ? 'bg-gray-600 text-gray-100' : 'text-gray-400 hover:text-gray-200'
                     }`}
                   >
-                    <span
-                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                        enabled ? 'translate-x-4' : 'translate-x-1'
-                      }`}
-                    />
+                    {mode}
                   </button>
-                </li>
-              );
-            })}
-          </ul>
+                ))}
+              </div>
+            </div>
+          </>
         )}
       </section>
 
