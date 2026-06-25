@@ -120,13 +120,33 @@ The fetcher pulls arbitrary URLs from untrusted customer sites, so it is an SSRF
 - **Phase 1**: extract + `replay_assets` table + SSRF-safe fetch worker + R2 put + read-time rewrite. A few days. The fetch worker fits our existing background-job pattern (instrumentation/cron); R2 access already exists via storage-brain.
 - **Phase 2**: incremental.
 
-## Decisions to confirm
+## Decisions (DECIDED 2026-06-25)
 
-1. Ship Phase 0 alone first and measure, or go straight to Phase 1? (Recommend: Phase 0 now, it likely resolves the visible issue at ~zero cost and de-risks Phase 1 scope.)
-2. R2 directly vs via storage-brain SDK for the asset blobs.
-3. Asset CDN host (a dedicated `replay-assets.lumitra.co` R2 custom domain vs serving through the dashboard).
-4. Rewrite at read-time (recommended) vs rewrite-and-store at ingest.
+1. **Phase 0 already shipped** (`@marlinjai/analytics-tracker` 1.4.0, `inlineImages: false`), so this is straight to **Phase 1**.
+2. **Direct Cloudflare R2** (S3-compatible client), not the storage-brain SDK. Keeps analytics standalone (its stated design principle: own everything, no cross-service deps), self-contained, fewer moving parts. Content-addressing is implemented with `r2_key = sha256(content)` directly, so we still get cross-session/cross-project dedupe without storage-brain.
+3. **Dedicated R2 custom domain `replay-assets.lumitra.co`**, not serving through the dashboard. CDN edge-cached, offloads the dashboard, immutable content-addressed objects cache forever, and avoids the dashboard middleware/auth surface entirely.
+4. **Rewrite at read-time** (in `/api/sessions/[id]/replay`), not rewrite-and-store at ingest. Idempotent, lets late-captured assets resolve automatically, keeps the raw event stream intact for re-processing.
+
+## Infra prerequisites (provision before Phase 1 e2e)
+
+- **R2 bucket** `lumitra-replay-assets` (EU jurisdiction for residency), created via Terraform in the infra repo.
+- **R2 custom domain** `replay-assets.lumitra.co` bound to that bucket + DNS record (Cloudflare). Public read, immutable cache headers.
+- **Infisical keys** (analytics project `45b9c32b`, env `prod`, root path): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (secrets, scaffolded as PLACEHOLDER for Marlin to fill), `R2_REPLAY_ASSETS_BUCKET=lumitra-replay-assets`, `REPLAY_ASSETS_CDN_BASE=https://replay-assets.lumitra.co` (non-secret config).
+
+## Build breakdown (Phase 1)
+
+Pure, infra-independent, unit-tested core (buildable + verifiable now):
+- `replay-assets/extract.ts` — walk rrweb events (full snapshot `type:2`, add-node mutations `type:3/source:0`), collect absolute asset URLs (`img[src]`, `img/source[srcset]`, `link[rel=stylesheet|icon|preload][href]`, `video[poster|src]`, `audio[src]`, inline `style`/`<style>` `url(...)`), resolve relative URLs against the chunk's page URL, skip `data:`.
+- `replay-assets/ssrf.ts` — SSRF-safe URL validator + fetcher: allow only `http`/`https`; resolve host and block private/link-local/loopback/internal ranges; size cap (<=5 MB); short timeout; do not follow redirects to disallowed targets; never forward credentials/cookies.
+- `replay-assets/rewrite.ts` — read-time rewriter: given a `url_hash -> r2_key` map + CDN base, rewrite asset URLs in reassembled events; URLs not yet `ready` fall back to the original.
+- `replay-assets/store.ts` — R2 adapter (S3 client) interface + impl; content-addressed `put(sha256(content))`; tested against a mock.
+
+Integration layer (needs the table + R2 creds to verify e2e):
+- Postgres migration: `replay_assets` table (see data model above).
+- Enqueue on `replay_chunk` ingest (`/api/collect`): extract + upsert `pending`.
+- Background fetch worker (existing instrumentation/cron pattern): drain `pending`, SSRF-fetch, R2 put, mark `ready|failed`.
+- Read-time rewrite wired into `/api/sessions/[id]/replay`.
 
 ## Status
 
-Draft. Phase 0 is ready to implement immediately; Phase 1 needs the R2/CDN host decision (#2, #3) before build.
+**Decided.** Pure core is ready to implement and unit-test immediately. Integration + e2e are gated on the R2 bucket + `replay-assets.lumitra.co` domain + Infisical R2 creds being provisioned.
