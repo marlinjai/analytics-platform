@@ -16,4 +16,8 @@ export const authBrainClient = createAuthBrainClient({
   cacheTtlMs: 30_000,
   openfgaUrl: process.env.OPENFGA_API_URL,
   openfgaStoreId: process.env.OPENFGA_STORE_ID,
+  openfgaModelId: process.env.OPENFGA_AUTHORIZATION_MODEL_ID,
+  // This OpenFGA runs with preshared auth: can() must send the bearer token or
+  // every check is rejected 401 and fail-closes to false. SDK >=1.1.0 forwards it.
+  openfgaToken: process.env.OPENFGA_API_TOKEN,
 });
