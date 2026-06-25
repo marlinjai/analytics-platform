@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  expandIpv6,
   ipv4ToInt,
   isBlockedIp,
   isBlockedIpv4,
@@ -77,6 +78,35 @@ describe('isBlockedIpv6', () => {
   it('allows public global unicast', () => {
     expect(isBlockedIpv6('2606:4700:4700::1111')).toBe(false);
   });
+  it('blocks the HEX-serialized v4-mapped form (regression: new URL() rewrites the dotted v4 to hex)', () => {
+    // new URL('http://[::ffff:169.254.169.254]/').hostname === '[::ffff:a9fe:a9fe]'
+    expect(isBlockedIpv6('::ffff:a9fe:a9fe')).toBe(true); // 169.254.169.254 metadata
+    expect(isBlockedIpv6('::ffff:7f00:1')).toBe(true); // 127.0.0.1 loopback
+    expect(isBlockedIpv6('::ffff:0a00:1')).toBe(true); // 10.0.0.1 private
+    expect(isBlockedIpv6('::ffff:808:808')).toBe(false); // 8.8.8.8 public
+  });
+  it('blocks 6to4 (2002::/16) and NAT64 hex forms embedding private v4', () => {
+    expect(isBlockedIpv6('2002:7f00:1::')).toBe(true); // 6to4 -> 127.0.0.1
+    expect(isBlockedIpv6('2002:a9fe:a9fe::')).toBe(true); // 6to4 -> 169.254.169.254
+    expect(isBlockedIpv6('64:ff9b::7f00:1')).toBe(true); // NAT64 hex -> 127.0.0.1
+  });
+  it('blocks deprecated site-local fec0::/10', () => {
+    expect(isBlockedIpv6('fec0::1')).toBe(true);
+  });
+});
+
+describe('expandIpv6', () => {
+  it('expands :: and embedded v4 (dotted and hex)', () => {
+    expect(expandIpv6('::1')).toEqual([0, 0, 0, 0, 0, 0, 0, 1]);
+    expect(expandIpv6('::ffff:127.0.0.1')).toEqual([0, 0, 0, 0, 0, 0xffff, 0x7f00, 1]);
+    expect(expandIpv6('::ffff:7f00:1')).toEqual([0, 0, 0, 0, 0, 0xffff, 0x7f00, 1]);
+    expect(expandIpv6('2606:4700:4700::1111')).toEqual([0x2606, 0x4700, 0x4700, 0, 0, 0, 0, 0x1111]);
+  });
+  it('returns null for non-IPv6', () => {
+    expect(expandIpv6('8.8.8.8')).toBeNull();
+    expect(expandIpv6('not-an-ip')).toBeNull();
+    expect(expandIpv6('1::2::3')).toBeNull();
+  });
 });
 
 describe('isBlockedIp dispatch', () => {
@@ -111,5 +141,19 @@ describe('validateAssetUrl', () => {
   });
   it('allows literal public IP hosts', () => {
     expect(validateAssetUrl('http://8.8.8.8/x').ok).toBe(true);
+  });
+  it('rejects bracketed IPv6 literals through the real new URL() path (SSRF bypass regression)', () => {
+    // These go through new URL(), which rewrites the embedded v4 to hex; the
+    // validator must still block them. This is the path the unit tests missed.
+    expect(validateAssetUrl('http://[::ffff:169.254.169.254]/latest/meta-data/').ok).toBe(false);
+    expect(validateAssetUrl('http://[::ffff:127.0.0.1]/x').ok).toBe(false);
+    expect(validateAssetUrl('http://[64:ff9b::127.0.0.1]/x').ok).toBe(false);
+    expect(validateAssetUrl('http://[2002:7f00:1::]/x').ok).toBe(false); // 6to4 -> 127.0.0.1
+    expect(validateAssetUrl('http://[fec0::1]/x').ok).toBe(false);
+    expect(validateAssetUrl('http://[fe80::1]/x').ok).toBe(false);
+  });
+  it('allows public IPv6 (incl. public v4-mapped) through new URL()', () => {
+    expect(validateAssetUrl('http://[2606:4700:4700::1111]/x').ok).toBe(true);
+    expect(validateAssetUrl('http://[::ffff:8.8.8.8]/x').ok).toBe(true);
   });
 });

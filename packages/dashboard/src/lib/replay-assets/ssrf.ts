@@ -68,22 +68,81 @@ export function isBlockedIpv4(ip: string): boolean {
   return BLOCKED_V4_CIDRS.some(([base, bits]) => inCidr(ipInt, base, bits));
 }
 
-export function isBlockedIpv6(ip: string): boolean {
-  const addr = ip.toLowerCase().split('%')[0] ?? ''; // strip zone id
-  if (addr === '::1' || addr === '::') return true;
-
-  // IPv4-mapped (::ffff:a.b.c.d) and NAT64 (64:ff9b::a.b.c.d) embed an IPv4
-  // address; extract and apply the v4 rules.
-  const v4Embedded = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(addr);
-  if (v4Embedded?.[1] && (addr.startsWith('::ffff:') || addr.startsWith('64:ff9b:'))) {
-    return isBlockedIpv4(v4Embedded[1]);
+/**
+ * Expand an IPv6 string to its 8 hextets (numbers 0..0xffff), or null if it is
+ * not a parseable IPv6 literal. Handles `::` compression and an embedded IPv4
+ * tail in BOTH the dotted form (`::ffff:1.2.3.4`) and the hex form that
+ * `new URL()` normalizes it to (`::ffff:102:304`). Working at the hextet level
+ * is the only safe way to range-check: a regex on the string misses the hex
+ * re-serialization, which was a critical SSRF bypass (cloud metadata reachable
+ * via `[::ffff:169.254.169.254]` -> `[::ffff:a9fe:a9fe]`).
+ */
+export function expandIpv6(input: string): number[] | null {
+  let addr = (input.toLowerCase().split('%')[0] ?? '').replace(/^\[|\]$/g, '');
+  // Convert a trailing embedded dotted-quad IPv4 into two hextets first.
+  const dotted = /^(.*:)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(addr);
+  if (dotted) {
+    const v4 = ipv4ToInt(dotted[2]!);
+    if (v4 === null) return null;
+    addr = dotted[1] + ((v4 >>> 16) & 0xffff).toString(16) + ':' + (v4 & 0xffff).toString(16);
   }
+  if (!addr.includes(':')) return null;
+  const halves = addr.split('::');
+  if (halves.length > 2) return null;
+  const toHextets = (s: string): number[] | null => {
+    if (s === '') return [];
+    const out: number[] = [];
+    for (const part of s.split(':')) {
+      if (!/^[0-9a-f]{1,4}$/.test(part)) return null;
+      out.push(parseInt(part, 16));
+    }
+    return out;
+  };
+  const left = toHextets(halves[0] ?? '');
+  const right = halves.length === 2 ? toHextets(halves[1] ?? '') : [];
+  if (left === null || right === null) return null;
+  let hextets: number[];
+  if (halves.length === 2) {
+    const fill = 8 - left.length - right.length;
+    if (fill < 0) return null;
+    hextets = [...left, ...Array(fill).fill(0), ...right];
+  } else {
+    hextets = left;
+  }
+  if (hextets.length !== 8) return null;
+  return hextets;
+}
+
+/** Range-check the IPv4 embedded in two hextets (high, low) against the v4 rules. */
+function isBlockedV4InHextets(hi: number, lo: number): boolean {
+  return isBlockedIpv4(`${(hi >>> 8) & 0xff}.${hi & 0xff}.${(lo >>> 8) & 0xff}.${lo & 0xff}`);
+}
+
+export function isBlockedIpv6(ip: string): boolean {
+  const h = expandIpv6(ip);
+  if (h === null) return false; // not a parseable IPv6 literal
+
+  // Unspecified (::) and loopback (::1).
+  if (h.every((x) => x === 0)) return true;
+  if (h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0 && h[6] === 0 && h[7] === 1) {
+    return true;
+  }
+  // Embedded-IPv4 forms: extract and apply the full v4 blocklist.
+  // IPv4-mapped ::ffff:0:0/96 and NAT64 64:ff9b::/96 carry the v4 in h[6],h[7].
+  if (h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0xffff) {
+    return isBlockedV4InHextets(h[6]!, h[7]!);
+  }
+  if (h[0] === 0x64 && h[1] === 0xff9b && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0) {
+    return isBlockedV4InHextets(h[6]!, h[7]!);
+  }
+  // 6to4 2002::/16 carries the v4 in h[1],h[2].
+  if (h[0] === 0x2002) return isBlockedV4InHextets(h[1]!, h[2]!);
 
   // Prefix-based reserved ranges.
-  const firstHextet = parseInt(addr.split(':')[0] || '0', 16);
-  if ((firstHextet & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
-  if ((firstHextet & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
-  if ((firstHextet & 0xff00) === 0xff00) return true; // ff00::/8 multicast
+  if ((h[0]! & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
+  if ((h[0]! & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  if ((h[0]! & 0xffc0) === 0xfec0) return true; // fec0::/10 site-local (deprecated)
+  if ((h[0]! & 0xff00) === 0xff00) return true; // ff00::/8 multicast
   return false;
 }
 
@@ -210,7 +269,17 @@ export async function safeFetchAsset(rawUrl: string, opts: SafeFetchOptions = {}
       return { ok: false, status: res.status, reason: 'too-large' };
     }
 
-    const body = await readCapped(res, maxBytes);
+    // The body read can also reject (connection reset mid-stream, or the
+    // timeout aborting during the read), so it must be inside try/catch too,
+    // and the timer cleared on every exit path, or a stream error escapes as
+    // an unhandled rejection and leaks the abort timer.
+    let body: Uint8Array | null;
+    try {
+      body = await readCapped(res, maxBytes);
+    } catch (err) {
+      clearTimeout(timer);
+      return { ok: false, status: res.status, reason: err instanceof Error && err.name === 'AbortError' ? 'timeout' : 'fetch-failed' };
+    }
     clearTimeout(timer);
     if (body === null) return { ok: false, status: res.status, reason: 'too-large' };
 
