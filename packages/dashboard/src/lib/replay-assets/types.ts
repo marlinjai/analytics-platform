@@ -15,6 +15,8 @@ export const NODE_TYPE_TEXT = 3;
 
 export interface SerializedNode {
   type?: number;
+  /** rrweb mirror id; used to resolve a tag for incremental attribute mutations. */
+  id?: number;
   tagName?: string;
   attributes?: Record<string, unknown>;
   childNodes?: SerializedNode[];

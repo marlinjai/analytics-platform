@@ -93,6 +93,15 @@ describe('isBlockedIpv6', () => {
   it('blocks deprecated site-local fec0::/10', () => {
     expect(isBlockedIpv6('fec0::1')).toBe(true);
   });
+  it('blocks the IPv4-compatible ::/96 form (regression: [::169.254.169.254] -> [::a9fe:a9fe])', () => {
+    // The whole ::/96 is deprecated/non-routable, blocked wholesale: a missed
+    // embedded-v4 form here was a real SSRF gap (cloud metadata via [::a9fe:a9fe]).
+    expect(isBlockedIpv6('::169.254.169.254')).toBe(true); // dotted form
+    expect(isBlockedIpv6('::a9fe:a9fe')).toBe(true); // hex form new URL() produces
+    expect(isBlockedIpv6('::7f00:1')).toBe(true); // 127.0.0.1
+    expect(isBlockedIpv6('::a00:1')).toBe(true); // 10.0.0.1
+    expect(isBlockedIpv6('::ffff:0:a9fe:a9fe')).toBe(true); // ::ffff:0:a.b.c.d translated form
+  });
 });
 
 describe('expandIpv6', () => {
@@ -155,5 +164,19 @@ describe('validateAssetUrl', () => {
   it('allows public IPv6 (incl. public v4-mapped) through new URL()', () => {
     expect(validateAssetUrl('http://[2606:4700:4700::1111]/x').ok).toBe(true);
     expect(validateAssetUrl('http://[::ffff:8.8.8.8]/x').ok).toBe(true);
+  });
+  it('rejects the IPv4-compatible ::/96 bracketed form through new URL() (SSRF regression)', () => {
+    expect(validateAssetUrl('http://[::169.254.169.254]/latest/meta-data/').ok).toBe(false);
+    expect(validateAssetUrl('http://[::7f00:1]/x').ok).toBe(false); // 127.0.0.1
+  });
+  it('rejects obfuscated IPv4 encodings normalized by new URL() (decimal/hex/octal/shorthand)', () => {
+    // new URL() normalizes these to dotted-quad before the IP check; lock that in
+    // so a future parser/validator change cannot silently re-open the bypass class.
+    expect(validateAssetUrl('http://2130706433/').ok).toBe(false); // 127.0.0.1 decimal
+    expect(validateAssetUrl('http://0x7f000001/').ok).toBe(false); // 127.0.0.1 hex
+    expect(validateAssetUrl('http://0177.0.0.1/').ok).toBe(false); // 127.0.0.1 octal
+    expect(validateAssetUrl('http://127.1/').ok).toBe(false); // 127.0.0.1 shorthand
+    expect(validateAssetUrl('http://2852039166/').ok).toBe(false); // 169.254.169.254 decimal
+    expect(validateAssetUrl('http://3232235521/').ok).toBe(false); // 192.168.0.1 decimal
   });
 });

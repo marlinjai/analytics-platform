@@ -76,7 +76,18 @@ export function parseSrcsetCandidates(srcset: string): Array<{ url: string; desc
   return out;
 }
 
-const CSS_URL_RE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
+// url(...) references. Per-quote branches: a quoted URL may contain ( ) and the
+// opposite quote; the unquoted branch excludes ' " ( ). Splitting the branches
+// (vs one shared [^'")]+ class) is what keeps this LINEAR instead of O(n^2): with
+// a shared class that allowed '(', a run of `url(` tokens with no closing paren
+// made each match greedily consume then backtrack the whole tail, a CPU DoS on
+// attacker-controlled CSS. Groups: 1 single-quoted, 2 double-quoted, 3 unquoted.
+const CSS_URL_RE = /url\(\s*(?:'([^']*)'|"([^"]*)"|([^'")(]+))\s*\)/gi;
+// Bare-string @import "x.css" (the url() form is already covered by CSS_URL_RE).
+const CSS_IMPORT_RE = /@import\s+(['"])([^'"]+)\1/gi;
+// Skip pathologically large CSS strings outright; bounds worst-case work no matter
+// how the patterns evolve. A legit inline style / <style> body is far smaller.
+const MAX_CSS_LEN = 1_000_000;
 
 // <link rel> values whose href is a render asset we rehost.
 const LINK_RELS = new Set(['stylesheet', 'icon', 'shortcut icon', 'apple-touch-icon', 'preload', 'manifest']);
@@ -120,12 +131,14 @@ function srcset(attrs: Record<string, unknown>, key: string, pageUrl: string, h:
   if (changed) attrs[key] = rebuilt.join(', ');
 }
 
-/** Handle url(...) references inside a CSS string on obj[key] (collect or replace). */
+/** Handle url(...) + bare-string @import references inside a CSS string on obj[key] (collect or replace). */
 function css(obj: Record<string, unknown> | SerializedNode, key: string, pageUrl: string, h: AssetHandler): void {
   const val = (obj as Record<string, unknown>)[key];
-  if (typeof val !== 'string') return;
+  if (typeof val !== 'string' || val.length > MAX_CSS_LEN) return;
   let changed = false;
-  const out = val.replace(CSS_URL_RE, (whole, quote: string, url: string) => {
+  let out = val.replace(CSS_URL_RE, (whole, sq?: string, dq?: string, uq?: string) => {
+    const quote = sq !== undefined ? "'" : dq !== undefined ? '"' : '';
+    const url = sq ?? dq ?? uq ?? '';
     const resolved = resolveAssetUrl(url, pageUrl);
     if (!resolved) return whole;
     const repl = h(resolved);
@@ -133,15 +146,29 @@ function css(obj: Record<string, unknown> | SerializedNode, key: string, pageUrl
     changed = true;
     return `url(${quote}${repl}${quote})`;
   });
+  out = out.replace(CSS_IMPORT_RE, (whole, quote: string, url: string) => {
+    const resolved = resolveAssetUrl(url, pageUrl);
+    if (!resolved) return whole;
+    const repl = h(resolved);
+    if (repl === undefined) return whole;
+    changed = true;
+    return `@import ${quote}${repl}${quote}`;
+  });
+  // NOTE: bare-string image-set("a.png" 1x) is intentionally NOT matched. Its
+  // url() form IS (via CSS_URL_RE), and rrweb normalizes CSSOM stylesheets to the
+  // url() form, so only a raw inline image-set bare string is missed (rare; a
+  // safe scoped matcher is disproportionate to the one-asset fidelity loss).
   if (changed) (obj as Record<string, unknown>)[key] = out;
 }
 
-/** Process the URL-bearing attributes of one element node. */
-function elementAttrs(node: SerializedNode, pageUrl: string, h: AssetHandler): void {
-  const tag = (node.tagName ?? '').toLowerCase();
-  const attrs = node.attributes;
-  if (!attrs) return;
-
+/**
+ * Apply the URL-bearing attribute rules for a KNOWN tag (collect or replace).
+ * This is the single tag-aware rule set used by BOTH the full-snapshot walk and
+ * the attribute-mutation walk (when the mutated node's tag is known), so the two
+ * can never diverge on which attributes count as assets for a given tag. It is
+ * what keeps <a href> and <script src> out of the asset set (display-assets-only).
+ */
+function applyTagAttrs(tag: string, attrs: Record<string, unknown>, pageUrl: string, h: AssetHandler): void {
   if (tag === 'img' || tag === 'source' || tag === 'video' || tag === 'audio' || tag === 'embed' || tag === 'input') {
     single(attrs, 'src', pageUrl, h);
   }
@@ -153,6 +180,12 @@ function elementAttrs(node: SerializedNode, pageUrl: string, h: AssetHandler): v
     single(attrs, 'href', pageUrl, h);
     single(attrs, 'xlink:href', pageUrl, h);
   }
+  // <link> href is an asset only for stylesheet/icon/preload(as image|font|
+  // style)/manifest rels. NB: an incremental attribute mutation carries only the
+  // changed attrs, so a runtime-swapped <link href> whose payload omits rel is
+  // conservatively NOT collected here and live-loads from origin at replay
+  // (graceful). Full fidelity for that compound-rare case needs the snapshot rel
+  // threaded in (tracked under Phase 2 in the asset-rehosting plan).
   if (tag === 'link' && linkHrefIsAsset(attrs)) single(attrs, 'href', pageUrl, h);
 
   // url(...) in an inline style on any element, and rrweb's inlined-stylesheet text.
@@ -160,13 +193,27 @@ function elementAttrs(node: SerializedNode, pageUrl: string, h: AssetHandler): v
   css(attrs, '_cssText', pageUrl, h);
 }
 
-/** URL-bearing attribute names handled in an incremental attribute mutation (no tag context). */
-function mutationAttrs(attrs: Record<string, unknown>, pageUrl: string, h: AssetHandler): void {
+/** Process the URL-bearing attributes of one element node from a snapshot/add. */
+function elementAttrs(node: SerializedNode, pageUrl: string, h: AssetHandler): void {
+  const attrs = node.attributes;
+  if (!attrs) return;
+  applyTagAttrs((node.tagName ?? '').toLowerCase(), attrs, pageUrl, h);
+}
+
+/**
+ * Handle an incremental attribute mutation whose node tag is UNKNOWN (the node
+ * was added in an earlier chunk not present in this batch, and no id->tag seed was
+ * supplied). Without tag context we cannot apply the tag-aware rules, so we use a
+ * conservative subset: the high-value lazy-asset attributes (src/srcset/poster +
+ * inline CSS — the lazy-loaded <img src> this path exists to catch), but
+ * deliberately NOT href or data, which without a tag would over-collect <a href>
+ * (arbitrary HTML page targets) and <object data>, violating the display-assets-
+ * only contract. Integration should pass the session id->tag map (walkAssets'
+ * seedIdToTag) so this fallback is rarely hit.
+ */
+function mutationAttrsUnknownTag(attrs: Record<string, unknown>, pageUrl: string, h: AssetHandler): void {
   single(attrs, 'src', pageUrl, h);
   single(attrs, 'poster', pageUrl, h);
-  single(attrs, 'href', pageUrl, h);
-  single(attrs, 'xlink:href', pageUrl, h);
-  single(attrs, 'data', pageUrl, h);
   srcset(attrs, 'srcset', pageUrl, h);
   css(attrs, 'style', pageUrl, h);
   css(attrs, '_cssText', pageUrl, h);
@@ -184,7 +231,44 @@ function walkNode(node: SerializedNode | undefined, pageUrl: string, h: AssetHan
   }
 }
 
-export function walkAssets(events: readonly RrwebEvent[], pageUrl: string, h: AssetHandler): void {
+/** Record id -> lowercased tagName for every element node in a subtree. */
+function collectNodeIdTags(node: SerializedNode | undefined, map: Map<number, string>): void {
+  if (!node || typeof node !== 'object') return;
+  if (node.type === NODE_TYPE_ELEMENT && typeof node.id === 'number' && typeof node.tagName === 'string') {
+    map.set(node.id, node.tagName.toLowerCase());
+  }
+  if (Array.isArray(node.childNodes)) {
+    for (const child of node.childNodes) collectNodeIdTags(child, map);
+  }
+}
+
+/**
+ * Walk the asset URLs in a batch of rrweb events. `seedIdToTag` lets a caller
+ * supply the session's id->tagName map (built from earlier chunks) so attribute
+ * mutations referencing nodes added before this batch can still be resolved
+ * tag-aware; without it, only ids defined within this batch are known and the
+ * rest fall back to mutationAttrsUnknownTag's conservative subset.
+ */
+export function walkAssets(
+  events: readonly RrwebEvent[],
+  pageUrl: string,
+  h: AssetHandler,
+  seedIdToTag?: ReadonlyMap<number, string>,
+): void {
+  // Pre-pass: map node id -> tag from full snapshots and add-node mutations in
+  // this batch, so the attribute-mutation pass can apply the tag-aware rules.
+  const idToTag = new Map<number, string>(seedIdToTag);
+  for (const evt of events) {
+    if (!evt || typeof evt !== 'object') continue;
+    if (evt.type === EVENT_TYPE_FULL_SNAPSHOT) {
+      collectNodeIdTags(evt.data?.node, idToTag);
+    } else if (evt.type === EVENT_TYPE_INCREMENTAL && evt.data?.source === INCREMENTAL_SOURCE_MUTATION) {
+      if (Array.isArray(evt.data.adds)) {
+        for (const add of evt.data.adds) collectNodeIdTags(add?.node, idToTag);
+      }
+    }
+  }
+
   for (const evt of events) {
     if (!evt || typeof evt !== 'object') continue;
     if (evt.type === EVENT_TYPE_FULL_SNAPSHOT) {
@@ -194,12 +278,16 @@ export function walkAssets(events: readonly RrwebEvent[], pageUrl: string, h: As
         for (const add of evt.data.adds) walkNode(add?.node, pageUrl, h);
       }
       // Lazy-loaded / dynamically-swapped src arrives as an attribute mutation,
-      // not an add-node. Without this, those (the exact blank-image case the
-      // pipeline targets) are never captured or rewritten.
+      // not an add-node (the exact blank-image case the pipeline targets). Resolve
+      // the node's tag to apply the same tag-aware rules as the snapshot walk;
+      // fall back to the conservative subset when the tag is unknown.
       if (Array.isArray(evt.data.attributes)) {
         for (const m of evt.data.attributes) {
           if (m?.attributes && typeof m.attributes === 'object') {
-            mutationAttrs(m.attributes as Record<string, unknown>, pageUrl, h);
+            const attrs = m.attributes as Record<string, unknown>;
+            const tag = typeof m.id === 'number' ? idToTag.get(m.id) : undefined;
+            if (tag !== undefined) applyTagAttrs(tag, attrs, pageUrl, h);
+            else mutationAttrsUnknownTag(attrs, pageUrl, h);
           }
         }
       }

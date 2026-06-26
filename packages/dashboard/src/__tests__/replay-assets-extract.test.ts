@@ -162,6 +162,67 @@ describe('extractAssetUrls', () => {
     expect(() => extractAssetUrls(events, PAGE)).not.toThrow();
     expect(extractAssetUrls(events, PAGE)).toEqual([]);
   });
+
+  it('does not over-collect <a href>/<script src> attribute mutations when the tag is known (snapshot in batch)', () => {
+    const snapshot = fullSnapshot(
+      el('div', {}, [
+        { ...el('a', {}), id: 10 },
+        { ...el('script', {}), id: 11 },
+        { ...el('img', {}), id: 12 },
+      ]),
+    );
+    const mutation = mutationAttr(
+      { id: 10, attributes: { href: 'https://evil.example.com/page' } }, // anchor nav, not an asset
+      { id: 11, attributes: { src: 'https://evil.example.com/app.js' } }, // script, not an asset
+      { id: 12, attributes: { src: 'https://cdn.x/lazy.png' } }, // img, IS an asset
+    );
+    expect(extractAssetUrls([snapshot, mutation], PAGE)).toEqual(['https://cdn.x/lazy.png']);
+  });
+
+  it('handles a runtime-swapped <link href> per the documented contract (rel in payload -> collected, omitted -> conservative)', () => {
+    const snapshot = fullSnapshot(
+      el('head', {}, [
+        { ...el('link', { rel: 'stylesheet', href: '/orig.css' }), id: 50 },
+        { ...el('link', { rel: 'stylesheet', href: '/orig2.css' }), id: 51 },
+      ]),
+    );
+    const mutation = mutationAttr(
+      { id: 50, attributes: { href: 'https://cdn.x/new.css' } }, // rel omitted -> not collected (live-loads)
+      { id: 51, attributes: { rel: 'stylesheet', href: 'https://cdn.x/new2.css' } }, // rel present -> collected
+    );
+    expect(extractAssetUrls([snapshot, mutation], PAGE).sort()).toEqual(
+      ['https://cdn.x/new2.css', 'https://shop.example.com/orig.css', 'https://shop.example.com/orig2.css'].sort(),
+    );
+  });
+
+  it('drops href/data but keeps src in attribute mutations when the tag is unknown (no snapshot/seed)', () => {
+    const mutation = mutationAttr(
+      { id: 20, attributes: { href: 'https://evil.example.com/page' } }, // dropped without tag context
+      { id: 21, attributes: { data: 'https://evil.example.com/x.pdf' } }, // dropped without tag context
+      { id: 22, attributes: { src: 'https://cdn.x/lazy.png' } }, // kept (the lazy-img case)
+    );
+    expect(extractAssetUrls([mutation], PAGE)).toEqual(['https://cdn.x/lazy.png']);
+  });
+
+  it('collects bare-string @import in <style> text (not only the url() form)', () => {
+    const evt = fullSnapshot(
+      el('div', {}, [el('style', {}, [text('@import "https://cdn.x/theme.css"; .a{color:red}')])]),
+    );
+    expect(extractAssetUrls([evt], PAGE)).toEqual(['https://cdn.x/theme.css']);
+  });
+
+  it('collects quoted CSS url() whose URL contains parentheses', () => {
+    const evt = fullSnapshot(el('div', { style: 'background: url("https://cdn.x/a(b).png")' }));
+    expect(extractAssetUrls([evt], PAGE)).toEqual(['https://cdn.x/a(b).png']);
+  });
+
+  it('handles pathological url( repetition in linear time (ReDoS regression)', () => {
+    const evil = 'url('.repeat(50000); // ~200KB; quadratic backtracking would take tens of seconds
+    const evt = fullSnapshot(el('div', {}, [el('style', {}, [text(evil)])]));
+    const start = performance.now();
+    expect(extractAssetUrls([evt], PAGE)).toEqual([]);
+    expect(performance.now() - start).toBeLessThan(1500);
+  });
 });
 
 describe('parseSrcsetCandidates', () => {

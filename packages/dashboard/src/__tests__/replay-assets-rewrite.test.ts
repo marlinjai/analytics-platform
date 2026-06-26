@@ -129,4 +129,13 @@ describe('rewriteAssetUrls', () => {
     const mod = out[0]!.data!.attributes![0]!;
     expect((mod.attributes as Record<string, unknown>).src).toBe(`${CDN}/lz`);
   });
+
+  it('rewrites a quoted CSS url() whose URL contains parentheses, preserving the quote', () => {
+    const events = [fullSnapshot(el('div', { style: 'background: url("https://cdn.x/a(b).png")' }))];
+    const map = new Map([['https://cdn.x/a(b).png', `${CDN}/par`]]);
+    const out = rewriteAssetUrls(events, map, PAGE);
+    expect((out[0]!.data!.node!.attributes as Record<string, unknown>).style).toBe(
+      `background: url("${CDN}/par")`,
+    );
+  });
 });

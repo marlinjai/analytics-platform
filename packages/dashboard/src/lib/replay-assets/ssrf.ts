@@ -19,7 +19,8 @@ import { lookup } from 'node:dns/promises';
  */
 
 export const DEFAULT_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
-export const DEFAULT_TIMEOUT_MS = 8_000;
+export const DEFAULT_TIMEOUT_MS = 8_000; // per-redirect-hop ceiling
+export const DEFAULT_TOTAL_TIMEOUT_MS = 15_000; // whole-operation wall-clock ceiling (DNS + every redirect hop)
 export const DEFAULT_MAX_REDIRECTS = 3;
 
 // --- Pure IP range checks -------------------------------------------------
@@ -122,16 +123,24 @@ export function isBlockedIpv6(ip: string): boolean {
   const h = expandIpv6(ip);
   if (h === null) return false; // not a parseable IPv6 literal
 
-  // Unspecified (::) and loopback (::1).
-  if (h.every((x) => x === 0)) return true;
-  if (h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0 && h[6] === 0 && h[7] === 1) {
+  // ::/96 — unspecified (::), loopback (::1), and the deprecated IPv4-compatible
+  // ::a.b.c.d form (h[0..5] all zero, v4 embedded in h[6],h[7]). The whole /96 is
+  // non-routable / special-use, so block it wholesale: a missed embedded-v4 form
+  // here is exactly the SSRF bypass this module exists to close (e.g. the host
+  // [::169.254.169.254], which new URL() normalizes to [::a9fe:a9fe]).
+  if (h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0) {
     return true;
   }
-  // Embedded-IPv4 forms: extract and apply the full v4 blocklist.
-  // IPv4-mapped ::ffff:0:0/96 and NAT64 64:ff9b::/96 carry the v4 in h[6],h[7].
+  // Embedded-IPv4 forms: extract the v4 and apply the full v4 blocklist.
+  // IPv4-mapped ::ffff:0:0/96 carries the v4 in h[6],h[7].
   if (h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0xffff) {
     return isBlockedV4InHextets(h[6]!, h[7]!);
   }
+  // IPv4-translated ::ffff:0:a.b.c.d (h[4]==0xffff, h[5]==0; v4 in h[6],h[7]).
+  if (h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0xffff && h[5] === 0) {
+    return isBlockedV4InHextets(h[6]!, h[7]!);
+  }
+  // NAT64 64:ff9b::/96 carries the v4 in h[6],h[7].
   if (h[0] === 0x64 && h[1] === 0xff9b && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0) {
     return isBlockedV4InHextets(h[6]!, h[7]!);
   }
@@ -188,21 +197,65 @@ export interface SafeFetchResult {
 
 export interface SafeFetchOptions {
   maxBytes?: number;
+  /** Per-redirect-hop ceiling. */
   timeoutMs?: number;
+  /** Whole-operation wall-clock ceiling (covers DNS + every redirect hop). */
+  totalTimeoutMs?: number;
   maxRedirects?: number;
 }
 
-/** Resolve a hostname and reject if ANY resolved address is blocked. */
-async function assertHostResolvesPublic(hostname: string): Promise<string | null> {
+/** Rejected by withDeadline when the wrapped work outlives its budget. */
+class DeadlineError extends Error {
+  constructor() {
+    super('deadline-exceeded');
+    this.name = 'DeadlineError';
+  }
+}
+
+/**
+ * Bound the wall-clock a caller waits on `promise` to `budgetMs`, rejecting with
+ * DeadlineError otherwise. The wrapped work (notably dns.lookup's getaddrinfo on
+ * the libuv threadpool, which takes no AbortSignal) is not itself cancellable, but
+ * this stops a slow/blackholed resolver from stalling a fetch past its deadline.
+ * Capping concurrency so stalled lookups cannot exhaust the shared threadpool is
+ * an integration-layer concern (see the asset-rehosting plan).
+ */
+function withDeadline<T>(promise: Promise<T>, budgetMs: number): Promise<T> {
+  if (budgetMs <= 0) {
+    // The work was already started by the caller; attach a no-op catch so an
+    // abandoned rejection cannot surface as an unhandled rejection.
+    void promise.catch(() => {});
+    return Promise.reject(new DeadlineError());
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new DeadlineError()), budgetMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+/**
+ * Resolve a hostname and reject if ANY resolved address is blocked, bounded by
+ * `budgetMs` of wall-clock. Uses dns.lookup (getaddrinfo) deliberately: it is the
+ * same resolver undici uses at connect time, so the IPs we range-check are the
+ * IPs the fetch will actually connect to (switching to c-ares dns.resolve* would
+ * let a resolve-vs-connect mismatch re-open the SSRF hole).
+ */
+async function assertHostResolvesPublic(hostname: string, budgetMs: number): Promise<string | null> {
   const host = hostname.replace(/^\[|\]$/g, '');
   if (isBlockedIp(host)) return 'blocked-ip-literal';
   // Literal IP that passed the block check: fine.
   if (host.includes(':') || ipv4ToInt(host) !== null) return null;
+  // Budget already spent (the caller's deadline ticked over): fail fast without
+  // kicking off a lookup we would immediately abandon.
+  if (budgetMs <= 0) return 'dns-timeout';
   let addrs: Array<{ address: string }>;
   try {
-    addrs = await lookup(host, { all: true });
-  } catch {
-    return 'dns-resolution-failed';
+    addrs = await withDeadline(lookup(host, { all: true }), budgetMs);
+  } catch (err) {
+    return err instanceof DeadlineError ? 'dns-timeout' : 'dns-resolution-failed';
   }
   if (addrs.length === 0) return 'dns-no-records';
   if (addrs.some((a) => isBlockedIp(a.address))) return 'resolves-to-blocked-ip';
@@ -211,25 +264,38 @@ async function assertHostResolvesPublic(hostname: string): Promise<string | null
 
 /**
  * Fetch an asset URL with the full SSRF guard: http(s) only, every resolved IP
- * checked against the block list, redirects re-validated hop by hop, a hard
- * size cap (streamed, so an oversized body is aborted early), a timeout, and no
- * credentials/cookies forwarded.
+ * checked against the block list, redirects re-validated hop by hop, a hard size
+ * cap (streamed, so an oversized body is aborted early), a single whole-operation
+ * wall-clock deadline (covering DNS + every hop, so redirects cannot multiply the
+ * held time), and no credentials/cookies forwarded. The response body is released
+ * on EVERY exit path, including the early returns that never read it, so undici
+ * cannot pin a socket until GC.
  */
 export async function safeFetchAsset(rawUrl: string, opts: SafeFetchOptions = {}): Promise<SafeFetchResult> {
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const totalTimeoutMs = opts.totalTimeoutMs ?? DEFAULT_TOTAL_TIMEOUT_MS;
   const maxRedirects = opts.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
+  // One absolute deadline for the whole operation, so redirects + DNS cannot
+  // multiply into (maxRedirects+1) * timeoutMs of held resources.
+  const deadline = Date.now() + totalTimeoutMs;
 
   let current = rawUrl;
   for (let hop = 0; hop <= maxRedirects; hop++) {
+    if (deadline - Date.now() <= 0) return { ok: false, reason: 'timeout' };
+
     const check = validateAssetUrl(current);
     if (!check.ok) return { ok: false, reason: check.reason };
 
-    const blockedReason = await assertHostResolvesPublic(check.url.hostname);
+    // DNS resolution is bounded by (and counts against) the remaining budget.
+    const blockedReason = await assertHostResolvesPublic(check.url.hostname, deadline - Date.now());
     if (blockedReason) return { ok: false, reason: blockedReason };
 
+    const hopBudget = Math.min(timeoutMs, deadline - Date.now());
+    if (hopBudget <= 0) return { ok: false, reason: 'timeout' };
+
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), hopBudget);
     let res: Response;
     try {
       res = await fetch(check.url, {
@@ -244,56 +310,65 @@ export async function safeFetchAsset(rawUrl: string, opts: SafeFetchOptions = {}
       return { ok: false, reason: err instanceof Error && err.name === 'AbortError' ? 'timeout' : 'fetch-failed' };
     }
 
-    // Manual redirect handling: re-validate the Location and loop.
-    if (res.status >= 300 && res.status < 400) {
-      clearTimeout(timer);
-      const loc = res.headers.get('location');
-      if (!loc) return { ok: false, reason: 'redirect-without-location' };
-      try {
-        current = new URL(loc, check.url).href;
-      } catch {
-        return { ok: false, reason: 'bad-redirect-location' };
-      }
-      continue;
-    }
-
-    if (!res.ok) {
-      clearTimeout(timer);
-      return { ok: false, status: res.status, reason: `http-${res.status}` };
-    }
-
-    // Early reject if the declared length already exceeds the cap.
-    const declared = Number(res.headers.get('content-length') ?? '');
-    if (Number.isFinite(declared) && declared > maxBytes) {
-      clearTimeout(timer);
-      return { ok: false, status: res.status, reason: 'too-large' };
-    }
-
-    // The body read can also reject (connection reset mid-stream, or the
-    // timeout aborting during the read), so it must be inside try/catch too,
-    // and the timer cleared on every exit path, or a stream error escapes as
-    // an unhandled rejection and leaks the abort timer.
-    let body: Uint8Array | null;
+    // res.body MUST be released on every exit path from here, or undici keeps the
+    // socket pinned until FinalizationRegistry GC. readCapped takes ownership of
+    // the body once called (it drains or cancels its own reader); the early
+    // returns below never touch it, so the finally cancels it for them.
+    let bodyOwned = false;
     try {
-      body = await readCapped(res, maxBytes);
-    } catch (err) {
-      clearTimeout(timer);
-      return { ok: false, status: res.status, reason: err instanceof Error && err.name === 'AbortError' ? 'timeout' : 'fetch-failed' };
-    }
-    clearTimeout(timer);
-    if (body === null) return { ok: false, status: res.status, reason: 'too-large' };
+      // Manual redirect handling: re-validate the Location and loop.
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get('location');
+        if (!loc) return { ok: false, reason: 'redirect-without-location' };
+        try {
+          current = new URL(loc, check.url).href;
+        } catch {
+          return { ok: false, reason: 'bad-redirect-location' };
+        }
+        continue;
+      }
 
-    return {
-      ok: true,
-      status: res.status,
-      contentType: res.headers.get('content-type') ?? 'application/octet-stream',
-      body,
-    };
+      if (!res.ok) {
+        return { ok: false, status: res.status, reason: `http-${res.status}` };
+      }
+
+      // Early reject if the declared length already exceeds the cap.
+      const declared = Number(res.headers.get('content-length') ?? '');
+      if (Number.isFinite(declared) && declared > maxBytes) {
+        return { ok: false, status: res.status, reason: 'too-large' };
+      }
+
+      bodyOwned = true; // readCapped now owns the body stream and its cleanup
+      let body: Uint8Array | null;
+      try {
+        body = await readCapped(res, maxBytes);
+      } catch (err) {
+        return { ok: false, status: res.status, reason: err instanceof Error && err.name === 'AbortError' ? 'timeout' : 'fetch-failed' };
+      }
+      if (body === null) return { ok: false, status: res.status, reason: 'too-large' };
+
+      return {
+        ok: true,
+        status: res.status,
+        contentType: res.headers.get('content-type') ?? 'application/octet-stream',
+        body,
+      };
+    } finally {
+      clearTimeout(timer);
+      // Release the connection on every path that did not hand the body to
+      // readCapped (redirect, http-error, declared-too-large, bad/absent
+      // Location), or undici pins the socket until GC.
+      if (!bodyOwned) void res.body?.cancel()?.catch(() => {});
+    }
   }
   return { ok: false, reason: 'too-many-redirects' };
 }
 
-/** Read a response body, returning null if it exceeds maxBytes. */
+/**
+ * Read a response body, returning null if it exceeds maxBytes. Owns the reader's
+ * lifecycle: cancels it on over-cap and on a mid-stream error (so the connection
+ * is always released), and rethrows the error to the caller.
+ */
 async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array | null> {
   if (!res.body) {
     const buf = new Uint8Array(await res.arrayBuffer());
@@ -302,17 +377,26 @@ async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array |
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel();
-        return null;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel();
+          return null;
+        }
+        chunks.push(value);
       }
-      chunks.push(value);
     }
+  } catch (err) {
+    try {
+      await reader.cancel();
+    } catch {
+      // Reader may already be errored/released; nothing more to release.
+    }
+    throw err;
   }
   const out = new Uint8Array(total);
   let offset = 0;
