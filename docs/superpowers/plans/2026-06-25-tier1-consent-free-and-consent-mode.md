@@ -1,6 +1,6 @@
 ---
 type: plan
-status: draft
+status: decided
 date: 2026-06-25
 title: Tier-1 Consent-Free + Consent-Mode Architecture (make the central claim true)
 summary: A code audit found that Tier 1 is not actually consent-free: the tracker writes to sessionStorage on init() before any consent, which legally triggers a cookie banner under German law and destroys the consent-free wedge. This plan specifies the fix: client stores nothing pre-consent, sessionization moves server-side with a secret salt, a default-deny consent signal gates all Tier-2 features, plus Global Privacy Control, retention controls, and the processor docs.
@@ -293,6 +293,27 @@ Consolidated from the plan's open questions plus the 2026-06-25 review. A recomm
 | **D10** | How do existing `auto_consent` test links interact with the new default-deny gate? | Restrict `auto_consent` to internal QA on owned properties only; never let a test link grant Tier-2 consent for real visitor traffic. Document the boundary. |
 | **D11** | CMP integration shape. | Ship a thin documented `setConsent({analytics, replay})` adapter the customer fires from their CMP callback, plus a TCF/Usercentrics worked example; specify default-deny on the first consent-unknown request. |
 | **D12** | Bot filtering once the client id is gone. | Server-side user-agent blocklist (standard known-bots list) at ingestion; optional known-bot IP-range filtering. Names the gap so visitor counts stay credible. |
+
+---
+
+## 7. Decisions made (2026-06-26, Marlin)
+
+All twelve resolved; plan moves to `decided`. P1 is now firmly: remove `sessionStorage` from `session.ts` + `experiment.ts`, server-side **query-time** sessionization (D6) on a **secret Postgres-stored salt** (D4), **cookieless A/B** (D1), and **self-hosted geo** (D5). D9 (legal) starts in parallel; no-banner copy is gated on the written sign-off.
+
+| # | Resolution |
+|---|------------|
+| **D1** | **Cookieless Tier-1, bucket on the daily visitor key** (no persistent `lumitra_uid`; the 1-year cookie path leaves the consent-free path). **Accepted trade-off:** the variant re-rolls at the midnight salt rotation, so multi-day experiments re-bucket returning visitors. Chosen over a stable per-experiment server seed deliberately: a daily-rotating bucketing key cannot itself become a cross-day identifier, which is the more privacy-conservative posture for the German ceiling. Sticky cross-day A/B is the Tier-2 (consented) `uid` upgrade. **P1.** |
+| **D2** | Shadow-compute server sessionization alongside client sessions ~2–4 weeks, compare, then hard-cut with a dated dashboard annotation. Pre/post numbers explicitly not comparable. |
+| **D3** | Confirmed: the other device/transfer paths are the A/B cookies (D1) and the geo IP transfer (D5); both pulled into P1. Tier-1 is not storage-free until both land. |
+| **D4** | Secret salt in **Postgres** (durable source of truth); each instance caches **current + previous** salt in memory, refreshed daily by a rotation job. No new Redis. |
+| **D5** | **Self-host the geo database** (DB-IP Lite preferred — CC-BY, no license key — or MaxMind GeoLite2) bundled in the dashboard container; the raw IP never leaves the EU. **P1.** |
+| **D6** | **Query-time gap sessionization** off `ip_hash` (ingestion stays a stateless pure hash); rework the session-based materialized views with ClickHouse window functions (new session when the gap > 30 min). |
+| **D7** | Replay TTL default **60 days**, per-tenant overridable to 90. |
+| **D8** | Build the replay-TTL + `page_snapshots` GC **enforcement now**; defer the per-tenant retention config **UI** to a P3 follow-up. |
+| **D9** | **External German Fachanwalt für IT-Recht/Datenschutzrecht** signs off the public "kein Banner nötig" claim (a DPO opinion is necessary but not sufficient); address the salted-hash anonymous-vs-pseudonymous question specifically. **Engage now** (long lead); engineering ships in parallel; no-banner copy gates on the written sign-off. |
+| **D10** | Restrict `auto_consent` test links to internal QA on owned properties; never grant Tier-2 consent for real visitor traffic. |
+| **D11** | Thin documented `setConsent({analytics, replay})` adapter fired from the customer's CMP callback + a Usercentrics/TCF worked example; default-deny on the first consent-unknown request. |
+| **D12** | Server-side user-agent blocklist at ingestion (+ optional known-bot IP ranges) to keep visitor counts credible once the client id is gone. |
 
 ---
 
