@@ -89,7 +89,7 @@ All ClickHouse and Postgres queries live in `packages/dashboard/src/lib/queries/
 - **Playwright**: `tests/` directory, three viewport projects (mobile 390x844, tablet 768x1024, desktop 1440x900). Enable web server with `PW_WEB_SERVER=1`.
 
 ## Migrations
-SQL migrations live in `scripts/migrations/`. Files named `YYYYMMDD-description-postgres.sql` and `YYYYMMDD-description-clickhouse.sql`. `scripts/migrate.sh` tracks applied migrations in a `_migrations` table and is idempotent.
+SQL migrations live in `packages/shared/src/migrations/`. Files named `NNN-postgres.sql` (applied to PostgreSQL) and `NNN-clickhouse.sql` (applied to ClickHouse), where `NNN` is a zero-padded sequence number. `scripts/migrate.sh` globs `*-postgres.sql`/`*-clickhouse.sql` from that directory in sorted order, tracks applied migrations by filename in a `_migrations` table, and is idempotent.
 
 ## Agent Specs
 - `agents.json` — machine-readable agent definitions (10 agents)

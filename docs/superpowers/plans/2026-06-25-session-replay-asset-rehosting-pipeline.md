@@ -103,6 +103,12 @@ The fetcher pulls arbitrary URLs from untrusted customer sites, so it is an SSRF
 - `srcset` / responsive images, `<video>`/`<audio>`.
 - Retention/GC: expire `replay_assets` + R2 objects in step with replay retention (see the GDPR note: align to the configured TTL; CNIL reference points are <=13/25 months, replay 30 to 90 days).
 - Metrics: per-project asset capture rate, `failed` rate, R2 storage, dedupe ratio.
+- **SSRF hardening (the `ssrf.ts` residual-vector follow-ups, tracked here so the in-code "Phase 2" pointers resolve):**
+  - **DNS-rebinding (resolve-vs-connect TOCTOU):** `assertHostResolvesPublic` validates the resolved IP, then `fetch()` re-resolves the hostname at connect time. Pin the validated IP into the connection (custom dispatcher / `lookup` override), or re-resolve-and-compare at connect, so the IP we checked is the IP we hit.
+  - **Threadpool / concurrency:** `dns.lookup` runs getaddrinfo on the bounded libuv threadpool. The fetch worker MUST cap concurrency so a burst of stalled lookups from untrusted hosts cannot starve the shared pool. (The per-operation wall-clock deadline added in the core bounds a single request; the cap bounds the fleet.)
+  - **Defense-in-depth egress block:** drop outbound `169.254.169.254` + RFC1918 at the host/network layer of the worker, independent of the application-level block list.
+  - **Per-chunk tag map:** the read/extract integration should pass the session id->tagName map to `walkAssets(..., seedIdToTag)` so attribute mutations referencing nodes added in earlier chunks are resolved tag-aware (otherwise they fall back to the conservative no-`href`/`data` subset).
+  - **Runtime-swapped `<link>` rel:** a `<link href>` swapped via an attribute mutation usually omits `rel` in the payload, so it is conservatively not rehosted (it live-loads from origin, graceful). Full fidelity needs the snapshot's `rel` for the id threaded into the mutation walk (an id->rel companion to the tag map). Compound-rare; deferred deliberately, not a silent gap.
 
 ## Tradeoffs
 
@@ -135,17 +141,19 @@ The fetcher pulls arbitrary URLs from untrusted customer sites, so it is an SSRF
 
 ## Build breakdown (Phase 1)
 
-Pure, infra-independent, unit-tested core (buildable + verifiable now):
-- `replay-assets/extract.ts` — walk rrweb events (full snapshot `type:2`, add-node mutations `type:3/source:0`), collect absolute asset URLs (`img[src]`, `img/source[srcset]`, `link[rel=stylesheet|icon|preload][href]`, `video[poster|src]`, `audio[src]`, inline `style`/`<style>` `url(...)`), resolve relative URLs against the chunk's page URL, skip `data:`.
-- `replay-assets/ssrf.ts` — SSRF-safe URL validator + fetcher: allow only `http`/`https`; resolve host and block private/link-local/loopback/internal ranges; size cap (<=5 MB); short timeout; do not follow redirects to disallowed targets; never forward credentials/cookies.
-- `replay-assets/rewrite.ts` — read-time rewriter: given a `url_hash -> r2_key` map + CDN base, rewrite asset URLs in reassembled events; URLs not yet `ready` fall back to the original.
-- `replay-assets/store.ts` — R2 adapter (S3 client) interface + impl; content-addressed `put(sha256(content))`; tested against a mock.
+Pure, infra-independent, unit-tested core (shipped in PR #29):
+- `replay-assets/walk.ts` — the single shared traversal both extract and rewrite run (so they cannot drift): resolve relative URLs against the page URL; collect from `img/source/video/audio/embed/input[src]`, `img/source[srcset]`, `link[rel=stylesheet|icon|preload as image|font|style][href]`, `video[poster]`, `object[data]`, `use/image[href|xlink:href]`, inline `style`/`<style>` `url(...)` + bare-string `@import`; skip `data:`/`blob:`/non-http(s). Tag-aware for both snapshot nodes AND incremental attribute mutations (via an id->tag map, so `<a href>`/`<script src>` are not over-collected).
+- `replay-assets/extract.ts` — `extractAssetUrls`, collect mode over `walk`.
+- `replay-assets/rewrite.ts` — read-time rewriter, replace mode over `walk`: given a `url -> CDN` map, rewrite asset URLs in reassembled events; URLs not yet `ready` fall back to the original.
+- `replay-assets/ssrf.ts` — SSRF-safe URL validator + fetcher: allow only `http`/`https`; resolve host and block private/link-local/loopback/internal ranges (IPv4 + the IPv6 embedded-v4 / `::/96` / NAT64 / 6to4 forms); size cap (<=5 MB, streamed); one whole-operation wall-clock deadline (DNS + every redirect hop); re-validate every redirect hop; release the body on every exit path; never forward credentials/cookies. Residual DNS-rebinding + concurrency hardening tracked in Phase 2 above.
+- `replay-assets/types.ts` — local rrweb serialized-node shape.
+- Postgres migration `016-postgres.sql`: `replay_assets` table (see data model above) — schema-only, no writer yet, so it ships with the core.
 
 Integration layer (needs the table + R2 creds to verify e2e):
-- Postgres migration: `replay_assets` table (see data model above).
+- `replay-assets/store.ts` — R2 adapter (S3 client): content-addressed `put(sha256(content))`. Moved here from the core list: it needs the S3 client + R2 creds to verify against a real bucket, so it is built with the rest of the wiring, not in the unwired core.
 - Enqueue on `replay_chunk` ingest (`/api/collect`): extract + upsert `pending`.
-- Background fetch worker (existing instrumentation/cron pattern): drain `pending`, SSRF-fetch, R2 put, mark `ready|failed`.
-- Read-time rewrite wired into `/api/sessions/[id]/replay`.
+- Background fetch worker (existing instrumentation/cron pattern): drain `pending`, SSRF-fetch (with the Phase 2 rebinding mitigation + a concurrency cap), R2 put, mark `ready|failed`.
+- Read-time rewrite wired into `/api/sessions/[id]/replay`: `getReplayChunks` must `SELECT url`, and pass the session id->tag map into `walkAssets(..., seedIdToTag)`.
 
 ## Status
 
