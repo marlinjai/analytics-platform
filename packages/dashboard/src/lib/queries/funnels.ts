@@ -1,5 +1,6 @@
 import { getClickHouse, chDateParams } from '../clickhouse';
 import type { DateRange } from '@analytics-platform/shared';
+import { sessionizedEvents } from './sessionize';
 
 export type FunnelStep =
   | { type: 'pageview'; url: string }
@@ -27,8 +28,14 @@ export async function computeFunnelResults(
 
   if (steps.length === 0) return [];
 
-  // Build CTEs
-  const cteParts: string[] = [];
+  // Sessionize the visitor's full activity once (server-derived, query-time gap
+  // sessionization off the salted visitor key; D6), then chain funnel steps on
+  // server_session_id. The client session_id is no longer used here.
+  const sessionizedScope = `project_id = {projectId: UUID}
+        AND environment = {environment: String}
+        AND timestamp >= {from: DateTime64(3)}
+        AND timestamp <= {to: DateTime64(3)}`;
+  const cteParts: string[] = [`sessionized AS (${sessionizedEvents(sessionizedScope)})`];
   const params: Record<string, string> = {
     projectId,
     environment,
@@ -50,28 +57,20 @@ export async function computeFunnelResults(
     if (i === 0) {
       cteParts.push(`
         step_0 AS (
-          SELECT session_id, min(timestamp) AS ts
-          FROM analytics.events
-          WHERE project_id = {projectId: UUID}
-            AND environment = {environment: String}
-            AND timestamp >= {from: DateTime64(3)}
-            AND timestamp <= {to: DateTime64(3)}
-            AND ${condition}
-          GROUP BY session_id
+          SELECT server_session_id, min(timestamp) AS ts
+          FROM sessionized
+          WHERE ${condition}
+          GROUP BY server_session_id
         )`);
     } else {
       cteParts.push(`
         step_${i} AS (
-          SELECT e.session_id, min(e.timestamp) AS ts
-          FROM analytics.events e
-          INNER JOIN step_${i - 1} prev ON prev.session_id = e.session_id
-          WHERE e.project_id = {projectId: UUID}
-            AND e.environment = {environment: String}
-            AND e.timestamp >= {from: DateTime64(3)}
-            AND e.timestamp <= {to: DateTime64(3)}
-            AND e.timestamp > prev.ts
+          SELECT e.server_session_id, min(e.timestamp) AS ts
+          FROM sessionized e
+          INNER JOIN step_${i - 1} prev ON prev.server_session_id = e.server_session_id
+          WHERE e.timestamp > prev.ts
             AND ${condition}
-          GROUP BY e.session_id
+          GROUP BY e.server_session_id
         )`);
     }
   });

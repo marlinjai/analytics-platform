@@ -57,6 +57,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/packages/dashboard/public ./packa
 # Migration SQL files (read by instrumentation hook on startup)
 COPY --from=builder --chown=nextjs:nodejs /app/packages/shared/src/migrations ./packages/shared/src/migrations
 
+# Self-hosted GeoIP (DB-IP Lite, Country) fetched at build time so visitor IPs
+# are geolocated locally and never leave the EU (replaces ip-api.com). The
+# download is best-effort: lib/geo.ts degrades to an empty country if absent.
+# curl is installed above.
+ENV GEOIP_DB_PATH=/app/geoip/country.mmdb
+COPY packages/dashboard/scripts/fetch-geoip.sh /usr/local/bin/fetch-geoip.sh
+RUN sh /usr/local/bin/fetch-geoip.sh "$GEOIP_DB_PATH" \
+  && chown -R nextjs:nodejs /app/geoip
+
 USER nextjs
 
 EXPOSE 3000

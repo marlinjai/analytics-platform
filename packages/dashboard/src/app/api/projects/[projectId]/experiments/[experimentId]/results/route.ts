@@ -3,6 +3,13 @@ import { getDb } from '@/lib/db';
 import { getClickHouse } from '@/lib/clickhouse';
 import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
 import { analyzeExperiment, type VariantData } from '@/lib/experiment-stats';
+import { sessionizedEvents } from '@/lib/queries/sessionize';
+
+// Sessionize a visitor's full activity (project + environment), then count
+// distinct server sessions per variant. Server-derived (query-time gap
+// sessionization off the salted visitor key; D6), not the client session_id.
+const EXPERIMENT_SCOPE = `project_id = {projectId: UUID}
+        AND environment = {environment: String}`;
 
 type Params = { params: Promise<{ projectId: string; experimentId: string }> };
 
@@ -52,11 +59,9 @@ export async function GET(request: NextRequest, { params }: Params) {
     query: `
       SELECT
         variant,
-        uniqExact(session_id) AS unique_sessions
-      FROM analytics.events
-      WHERE project_id = {projectId: UUID}
-        AND environment = {environment: String}
-        AND experiment_id = {experimentId: String}
+        uniqExact(server_session_id) AS unique_sessions
+      FROM (${sessionizedEvents(EXPERIMENT_SCOPE)})
+      WHERE experiment_id = {experimentId: String}
         AND variant != ''
       GROUP BY variant
     `,
@@ -88,11 +93,9 @@ export async function GET(request: NextRequest, { params }: Params) {
       query: `
         SELECT
           variant,
-          uniqExact(session_id) AS converted_sessions
-        FROM analytics.events
-        WHERE project_id = {projectId: UUID}
-          AND environment = {environment: String}
-          AND experiment_id = {experimentId: String}
+          uniqExact(server_session_id) AS converted_sessions
+        FROM (${sessionizedEvents(EXPERIMENT_SCOPE)})
+        WHERE experiment_id = {experimentId: String}
           AND variant != ''
           AND type = 'pageview'
           AND url LIKE {target: String}
@@ -120,11 +123,9 @@ export async function GET(request: NextRequest, { params }: Params) {
       query: `
         SELECT
           variant,
-          uniqExact(session_id) AS converted_sessions
-        FROM analytics.events
-        WHERE project_id = {projectId: UUID}
-          AND environment = {environment: String}
-          AND experiment_id = {experimentId: String}
+          uniqExact(server_session_id) AS converted_sessions
+        FROM (${sessionizedEvents(EXPERIMENT_SCOPE)})
+        WHERE experiment_id = {experimentId: String}
           AND variant != ''
           AND type = 'custom'
           AND event_name = {target: String}
@@ -152,11 +153,9 @@ export async function GET(request: NextRequest, { params }: Params) {
       query: `
         SELECT
           variant,
-          uniqExact(session_id) AS converted_sessions
-        FROM analytics.events
-        WHERE project_id = {projectId: UUID}
-          AND environment = {environment: String}
-          AND experiment_id = {experimentId: String}
+          uniqExact(server_session_id) AS converted_sessions
+        FROM (${sessionizedEvents(EXPERIMENT_SCOPE)})
+        WHERE experiment_id = {experimentId: String}
           AND variant != ''
           AND type = 'click'
           AND selector = {target: String}

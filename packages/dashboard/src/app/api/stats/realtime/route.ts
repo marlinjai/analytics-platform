@@ -22,7 +22,10 @@ export async function GET(request: NextRequest) {
 
   const result = await ch.query({
     query: `
-      SELECT uniqExact(session_id) AS current_visitors
+      -- "Currently online" over a 5-min window is a distinct-visitor count, not
+      -- a session count (a 5-min window is one session by definition). Use the
+      -- salted visitor key ip_hash (consent-free; D6), not the client session_id.
+      SELECT uniqExact(ip_hash) AS current_visitors
       FROM analytics.events
       WHERE project_id = {projectId: UUID}
         AND environment = {environment: String}
