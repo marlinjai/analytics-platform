@@ -14,11 +14,15 @@ import { EngagementZonesTable } from '@/components/charts/EngagementZonesTable';
 import { HistoricalHeatmapViewer } from '@/components/heatmap/HistoricalHeatmapViewer';
 import {
   VariantPicker,
-  COMPARE_ALL,
   type ExperimentSummary,
 } from '@/components/heatmap/VariantPicker';
 import { VariantHeatmapCompare } from '@/components/heatmap/VariantHeatmapCompare';
 import { loadHeatmapExperiments } from '@/lib/heatmap-experiments';
+import {
+  COMPARE_ALL,
+  resolveArmSelection,
+  resolveArmUrlStep,
+} from '@/lib/heatmap-arm';
 import type { ScrollDepthRow, RageClickRow } from '@/lib/queries/advanced';
 
 export default function HeatmapPage() {
@@ -63,25 +67,22 @@ function HeatmapPageInner() {
     [router, searchParams],
   );
 
-  const selectedExperiment = experiments.find((e) => e.id === experimentId);
-  // A picked experiment with no concrete arm (or the explicit sentinel) means
-  // "show every arm side-by-side".
-  const compareAll =
-    !!selectedExperiment && (variant === '' || variant === COMPARE_ALL);
-  // A concrete arm is set only when it actually exists on the experiment.
-  const singleArm =
-    selectedExperiment && variant && variant !== COMPARE_ALL
-      ? selectedExperiment.variants.find((v) => v.key === variant)?.key
-      : undefined;
-  // A non-empty, non-sentinel variant that resolves to no arm is a stale deep
-  // link (renamed/removed arm). We must NOT silently fall back to the overall
-  // heatmap: that shows non-scoped data for a request that explicitly asked for
-  // a specific arm, with no signal to the user. Surface it as an explicit state.
-  const unknownVariant =
-    !!selectedExperiment &&
-    !!variant &&
-    variant !== COMPARE_ALL &&
-    singleArm === undefined;
+  // Resolve which arm (if any) the heatmap is scoped to. See heatmap-arm.ts for
+  // the compareAll / singleArm / unknownVariant (stale deep link) rules.
+  const { selectedExperiment, compareAll, singleArm, unknownVariant } =
+    resolveArmSelection(experiments, experimentId, variant);
+
+  // Pick-a-URL next step: when an experiment arm is scoped (e.g. via the
+  // experiments-page deep link) but no page is chosen, the page would otherwise
+  // render nothing — a dead-end. Auto-select the only tracked URL, or prompt.
+  const armUrlStep = resolveArmUrlStep({
+    armScoped: !!selectedExperiment,
+    selectedUrl,
+    urls,
+    loadingUrls,
+  });
+  const autoSelectUrl =
+    armUrlStep.kind === 'auto-select' ? armUrlStep.url : '';
 
   // Scroll depth state
   const [scrollData, setScrollData] = useState<ScrollDepthRow[]>([]);
@@ -158,6 +159,12 @@ function HeatmapPageInner() {
       cancelled = true;
     };
   }, [projectId]);
+
+  // Auto-select the sole tracked URL when an arm is scoped without a chosen
+  // page, so a variant deep link renders immediately instead of dead-ending.
+  useEffect(() => {
+    if (autoSelectUrl) setSelectedUrl(autoSelectUrl);
+  }, [autoSelectUrl]);
 
   return (
     <div className="space-y-6">
@@ -248,6 +255,17 @@ function HeatmapPageInner() {
               <p className="mt-4 text-sm text-gray-500">No tracked pages found for the selected date range.</p>
             )}
           </div>
+
+          {/* Pick-a-URL prompt: an arm is scoped but no page is chosen yet and
+              there is more than one tracked page to choose from. */}
+          {selectedExperiment && armUrlStep.kind === 'prompt' && (
+            <PickUrlPrompt
+              experimentName={selectedExperiment.name}
+              variant={singleArm ?? (compareAll ? '' : variant)}
+              urls={armUrlStep.urls}
+              onPick={setSelectedUrl}
+            />
+          )}
 
           {/* Scroll Depth */}
           <div className="rounded-xl border border-gray-800 bg-gray-900 p-6">
@@ -351,6 +369,64 @@ function HeatmapPageInner() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Next-step prompt for a variant deep link that has not yet picked a page.
+ *
+ * Arriving from the experiments page carries an experiment arm but no URL, and
+ * the heatmaps only render once a page is chosen. Rather than dead-ending on an
+ * empty screen, list the tracked pages so picking one is the obvious next step.
+ * (The single-tracked-page case auto-selects upstream and never reaches here.)
+ */
+function PickUrlPrompt({
+  experimentName,
+  variant,
+  urls,
+  onPick,
+}: {
+  experimentName: string;
+  variant: string;
+  urls: string[];
+  onPick: (url: string) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-blue-900/40 bg-blue-950/10 p-6">
+      <h2 className="mb-1 text-lg font-semibold text-white">
+        Pick a page to see this variant&apos;s heatmap
+      </h2>
+      <p className="mb-4 text-sm text-gray-400">
+        {variant ? (
+          <>
+            Showing{' '}
+            <span className="font-medium text-gray-200">{experimentName}</span>{' '}
+            <span className="font-mono text-gray-200">({variant})</span>. Choose
+            one of the tracked pages below to render its heatmap.
+          </>
+        ) : (
+          <>
+            Showing{' '}
+            <span className="font-medium text-gray-200">{experimentName}</span>.
+            Choose one of the tracked pages below to compare its variants
+            side-by-side.
+          </>
+        )}
+      </p>
+      <ul className="space-y-1">
+        {urls.map((url) => (
+          <li key={url}>
+            <button
+              type="button"
+              onClick={() => onPick(url)}
+              className="block w-full truncate rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-left text-sm text-gray-300 transition hover:border-blue-600 hover:text-gray-100"
+            >
+              {url}
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
