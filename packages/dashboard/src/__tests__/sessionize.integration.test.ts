@@ -3,6 +3,7 @@ import { createClient, type ClickHouseClient } from '@clickhouse/client';
 import { randomUUID } from 'node:crypto';
 import { sessionizedEvents } from '@/lib/queries/sessionize';
 import { getStatsOverview } from '@/lib/queries/stats';
+import { computeFunnelResults } from '@/lib/queries/funnels';
 
 // Opt-in: needs a throwaway ClickHouse. Skipped in the normal suite / CI.
 //   RUN_CH_IT=1 CLICKHOUSE_URL=http://localhost:18123 pnpm test -- --run sessionize.integration
@@ -125,5 +126,32 @@ describe.skipIf(!RUN)('sessionize integration (real ClickHouse)', () => {
     });
     const rows = await res.json<{ sessions: string }>();
     expect(Number(rows[0]?.sessions)).toBe(2);
+  });
+
+  it('funnels chain on server sessions (base CTE + self-join on server_session_id)', async () => {
+    const ipF = `funnel-f-${randomUUID()}`;
+    const ipG = `funnel-g-${randomUUID()}`;
+    await ch.insert({
+      table: 'analytics.events',
+      values: [
+        // Visitor F completes /funnel-a -> /funnel-b within one session.
+        { project_id: projectId, session_id: 'f', type: 'pageview', url: '/funnel-a', timestamp: fmt(at(300)), ip_hash: ipF },
+        { project_id: projectId, session_id: 'f', type: 'pageview', url: '/funnel-b', timestamp: fmt(at(305)), ip_hash: ipF },
+        // Visitor G only reaches /funnel-a.
+        { project_id: projectId, session_id: 'g', type: 'pageview', url: '/funnel-a', timestamp: fmt(at(310)), ip_hash: ipG },
+      ],
+      format: 'JSONEachRow',
+    });
+    const res = await computeFunnelResults(
+      projectId,
+      [
+        { type: 'pageview', url: '/funnel-a' },
+        { type: 'pageview', url: '/funnel-b' },
+      ],
+      { from: at(299).toISOString(), to: at(320).toISOString() },
+      'production',
+    );
+    expect(res[0]?.sessions).toBe(2); // F and G both hit step 1
+    expect(res[1]?.sessions).toBe(1); // only F continued to step 2
   });
 });

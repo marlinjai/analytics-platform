@@ -1,5 +1,6 @@
 import { getClickHouse, chDateParams } from '../clickhouse';
 import type { DateRange } from '@analytics-platform/shared';
+import { sessionizedEvents } from './sessionize';
 
 export interface ScrollDepthRow {
   url: string;
@@ -34,14 +35,13 @@ export async function getScrollDepth(
         round(quantile(0.50)(scroll_depth), 1)          AS p50,
         round(quantile(0.75)(scroll_depth), 1)          AS p75,
         round(quantile(0.90)(scroll_depth), 1)          AS p90,
-        uniqExact(session_id)                           AS sessions
-      FROM analytics.events
-      WHERE project_id  = {projectId: UUID}
+        uniqExact(server_session_id)                    AS sessions
+      FROM (${sessionizedEvents(`project_id = {projectId: UUID}
         AND environment = {environment: String}
-        AND type        = 'scroll'
-        AND scroll_depth IS NOT NULL
         AND timestamp  >= {from: DateTime64(3)}
-        AND timestamp  <= {to:   DateTime64(3)}
+        AND timestamp  <= {to:   DateTime64(3)}`)})
+      WHERE type = 'scroll'
+        AND scroll_depth IS NOT NULL
       GROUP BY url
       ORDER BY sessions DESC
       LIMIT 50
@@ -78,22 +78,21 @@ export async function getRageClicks(
       SELECT
         selector,
         url,
-        uniqExact(session_id) AS sessions,
-        count()               AS count
+        uniqExact(server_session_id) AS sessions,
+        count()                      AS count
       FROM (
         SELECT
-          session_id,
+          server_session_id,
           selector,
           url,
           arraySort(groupArray(toFloat64(timestamp))) AS ts_arr
-        FROM analytics.events
-        WHERE project_id = {projectId: UUID}
+        FROM (${sessionizedEvents(`project_id = {projectId: UUID}
           AND environment = {environment: String}
-          AND type       = 'click'
-          AND selector  != ''
           AND timestamp >= {from: DateTime64(3)}
-          AND timestamp <= {to:   DateTime64(3)}
-        GROUP BY session_id, selector, url
+          AND timestamp <= {to:   DateTime64(3)}`)})
+        WHERE type = 'click'
+          AND selector != ''
+        GROUP BY server_session_id, selector, url
         HAVING
           length(ts_arr) >= 3
           AND arrayExists(
