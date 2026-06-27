@@ -17,6 +17,7 @@
     "@marlinjai/auth-brain-sdk": "^1.6.1",
     "@marlinjai/auth-brain-shared": "^1.6.0",
     "bcryptjs": "^3.0.3",
+    "maxmind": "^5.0.6",
     "next": "^15.1.6",
     "postgres": "^3.4.8",
     "react": "^19.0.0",
