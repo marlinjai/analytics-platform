@@ -1,5 +1,6 @@
 import { API_KEY_PREFIX_TEST } from '@analytics-platform/shared';
 import type { TrackerEvent, StoredEvent } from '@analytics-platform/shared';
+import { getCurrentSalt } from './daily-salt';
 
 async function sha256(input: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -8,10 +9,6 @@ async function sha256(input: string): Promise<string> {
   return Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
-}
-
-function getDailySalt(): string {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
 interface UAParsed {
@@ -145,28 +142,35 @@ export async function enrichEvents(
   ip: string,
   keyPrefix: string = '',
 ): Promise<StoredEvent[]> {
-  const salt = getDailySalt();
-  const ipHash = await sha256(`${ip}:${salt}`);
+  // Secret, daily-rotated salt (see daily-salt.ts). The raw IP is hashed into
+  // the visitor key here and never stored or logged.
+  const salt = await getCurrentSalt();
   const receivedAt = Date.now();
 
-  // One GeoIP lookup per batch (all events share the same IP)
+  // One GeoIP lookup per batch (all events share the same IP).
   const { country } = await lookupCountry(ip);
 
-  return events.map((event) => {
-    const ua = event.userAgent ?? '';
-    const { browser, os } = parseUserAgent(ua);
-    const deviceModel = extractDeviceModel(ua);
-    const environment = inferEnvironment(event.url, keyPrefix);
-    return {
-      ...event,
-      eventId: crypto.randomUUID(),
-      ipHash,
-      country,
-      receivedAt,
-      browser,
-      os,
-      deviceModel,
-      environment,
-    };
-  });
+  return Promise.all(
+    events.map(async (event) => {
+      const ua = event.userAgent ?? '';
+      // Cookieless visitor key: sha256(salt : ip : userAgent : projectId). Folds
+      // user-agent + project into the key so it doubles as the sessionization
+      // key (plan workstreams a+b, decisions D4/D6), not just a visitor counter.
+      const ipHash = await sha256(`${salt}:${ip}:${ua}:${event.projectId}`);
+      const { browser, os } = parseUserAgent(ua);
+      const deviceModel = extractDeviceModel(ua);
+      const environment = inferEnvironment(event.url, keyPrefix);
+      return {
+        ...event,
+        eventId: crypto.randomUUID(),
+        ipHash,
+        country,
+        receivedAt,
+        browser,
+        os,
+        deviceModel,
+        environment,
+      };
+    }),
+  );
 }

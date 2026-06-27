@@ -1,9 +1,9 @@
 /**
  * Unit tests for POST /api/ingest (server-to-server event ingest).
  *
- * ClickHouse, API-key validation and rate limiting are mocked: no live
- * infrastructure needed. enrichEvents runs for real, with a private (127.0.0.1)
- * IP so no GeoIP network call is made.
+ * ClickHouse, API-key validation, rate limiting and the daily salt are mocked:
+ * no live infrastructure needed. enrichEvents runs for real, with a private
+ * (127.0.0.1) IP so no GeoIP network call is made.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -18,6 +18,12 @@ vi.mock('@/lib/clickhouse', () => ({
 
 vi.mock('@/lib/rate-limit', () => ({
   checkRateLimit: vi.fn().mockReturnValue(true),
+}));
+
+// The visitor-key salt lives in Postgres (daily-salt.ts); mock it so enrich
+// computes a deterministic key without a live DB on the ingest path.
+vi.mock('@/lib/daily-salt', () => ({
+  getCurrentSalt: vi.fn(async () => 'test-salt'),
 }));
 
 import { validateApiKey } from '@/lib/api-key';
