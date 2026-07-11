@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type postgres from 'postgres';
 import { z } from 'zod';
 import { getDb } from '@/lib/db';
 import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
@@ -79,8 +80,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     SET name = ${data.name ?? existing.name},
         enabled = ${data.enabled ?? existing.enabled},
         rollout_percentage = ${data.rollout_percentage ?? existing.rollout_percentage},
-        variants = ${'variants' in data ? (data.variants !== null ? db.json(data.variants as any) : null) : existing.variants},
-        targeting = ${'targeting' in data ? db.json(data.targeting as any) : existing.targeting},
+        variants = ${'variants' in data ? (data.variants !== null ? db.json(data.variants as postgres.JSONValue) : null) : existing.variants},
+        targeting = ${'targeting' in data ? db.json(data.targeting as postgres.JSONValue) : existing.targeting},
         updated_at = now()
     WHERE id = ${flagId} AND project_id = ${projectId}
     RETURNING *

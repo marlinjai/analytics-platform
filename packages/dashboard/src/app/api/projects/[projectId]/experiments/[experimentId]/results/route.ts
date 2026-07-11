@@ -80,7 +80,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   }
 
   // Query conversions based on goal type
-  let conversionsByVariant: Record<string, number> = {};
+  const conversionsByVariant: Record<string, number> = {};
 
   if (primaryGoal.goal_type === 'pageview') {
     // Count unique sessions that had a pageview matching the target URL pattern

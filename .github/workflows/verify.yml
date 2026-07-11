@@ -1,0 +1,41 @@
+name: Verify
+
+# Quality gates: build + typecheck + lint + test on every PR and on pushes to
+# main. Until now only the deploy workflow existed, so PRs merged with zero
+# pre-merge checks beyond GitGuardian. Mirrors storage-brain's verify.yml.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm before setup-node so the node cache: pnpm step can find it.
+      # Version is read from the package.json "packageManager" field.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test

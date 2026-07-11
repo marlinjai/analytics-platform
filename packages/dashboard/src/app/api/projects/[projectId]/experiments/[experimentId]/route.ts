@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type postgres from 'postgres';
 import { z } from 'zod';
 import { getDb } from '@/lib/db';
 import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
@@ -97,8 +98,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     SET name = ${data.name ?? existing.name},
         description = ${data.description ?? existing.description},
         hypothesis = ${data.hypothesis ?? existing.hypothesis},
-        variants = ${'variants' in data ? db.json(data.variants as any) : existing.variants},
-        targeting = ${'targeting' in data ? db.json(data.targeting as any) : existing.targeting},
+        variants = ${'variants' in data ? db.json(data.variants as postgres.JSONValue) : existing.variants},
+        targeting = ${'targeting' in data ? db.json(data.targeting as postgres.JSONValue) : existing.targeting},
         min_sessions_per_variant = ${data.minSessionsPerVariant ?? existing.min_sessions_per_variant}
     WHERE id = ${experimentId} AND project_id = ${projectId}
     RETURNING *

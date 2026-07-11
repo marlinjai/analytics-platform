@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type postgres from 'postgres';
 import { z } from 'zod';
 import { getDb } from '@/lib/db';
 import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       ${enabled},
       ${rollout_percentage},
       ${variants ? db.json(variants) : null},
-      ${db.json(targeting as any)}
+      ${db.json(targeting as postgres.JSONValue)}
     )
     RETURNING *
   `;
