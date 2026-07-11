@@ -12,10 +12,14 @@ INFISICAL_TOKEN=$(infisical login \
   --domain "$DOMAIN" \
   --silent --plain)
 
+# Pass the token via the environment, NOT --token: argv is visible to every
+# process in the container (ps, /proc/*/cmdline). `env -u` strips it from the
+# app process again so it lives only in the infisical wrapper.
+export INFISICAL_TOKEN
+
 # Inject secrets and start the app
 exec infisical run \
   --env=prod \
   --projectId="$PROJECT_ID" \
   --domain "$DOMAIN" \
-  --token "$INFISICAL_TOKEN" \
-  -- node packages/dashboard/server.js
+  -- env -u INFISICAL_TOKEN node packages/dashboard/server.js
