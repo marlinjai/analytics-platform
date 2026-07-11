@@ -81,9 +81,8 @@ export function SnapshotHeatmap({ snapshot, clicks }: Props) {
         const replayerWrapper = document.createElement('div');
         container.appendChild(replayerWrapper);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const replayer = new Replayer(
-          [metaEvent, snapshotEvent] as any,
+          [metaEvent, snapshotEvent] as unknown as ConstructorParameters<typeof Replayer>[0],
           {
             root: replayerWrapper,
             skipInactive: true,
