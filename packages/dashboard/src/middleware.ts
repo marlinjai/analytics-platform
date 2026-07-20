@@ -5,15 +5,18 @@ export async function middleware(request: NextRequest) {
   const sessionCookie = request.cookies.get('lumitra_session')?.value;
 
   if (!sessionCookie) {
-    // Redirect to auth-brain login, passing the original URL as callbackUrl
-    // so auth-brain can send the user back after login.
+    // Redirect to auth-brain login, passing the original URL so auth-brain can
+    // send the user back here after login. The param MUST be `return_to`: that
+    // is the only name auth-brain's login reads (validated via safeReturnTo).
+    // Sending `next` (the previous value) was silently ignored, dropping the
+    // user on the auth-brain portal instead of back in analytics.
     const proto = request.headers.get('x-forwarded-proto') || 'https';
     const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
     const publicUrl = `${proto}://${host}${request.nextUrl.pathname}${request.nextUrl.search}`;
 
     const authBrainUrl = process.env.AUTH_BRAIN_URL ?? 'https://auth.lumitra.co';
     const loginUrl = new URL('/login', authBrainUrl);
-    loginUrl.searchParams.set('next', publicUrl);
+    loginUrl.searchParams.set('return_to', publicUrl);
     return NextResponse.redirect(loginUrl);
   }
 
