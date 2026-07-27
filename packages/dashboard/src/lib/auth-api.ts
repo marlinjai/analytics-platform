@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { authBrainClient } from '@/lib/auth-brain';
 import { checkProjectAccess } from '@/lib/auth-check';
 import { validateApiKey } from '@/lib/api-key';
+import { evaluateAnalyticsGrant, logGrantVersionSkew } from '@/lib/app-grants';
 
 type AuthSuccess = {
   authenticated: true;
@@ -18,13 +19,53 @@ type AuthFailure = {
 
 type AuthResult = AuthSuccess | AuthFailure;
 
-async function getSessionUserId(): Promise<string | null> {
+/**
+ * Resolve the session cookie for an API request and apply the analytics door.
+ *
+ * Three outcomes the callers must tell apart:
+ * - `none`: no cookie, or the cookie failed verification. The caller falls
+ *   through to API-key auth (machine callers keep their own auth model).
+ * - `ungranted`: a valid signed-in user whose tenants do NOT carry the
+ *   analytics grant (or a version-skew payload, logged here). The caller must
+ *   block with 403 and NOT fall through to API-key auth: this is a human
+ *   session that the door refuses, not a missing credential.
+ * - `granted`: a valid session with the analytics grant. Per-project
+ *   authorization still runs afterwards, unchanged.
+ */
+type SessionGrant =
+  | { kind: 'none' }
+  | { kind: 'ungranted' }
+  | { kind: 'granted'; userId: string };
+
+async function resolveSessionGrant(): Promise<SessionGrant> {
   const jar = await cookies();
   const cookie = jar.get('lumitra_session')?.value;
-  if (!cookie) return null;
+  if (!cookie) return { kind: 'none' };
+
   const session = await authBrainClient.verifySession(cookie);
-  return session?.user?.id ?? null;
+  if (!session?.user?.id) return { kind: 'none' };
+
+  const decision = evaluateAnalyticsGrant(session);
+  if (!decision.granted) {
+    if (decision.reason === 'version-skew') {
+      logGrantVersionSkew('authApi', session.user.id);
+    }
+    return { kind: 'ungranted' };
+  }
+
+  return { kind: 'granted', userId: session.user.id };
 }
+
+/**
+ * The 403 body returned when a signed-in user lacks the analytics app grant.
+ * Distinct from a per-project "Forbidden" so the client can route the user to
+ * the request-access page rather than showing a project-permission error.
+ */
+const NO_GRANT_FAILURE: AuthFailure = {
+  authenticated: false,
+  error: 'Your account does not have access to Analytics. Request access to continue.',
+  status: 403,
+};
 
 /**
  * Maps a legacy route role string to the auth-brain OpenFGA workspace relation.
@@ -94,8 +135,10 @@ export async function authenticateRequest(
   const requiredRole = resolveRequiredRole(requiredRoles);
 
   // --- Try session auth ---
-  const userId = await getSessionUserId();
-  if (userId) {
+  const sessionGrant = await resolveSessionGrant();
+  if (sessionGrant.kind === 'ungranted') return NO_GRANT_FAILURE;
+  if (sessionGrant.kind === 'granted') {
+    const { userId } = sessionGrant;
     const hasAccess = await checkProjectAccess(userId, projectId, requiredRole);
     if (!hasAccess) return { authenticated: false, error: 'Forbidden', status: 403 };
     return { authenticated: true, userId, projectId };
@@ -140,8 +183,9 @@ export async function authenticateRequest(
 export async function authenticateAccountRequest(
   request: NextRequest,
 ): Promise<{ authenticated: true; userId: string } | AuthFailure> {
-  const userId = await getSessionUserId();
-  if (userId) return { authenticated: true, userId };
+  const sessionGrant = await resolveSessionGrant();
+  if (sessionGrant.kind === 'ungranted') return NO_GRANT_FAILURE;
+  if (sessionGrant.kind === 'granted') return { authenticated: true, userId: sessionGrant.userId };
 
   const apiKey = request.headers.get('x-api-key');
   if (!apiKey) return { authenticated: false, error: 'Unauthorized', status: 401 };
