@@ -40,7 +40,12 @@ vi.mock('@/lib/api-key', () => ({
   validateApiKey: vi.fn(),
 }));
 
+// The account-key (machine) path authorizes via checkAccountKeyProjectAccess
+// (the named FGA survivor). No cookie is present in these tests, so the session
+// helpers are never reached; they are stubbed only so the module imports.
 vi.mock('@/lib/auth-check', () => ({
+  checkAccountKeyProjectAccess: vi.fn(),
+  checkWorkspaceAccessForSession: vi.fn(),
   checkProjectAccess: vi.fn(),
   checkProjectMembership: vi.fn(),
 }));
@@ -61,7 +66,7 @@ vi.mock('@/lib/clickhouse', () => ({
 }));
 
 import { validateApiKey } from '@/lib/api-key';
-import { checkProjectAccess } from '@/lib/auth-check';
+import { checkAccountKeyProjectAccess } from '@/lib/auth-check';
 import { authenticateRequest } from '@/lib/auth-api';
 
 import { PUT as settingsPUT } from '@/app/api/projects/[projectId]/settings/route';
@@ -109,7 +114,7 @@ describe('PUT /api/projects/[projectId]/settings, agent-first', () => {
 
   it('is reachable with a valid account key whose owner has admin access', async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkProjectAccess).mockResolvedValue(true);
+    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
 
     const res = await settingsPUT(
       makeRequest(url, 'PUT', { recordReplay: true }, ACCOUNT_KEY),
@@ -120,7 +125,7 @@ describe('PUT /api/projects/[projectId]/settings, agent-first', () => {
     const json = await res.json();
     expect(json.ok).toBe(true);
     // owner/admin route -> workspace.admin role required
-    expect(vi.mocked(checkProjectAccess)).toHaveBeenCalledWith(
+    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
       'workspace.admin',
@@ -140,7 +145,7 @@ describe('PUT /api/projects/[projectId]/settings, agent-first', () => {
 
   it('rejects with 403 when the account key owner lacks project access', async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkProjectAccess).mockResolvedValue(false);
+    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(false);
 
     const res = await settingsPUT(
       makeRequest(url, 'PUT', { recordReplay: true }, ACCOUNT_KEY),
@@ -164,14 +169,14 @@ describe('POST /api/projects/[projectId]/funnels, agent-first', () => {
 
   it('is reachable with a valid account key whose owner has admin access', async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkProjectAccess).mockResolvedValue(true);
+    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
     // INSERT ... RETURNING * -> one row.
     dbMock.mockResolvedValue([{ id: FUNNEL_ID, ...validFunnel }]);
 
     const res = await funnelsPOST(makeRequest(url, 'POST', validFunnel, ACCOUNT_KEY), params);
 
     expect(res.status).toBe(201);
-    expect(vi.mocked(checkProjectAccess)).toHaveBeenCalledWith(
+    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
       'workspace.admin',
@@ -188,7 +193,7 @@ describe('POST /api/projects/[projectId]/funnels, agent-first', () => {
 
   it('rejects with 403 when the account key owner lacks project access', async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkProjectAccess).mockResolvedValue(false);
+    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(false);
 
     const res = await funnelsPOST(makeRequest(url, 'POST', validFunnel, ACCOUNT_KEY), params);
 
@@ -204,14 +209,14 @@ describe('DELETE /api/projects/[projectId]/funnels/[funnelId], agent-first', () 
 
   it('is reachable with a valid account key whose owner has admin access', async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkProjectAccess).mockResolvedValue(true);
+    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
 
     const res = await funnelDELETE(makeRequest(url, 'DELETE', undefined, ACCOUNT_KEY), params);
 
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.ok).toBe(true);
-    expect(vi.mocked(checkProjectAccess)).toHaveBeenCalledWith(
+    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
       'workspace.admin',
@@ -228,7 +233,7 @@ describe('DELETE /api/projects/[projectId]/funnels/[funnelId], agent-first', () 
 
   it('rejects with 403 when the account key owner lacks project access', async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkProjectAccess).mockResolvedValue(false);
+    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(false);
 
     const res = await funnelDELETE(makeRequest(url, 'DELETE', undefined, ACCOUNT_KEY), params);
 
@@ -249,14 +254,14 @@ describe('DELETE /api/projects/[projectId]/funnels/[funnelId], agent-first', () 
 describe('authenticateRequest, owner-only role mapping', () => {
   it("maps ['owner'] (project DELETE) to workspace.admin, not workspace.owner", async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkProjectAccess).mockResolvedValue(true);
+    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
 
     const url = `http://localhost/api/projects/${PROJECT_ID}`;
     const params = { params: Promise.resolve({ projectId: PROJECT_ID }) };
     const res = await projectDELETE(makeRequest(url, 'DELETE', undefined, ACCOUNT_KEY), params);
 
     expect(res.status).toBe(200);
-    expect(vi.mocked(checkProjectAccess)).toHaveBeenCalledWith(
+    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
       'workspace.admin',
@@ -265,14 +270,14 @@ describe('authenticateRequest, owner-only role mapping', () => {
 
   it("maps ['owner'] (project reset) to workspace.admin", async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkProjectAccess).mockResolvedValue(true);
+    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
 
     const url = `http://localhost/api/projects/${PROJECT_ID}/reset`;
     const params = { params: Promise.resolve({ projectId: PROJECT_ID }) };
     const res = await projectResetDELETE(makeRequest(url, 'DELETE', undefined, ACCOUNT_KEY), params);
 
     expect(res.status).toBe(200);
-    expect(vi.mocked(checkProjectAccess)).toHaveBeenCalledWith(
+    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
       'workspace.admin',
@@ -297,14 +302,14 @@ describe('authenticateRequest, unknown role rejection', () => {
 
   it("resolves a mixed ['viewer','admin'] set to the least-privileged workspace.viewer", async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkProjectAccess).mockResolvedValue(true);
+    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
 
     const url = `http://localhost/api/projects/${PROJECT_ID}/anything`;
     const req = makeRequest(url, 'GET', undefined, ACCOUNT_KEY);
     const result = await authenticateRequest(req, PROJECT_ID, ['viewer', 'admin']);
 
     expect(result.authenticated).toBe(true);
-    expect(vi.mocked(checkProjectAccess)).toHaveBeenCalledWith(
+    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
       'workspace.viewer',

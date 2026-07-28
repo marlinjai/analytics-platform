@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
+import type { SessionVerifyResponse } from '@marlinjai/auth-brain-shared';
 import { authBrainClient } from '@/lib/auth-brain';
-import { checkProjectAccess } from '@/lib/auth-check';
+import { checkWorkspaceAccessForSession, checkAccountKeyProjectAccess } from '@/lib/auth-check';
 import { validateApiKey } from '@/lib/api-key';
 import { evaluateAnalyticsGrant, logGrantVersionSkew } from '@/lib/app-grants';
 
@@ -35,7 +36,7 @@ type AuthResult = AuthSuccess | AuthFailure;
 type SessionGrant =
   | { kind: 'none' }
   | { kind: 'ungranted' }
-  | { kind: 'granted'; userId: string };
+  | { kind: 'granted'; userId: string; session: SessionVerifyResponse };
 
 async function resolveSessionGrant(): Promise<SessionGrant> {
   const jar = await cookies();
@@ -53,7 +54,9 @@ async function resolveSessionGrant(): Promise<SessionGrant> {
     return { kind: 'ungranted' };
   }
 
-  return { kind: 'granted', userId: session.user.id };
+  // Carry the verified payload forward: per-project authorization is derived
+  // from its effective_roles, not from a second FGA round-trip.
+  return { kind: 'granted', userId: session.user.id, session };
 }
 
 /**
@@ -115,7 +118,8 @@ function resolveRequiredRole(requiredRoles?: string[]): 'workspace.admin' | 'wor
 /**
  * Authenticate a request via session (lumitra_session cookie) or API key.
  *
- * 1. Try session cookie -> verifySession() -> checkProjectAccess() via OpenFGA
+ * 1. Try session cookie -> verifySession() -> per-project decision from the
+ *    payload's effective_roles (no FGA)
  * 2. If no session, try API key from X-API-Key header
  * 3. Project keys: verify the key's projectId matches the route's projectId
  * 4. Account keys: verify user has workspace access to the route's project
@@ -138,8 +142,9 @@ export async function authenticateRequest(
   const sessionGrant = await resolveSessionGrant();
   if (sessionGrant.kind === 'ungranted') return NO_GRANT_FAILURE;
   if (sessionGrant.kind === 'granted') {
-    const { userId } = sessionGrant;
-    const hasAccess = await checkProjectAccess(userId, projectId, requiredRole);
+    const { userId, session } = sessionGrant;
+    // Per-project authorization straight from the verified payload's roles.
+    const hasAccess = await checkWorkspaceAccessForSession(session, projectId, requiredRole);
     if (!hasAccess) return { authenticated: false, error: 'Forbidden', status: 403 };
     return { authenticated: true, userId, projectId };
   }
@@ -154,7 +159,9 @@ export async function authenticateRequest(
   }
 
   if (keyInfo.kind === 'account') {
-    const hasAccess = await checkProjectAccess(keyInfo.userId, projectId, requiredRole);
+    // Machine principal: no verify payload exists for a local account key, so
+    // this is the named FGA survivor. See checkAccountKeyProjectAccess().
+    const hasAccess = await checkAccountKeyProjectAccess(keyInfo.userId, projectId, requiredRole);
     if (!hasAccess) {
       return {
         authenticated: false,
@@ -179,13 +186,29 @@ export async function authenticateRequest(
 /**
  * Authenticate a request that is not project-scoped (e.g. project creation).
  * Supports session auth or account-level API keys.
+ *
+ * On success it reports the principal kind and, for a session, the verified
+ * payload — so callers that must filter a resource LIST by per-project access
+ * (e.g. GET /api/projects) can decide from `session.effective_roles` instead of
+ * a per-item FGA round-trip. Account-key principals carry no payload.
  */
+type AccountAuthSuccess =
+  | { authenticated: true; principal: 'session'; userId: string; session: SessionVerifyResponse }
+  | { authenticated: true; principal: 'account-key'; userId: string; session?: undefined };
+
 export async function authenticateAccountRequest(
   request: NextRequest,
-): Promise<{ authenticated: true; userId: string } | AuthFailure> {
+): Promise<AccountAuthSuccess | AuthFailure> {
   const sessionGrant = await resolveSessionGrant();
   if (sessionGrant.kind === 'ungranted') return NO_GRANT_FAILURE;
-  if (sessionGrant.kind === 'granted') return { authenticated: true, userId: sessionGrant.userId };
+  if (sessionGrant.kind === 'granted') {
+    return {
+      authenticated: true,
+      principal: 'session',
+      userId: sessionGrant.userId,
+      session: sessionGrant.session,
+    };
+  }
 
   const apiKey = request.headers.get('x-api-key');
   if (!apiKey) return { authenticated: false, error: 'Unauthorized', status: 401 };
@@ -201,7 +224,7 @@ export async function authenticateAccountRequest(
     };
   }
 
-  return { authenticated: true, userId: keyInfo.userId };
+  return { authenticated: true, principal: 'account-key', userId: keyInfo.userId };
 }
 
 /**
