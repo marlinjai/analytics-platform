@@ -24,7 +24,6 @@ import {
   provisionProjectWorkspace,
   grantWorkspaceMember,
 } from './workspace-provisioning';
-import { readWorkspaceTuples } from './openfga-direct';
 
 // Owner of last resort when a project has no resolvable owner (e.g. the legacy
 // memberships table was already dropped). Must be an existing auth-brain user.
@@ -103,21 +102,6 @@ export async function provisionMissingWorkspaces(): Promise<void> {
       }
     }
     console.log(`[provision] done: workspacesCreated=${created} grantsEnsured=${grantsEnsured}`);
-
-    // Diagnostic: read back the actual OpenFGA tuples on each workspace, so we
-    // can see whether the async outbox worker ever wrote the membership grants
-    // (the SDK's can() reads this same store). This is the ground truth the
-    // internal-only DB/OpenFGA otherwise hides.
-    for (const project of projects) {
-      const wsId = project.workspace_id ?? '(none-resolved)';
-      try {
-        const tuples = wsId.startsWith('(') ? [] : await readWorkspaceTuples(wsId);
-        const summary = tuples.map((t) => `${t.user}#${t.relation}`).join(', ') || 'NONE';
-        console.log(`[provision] openfga tuples for "${project.name}" ws=${wsId}: ${summary}`);
-      } catch (err) {
-        console.warn(`[provision] openfga read for "${project.name}" ws=${wsId} failed: ${asMsg(err)}`);
-      }
-    }
   } catch (err) {
     console.error(`[provision] provisioning step failed: ${asMsg(err)}`);
   } finally {

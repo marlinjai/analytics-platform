@@ -45,12 +45,14 @@ vi.mock('@/lib/api-key', () => ({
 }));
 
 vi.mock('@/lib/auth-check', () => ({
+  checkWorkspaceAccessForSession: vi.fn(async () => true),
+  checkAccountKeyProjectAccess: vi.fn(async () => true),
   checkProjectAccess: vi.fn(async () => true),
   checkProjectMembership: vi.fn(async () => true),
 }));
 
 import { validateApiKey } from '@/lib/api-key';
-import { checkProjectAccess } from '@/lib/auth-check';
+import { checkWorkspaceAccessForSession } from '@/lib/auth-check';
 import { authenticateAccountRequest, authenticateRequest } from '@/lib/auth-api';
 import { config as middlewareConfig } from '@/middleware';
 
@@ -78,7 +80,7 @@ beforeEach(() => {
   cookieValue = undefined;
   sessionToReturn = null;
   vi.mocked(validateApiKey).mockReset();
-  vi.mocked(checkProjectAccess).mockReset().mockResolvedValue(true);
+  vi.mocked(checkWorkspaceAccessForSession).mockReset().mockResolvedValue(true);
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -88,7 +90,12 @@ describe('authenticateAccountRequest — analytics door', () => {
     cookieValue = 'valid';
     sessionToReturn = grantedSession;
     const res = await authenticateAccountRequest(req());
-    expect(res).toEqual({ authenticated: true, userId: 'user-granted' });
+    expect(res).toMatchObject({ authenticated: true, principal: 'session', userId: 'user-granted' });
+    // The verified payload is carried forward so a resource-list route can
+    // filter by effective_roles instead of a per-item FGA round-trip.
+    if (res.authenticated && res.principal === 'session') {
+      expect(res.session).toBe(grantedSession);
+    }
   });
 
   it('blocks an ungranted signed-in user with 403 (no fall-through to API key)', async () => {
@@ -119,7 +126,7 @@ describe('authenticateAccountRequest — analytics door', () => {
       userId: 'acct-user',
     } as never);
     const res = await authenticateAccountRequest(req({ 'x-api-key': 'ap_account_xxx' }));
-    expect(res).toEqual({ authenticated: true, userId: 'acct-user' });
+    expect(res).toEqual({ authenticated: true, principal: 'account-key', userId: 'acct-user' });
   });
 
   it('returns 401 when there is no credential at all', async () => {
@@ -145,7 +152,7 @@ describe('authenticateRequest — analytics door (project-scoped)', () => {
     expect(res.authenticated).toBe(false);
     if (!res.authenticated) expect(res.status).toBe(403);
     // Door fails before per-project authorization runs.
-    expect(checkProjectAccess).not.toHaveBeenCalled();
+    expect(checkWorkspaceAccessForSession).not.toHaveBeenCalled();
     expect(validateApiKey).not.toHaveBeenCalled();
   });
 

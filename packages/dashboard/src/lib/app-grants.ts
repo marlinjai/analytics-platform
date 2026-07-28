@@ -3,9 +3,10 @@
  *
  * Analytics is grant-gated. A signed-in suite user may enter (and create
  * projects) only if one of their auth-brain tenants carries the `analytics`
- * app grant. Inner per-project authorization (OpenFGA workspace checks) is
- * unchanged and runs AFTER this door: the grant answers "may this account use
- * analytics at all", per-project checks answer "may it see THIS project".
+ * app grant. Inner per-project authorization (derived from the verify payload's
+ * effective_roles; see project-access.ts) is unchanged in MEANING and runs
+ * AFTER this door: the grant answers "may this account use analytics at all",
+ * per-project checks answer "may it see THIS project".
  *
  * The grant lives on the verified session payload as the union of
  * `session.tenants[].app_grants` (auth-brain shared >= 1.4.0). We treat the

@@ -14,6 +14,12 @@ export const authBrainClient = createAuthBrainClient({
   // 30s cache on session verify: hot path for authenticated API routes.
   // The SDK maps timeouts and 5xx to null (fail-closed).
   cacheTtlMs: 30_000,
+  // OpenFGA config is retained for ONE reason only: the named account-key
+  // survivor in auth-check.ts (checkAccountKeyProjectAccess) still resolves
+  // machine-principal access via can(), because local analytics account keys
+  // produce no verify payload. All SESSION (human) authorization now comes from
+  // the verify payload's effective_roles — no can() on that path. Remove this
+  // block once account keys are issued as auth-brain service accounts.
   openfgaUrl: process.env.OPENFGA_API_URL,
   openfgaStoreId: process.env.OPENFGA_STORE_ID,
   openfgaModelId: process.env.OPENFGA_AUTHORIZATION_MODEL_ID,
