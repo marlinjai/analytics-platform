@@ -40,6 +40,25 @@ describe('dashboard middleware login redirect', () => {
     expect(url.searchParams.has('next')).toBe(false);
   });
 
+  // An API path must answer a `fetch` with 401 JSON, never a cross-origin
+  // redirect to a login PAGE: the client follows the 307 to auth.lumitra.co and
+  // gets a CORS failure or login HTML where it expected JSON, so an expired
+  // session surfaces as an unexplained error instead of "sign in again".
+  it('answers an unauthenticated API request with 401 JSON, not a redirect', async () => {
+    for (const path of ['/api/stats?projectId=p1', '/api/scope', '/api/sessions']) {
+      const res = await middleware(makeRequest(path));
+      expect(res.status, path).toBe(401);
+      expect(res.headers.get('location'), path).toBeNull();
+      await expect(res.json()).resolves.toEqual({ error: 'Unauthorized' });
+    }
+  });
+
+  it('still REDIRECTS an unauthenticated page navigation (only API paths changed)', async () => {
+    const res = await middleware(makeRequest('/settings'));
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('auth.lumitra.co/login');
+  });
+
   it('lets an authenticated request pass through', async () => {
     const res = await middleware(makeRequest('/dashboard', { cookie: 'sometoken' }));
     // NextResponse.next() carries no redirect Location.
