@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { statsQuerySchema } from '@analytics-platform/shared';
 import { getStatsOverview, getTimeseries, pickInterval } from '@/lib/queries/stats';
 import { auth } from '@/lib/auth';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authorizeProjectRequest } from '@/lib/auth-check';
 import type { DashboardFilters } from '@analytics-platform/shared';
 
 export async function GET(request: NextRequest) {
@@ -25,8 +25,9 @@ export async function GET(request: NextRequest) {
   const { projectId, dateRange } = parsed.data;
   const interval = parsed.data.interval ?? pickInterval(dateRange.from, dateRange.to);
 
-  if (!(await checkProjectMembership(session.user.id, projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authz = await authorizeProjectRequest(session.user.id, projectId);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
   const sp = request.nextUrl.searchParams;

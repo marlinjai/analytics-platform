@@ -2,10 +2,17 @@
 
 import { useEffect, useState, useRef, useSyncExternalStore } from 'react';
 import type { Project } from '@analytics-platform/shared';
+import { reconcileProjectSelection } from '@/lib/project-selection';
 
 // ── Shared project state via localStorage ────────────────────────────────────
 
-const STORAGE_KEY = 'ap_current_project';
+/**
+ * The persisted "current project" selection. Exported so the company switcher
+ * can DROP it on a scope switch: the active company is a boundary, and a project
+ * selection from the old company must not be carried across (it would 404).
+ */
+export const CURRENT_PROJECT_STORAGE_KEY = 'ap_current_project';
+const STORAGE_KEY = CURRENT_PROJECT_STORAGE_KEY;
 const EVENT_NAME = 'ap-project-changed';
 
 function getStoredProjectId(): string | null {
@@ -21,6 +28,13 @@ function setStoredProjectId(id: string): void {
     localStorage.setItem(STORAGE_KEY, id);
   } catch {}
   window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: id }));
+}
+
+function clearStoredProjectId(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {}
+  window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: null }));
 }
 
 /** Subscribe to project changes from any component. */
@@ -43,7 +57,7 @@ export function useCurrentProjectId(): string | null {
 
 // ── ProjectSwitcher component ────────────────────────────────────────────────
 
-export function ProjectSwitcher() {
+export function ProjectSwitcher({ activeCompanyId }: { activeCompanyId: string | null }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loaded, setLoaded] = useState(false);
   const currentProjectId = useCurrentProjectId();
@@ -56,6 +70,9 @@ export function ProjectSwitcher() {
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
+  // Re-fetch whenever the active company changes: /api/projects is scoped to the
+  // active company, so switching companies must re-load the list (never carry
+  // the old company's projects across).
   useEffect(() => {
     fetch('/api/projects')
       .then((r) => r.json())
@@ -63,12 +80,18 @@ export function ProjectSwitcher() {
         const list: Project[] = data.projects ?? [];
         setProjects(list);
         setLoaded(true);
-        if (list.length > 0 && !getStoredProjectId()) {
-          setStoredProjectId(list[0]!.id);
-        }
+        // The active company is a BOUNDARY: a persisted selection whose project
+        // is not in the (active-company-scoped) list is stale — discard it and
+        // default to the first in-scope project rather than reattaching it.
+        const { next, action } = reconcileProjectSelection(
+          getStoredProjectId(),
+          list.map((p) => p.id),
+        );
+        if (action === 'clear') clearStoredProjectId();
+        else if (action === 'default' && next) setStoredProjectId(next);
       })
       .catch(() => setLoaded(true));
-  }, []);
+  }, [activeCompanyId]);
 
   function handleSelect(id: string) {
     setStoredProjectId(id);
@@ -90,13 +113,24 @@ export function ProjectSwitcher() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !domain.trim()) return;
+    if (!activeCompanyId) {
+      setError('Choose a company before creating a project.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
+      // A new project is created under the ACTIVE company. The server still
+      // re-validates that the caller holds tenant.admin there (never trusts this
+      // value on its own).
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), domain: domain.trim() }),
+        body: JSON.stringify({
+          name: name.trim(),
+          domain: domain.trim(),
+          companyId: activeCompanyId,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

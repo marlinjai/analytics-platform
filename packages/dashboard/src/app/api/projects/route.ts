@@ -4,6 +4,7 @@ import { authenticateAccountRequest, corsHeaders } from '@/lib/auth-api';
 import { authBrainClient } from '@/lib/auth-brain';
 import { checkAccountKeyProjectAccess } from '@/lib/auth-check';
 import { hasCompanyAccess } from '@/lib/project-access';
+import { resolveActiveCompanyId } from '@/lib/scope';
 import { getDb } from '@/lib/db';
 
 type ProjectRow = { id: string; company_id: string | null; [k: string]: unknown };
@@ -33,16 +34,25 @@ export async function GET(request: NextRequest) {
       `;
 
   // Decision plane depends on the principal:
-  //   - session: derive visibility from the verified payload's company roles
-  //     (effective_roles.tenants, no FGA). Inheritance is evaluated centrally.
-  //   - account key (machine): no verify payload exists, so authorize the key
-  //     owner via the named FGA survivor (a tenant-scoped can()). Fail-closed
-  //     per project. A project in another company is simply invisible.
+  //   - session: the list is a FILTER that must agree with the BOUNDARY, so it
+  //     is scoped to the ACTIVE company only (not "every company the user can
+  //     read"). Otherwise the switcher would offer projects the boundary then
+  //     404s. A null active scope yields an empty list — nothing is in scope.
+  //     Account keys are excluded from the boundary (see below); this is the
+  //     session-only rule.
+  //   - account key (machine): no verify payload exists and no active scope, so
+  //     authorize the key owner via the named FGA survivor (a tenant-scoped
+  //     can()) by COMPANY MEMBERSHIP as S2 left them. Fail-closed per project.
   let projects: ProjectRow[];
   if (authResult.principal === 'session') {
-    projects = candidates.filter((p) =>
-      hasCompanyAccess(authResult.session.effective_roles, p.company_id, 'tenant.viewer'),
-    );
+    const activeCompanyId = resolveActiveCompanyId(authResult.session);
+    projects = activeCompanyId
+      ? candidates.filter(
+          (p) =>
+            p.company_id === activeCompanyId &&
+            hasCompanyAccess(authResult.session.effective_roles, p.company_id, 'tenant.viewer'),
+        )
+      : [];
   } else {
     const allowed = await Promise.all(
       candidates.map((p) => checkAccountKeyProjectAccess(authResult.userId, p.id, 'tenant.viewer')),

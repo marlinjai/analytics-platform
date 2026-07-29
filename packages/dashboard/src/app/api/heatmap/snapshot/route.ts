@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pageSnapshotQuerySchema } from '@analytics-platform/shared';
 import { auth } from '@/lib/auth';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authorizeProjectRequest } from '@/lib/auth-check';
 import { verifyToolbarToken } from '@/lib/toolbar-token';
 import { getDb } from '@/lib/db';
 
@@ -60,8 +60,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
   } else {
-    if (!(await checkProjectMembership(session!.user.id, projectId))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const authz = await authorizeProjectRequest(session!.user.id, projectId);
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
   }
 

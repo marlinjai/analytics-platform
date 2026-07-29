@@ -45,6 +45,9 @@ vi.mock('@/lib/api-key', () => ({
 }));
 
 vi.mock('@/lib/auth-check', () => ({
+  // decideProjectForSession is the seam authenticateRequest now calls for the
+  // active-company boundary + role check. Default: in scope and authorized.
+  decideProjectForSession: vi.fn(async () => ({ ok: true, userId: 'user-granted' })),
   checkCompanyAccessForSession: vi.fn(async () => true),
   checkAccountKeyProjectAccess: vi.fn(async () => true),
   checkProjectAccess: vi.fn(async () => true),
@@ -52,7 +55,7 @@ vi.mock('@/lib/auth-check', () => ({
 }));
 
 import { validateApiKey } from '@/lib/api-key';
-import { checkCompanyAccessForSession } from '@/lib/auth-check';
+import { decideProjectForSession } from '@/lib/auth-check';
 import { authenticateAccountRequest, authenticateRequest } from '@/lib/auth-api';
 import { config as middlewareConfig } from '@/middleware';
 
@@ -80,7 +83,7 @@ beforeEach(() => {
   cookieValue = undefined;
   sessionToReturn = null;
   vi.mocked(validateApiKey).mockReset();
-  vi.mocked(checkCompanyAccessForSession).mockReset().mockResolvedValue(true);
+  vi.mocked(decideProjectForSession).mockReset().mockResolvedValue({ ok: true, userId: 'user-granted' });
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -152,7 +155,7 @@ describe('authenticateRequest — analytics door (project-scoped)', () => {
     expect(res.authenticated).toBe(false);
     if (!res.authenticated) expect(res.status).toBe(403);
     // Door fails before per-project authorization runs.
-    expect(checkCompanyAccessForSession).not.toHaveBeenCalled();
+    expect(decideProjectForSession).not.toHaveBeenCalled();
     expect(validateApiKey).not.toHaveBeenCalled();
   });
 

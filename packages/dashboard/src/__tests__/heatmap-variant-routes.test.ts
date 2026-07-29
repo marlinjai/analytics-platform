@@ -18,7 +18,9 @@ vi.mock('@/lib/auth', () => ({
 }));
 
 vi.mock('@/lib/auth-check', () => ({
-  checkProjectMembership: vi.fn().mockResolvedValue(true),
+  // The routes now enforce the active-company boundary via authorizeProjectRequest
+  // (404 foreign / 403 role / ok). Default: in scope and authorized.
+  authorizeProjectRequest: vi.fn().mockResolvedValue({ ok: true, userId: 'user-1' }),
 }));
 
 vi.mock('@/lib/toolbar-token', () => ({

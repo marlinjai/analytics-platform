@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authorizeProjectRequest } from '@/lib/auth-check';
 import { createToolbarToken } from '@/lib/toolbar-token';
 
 const UUID_RE =
@@ -27,9 +27,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const isMember = await checkProjectMembership(session.user.id, projectId);
-  if (!isMember) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authz = await authorizeProjectRequest(session.user.id, projectId);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
   const token = await createToolbarToken(session.user.id, projectId);

@@ -8,6 +8,14 @@ import { createAuthBrainClient } from '@marlinjai/auth-brain-sdk';
 // runtime via Infisical; this only governs build-time evaluation.
 const authBrainUrl = process.env.AUTH_BRAIN_URL ?? 'https://auth.lumitra.co';
 
+/**
+ * The resolved auth-brain base URL. Exported so the server-side scope-switch
+ * proxy (/api/scope) can make a same-origin-forbidden call server-to-server to
+ * `POST /api/sessions/active-context`, forwarding the shared lumitra_session
+ * cookie. The SDK exposes no active-context method, so the proxy uses fetch.
+ */
+export const AUTH_BRAIN_URL = authBrainUrl;
+
 export const authBrainClient = createAuthBrainClient({
   baseUrl: authBrainUrl,
   cookieName: 'lumitra_session',
