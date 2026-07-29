@@ -15,7 +15,7 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { projectId, experimentId } = await params;
-  const authResult = await authenticateRequest(request, projectId, ['owner', 'admin']);
+  const authResult = await authenticateRequest(request, projectId, ['member']);
   if (!authResult.authenticated) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }

@@ -45,14 +45,14 @@ vi.mock('@/lib/api-key', () => ({
 }));
 
 vi.mock('@/lib/auth-check', () => ({
-  checkWorkspaceAccessForSession: vi.fn(async () => true),
+  checkCompanyAccessForSession: vi.fn(async () => true),
   checkAccountKeyProjectAccess: vi.fn(async () => true),
   checkProjectAccess: vi.fn(async () => true),
   checkProjectMembership: vi.fn(async () => true),
 }));
 
 import { validateApiKey } from '@/lib/api-key';
-import { checkWorkspaceAccessForSession } from '@/lib/auth-check';
+import { checkCompanyAccessForSession } from '@/lib/auth-check';
 import { authenticateAccountRequest, authenticateRequest } from '@/lib/auth-api';
 import { config as middlewareConfig } from '@/middleware';
 
@@ -80,7 +80,7 @@ beforeEach(() => {
   cookieValue = undefined;
   sessionToReturn = null;
   vi.mocked(validateApiKey).mockReset();
-  vi.mocked(checkWorkspaceAccessForSession).mockReset().mockResolvedValue(true);
+  vi.mocked(checkCompanyAccessForSession).mockReset().mockResolvedValue(true);
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -152,7 +152,7 @@ describe('authenticateRequest — analytics door (project-scoped)', () => {
     expect(res.authenticated).toBe(false);
     if (!res.authenticated) expect(res.status).toBe(403);
     // Door fails before per-project authorization runs.
-    expect(checkWorkspaceAccessForSession).not.toHaveBeenCalled();
+    expect(checkCompanyAccessForSession).not.toHaveBeenCalled();
     expect(validateApiKey).not.toHaveBeenCalled();
   });
 

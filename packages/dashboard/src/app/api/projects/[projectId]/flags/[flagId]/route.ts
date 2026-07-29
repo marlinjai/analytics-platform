@@ -48,7 +48,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { projectId, flagId } = await params;
-  const authResult = await authenticateRequest(request, projectId, ['owner', 'admin']);
+  const authResult = await authenticateRequest(request, projectId, ['member']);
   if (!authResult.authenticated) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
@@ -92,7 +92,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
 export async function DELETE(request: NextRequest, { params }: Params) {
   const { projectId, flagId } = await params;
-  const authResult = await authenticateRequest(request, projectId, ['owner', 'admin']);
+  const authResult = await authenticateRequest(request, projectId, ['member']);
   if (!authResult.authenticated) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }

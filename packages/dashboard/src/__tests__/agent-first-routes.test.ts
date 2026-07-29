@@ -45,7 +45,7 @@ vi.mock('@/lib/api-key', () => ({
 // helpers are never reached; they are stubbed only so the module imports.
 vi.mock('@/lib/auth-check', () => ({
   checkAccountKeyProjectAccess: vi.fn(),
-  checkWorkspaceAccessForSession: vi.fn(),
+  checkCompanyAccessForSession: vi.fn(),
   checkProjectAccess: vi.fn(),
   checkProjectMembership: vi.fn(),
 }));
@@ -124,11 +124,11 @@ describe('PUT /api/projects/[projectId]/settings, agent-first', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.ok).toBe(true);
-    // owner/admin route -> workspace.admin role required
+    // settings is an admin route (['owner','admin']) -> tenant.admin required
     expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
-      'workspace.admin',
+      'tenant.admin',
     );
   });
 
@@ -167,7 +167,7 @@ describe('POST /api/projects/[projectId]/funnels, agent-first', () => {
     ],
   };
 
-  it('is reachable with a valid account key whose owner has admin access', async () => {
+  it('is reachable with a valid account key whose owner has member (write) access', async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
     vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
     // INSERT ... RETURNING * -> one row.
@@ -176,10 +176,11 @@ describe('POST /api/projects/[projectId]/funnels, agent-first', () => {
     const res = await funnelsPOST(makeRequest(url, 'POST', validFunnel, ACCOUNT_KEY), params);
 
     expect(res.status).toBe(201);
+    // creating a funnel is a write route (['member']) -> tenant.member required
     expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
-      'workspace.admin',
+      'tenant.member',
     );
   });
 
@@ -207,7 +208,7 @@ describe('DELETE /api/projects/[projectId]/funnels/[funnelId], agent-first', () 
     params: Promise.resolve({ projectId: PROJECT_ID, funnelId: FUNNEL_ID }),
   };
 
-  it('is reachable with a valid account key whose owner has admin access', async () => {
+  it('is reachable with a valid account key whose owner has member (write) access', async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
     vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
 
@@ -216,10 +217,11 @@ describe('DELETE /api/projects/[projectId]/funnels/[funnelId], agent-first', () 
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.ok).toBe(true);
+    // deleting a funnel is a write route (['member']) -> tenant.member required
     expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
-      'workspace.admin',
+      'tenant.member',
     );
   });
 
@@ -242,17 +244,16 @@ describe('DELETE /api/projects/[projectId]/funnels/[funnelId], agent-first', () 
 });
 
 /**
- * Role-mapping contract (the WS-E critique fix).
+ * Role-mapping contract (S2: company tiers).
  *
- * The live OpenFGA `workspace` type defines only admin/member/viewer relations:
- * there is NO `workspace.owner`. A workspace owner holds `workspace.admin`. So an
- * owner-only route (`['owner']`) MUST resolve to `workspace.admin`, not to a
- * non-existent `workspace.owner` (which would fail-closed and lock owners out),
- * and the helper must THROW on an unrecognized role rather than silently
- * collapsing it to viewer/admin.
+ * The tenant role ladder is `owner > admin > member > viewer`. An owner-only
+ * destructive route (`['owner']`, e.g. project DELETE / reset) resolves to
+ * `tenant.admin` (both `admin` and `owner` company roles satisfy it), NOT to a
+ * separate `tenant.owner` requirement. The helper must THROW on an unrecognized
+ * role rather than silently collapsing it to viewer/member/admin.
  */
 describe('authenticateRequest, owner-only role mapping', () => {
-  it("maps ['owner'] (project DELETE) to workspace.admin, not workspace.owner", async () => {
+  it("maps ['owner'] (project DELETE) to tenant.admin", async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
     vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
 
@@ -264,11 +265,11 @@ describe('authenticateRequest, owner-only role mapping', () => {
     expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
-      'workspace.admin',
+      'tenant.admin',
     );
   });
 
-  it("maps ['owner'] (project reset) to workspace.admin", async () => {
+  it("maps ['owner'] (project reset) to tenant.admin", async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
     vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
 
@@ -280,7 +281,7 @@ describe('authenticateRequest, owner-only role mapping', () => {
     expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
-      'workspace.admin',
+      'tenant.admin',
     );
   });
 });
@@ -300,7 +301,7 @@ describe('authenticateRequest, unknown role rejection', () => {
     );
   });
 
-  it("resolves a mixed ['viewer','admin'] set to the least-privileged workspace.viewer", async () => {
+  it("resolves a mixed ['viewer','admin'] set to the least-privileged tenant.viewer", async () => {
     vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
     vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
 
@@ -312,7 +313,7 @@ describe('authenticateRequest, unknown role rejection', () => {
     expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
       ACCOUNT_USER_ID,
       PROJECT_ID,
-      'workspace.viewer',
+      'tenant.viewer',
     );
   });
 });

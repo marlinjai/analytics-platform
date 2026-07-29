@@ -149,11 +149,11 @@ export const createProjectSchema = z.object({
   name: z.string().min(1).max(128),
   domain: z.string().min(1).max(256),
   allowedOrigins: z.array(allowedOriginEntrySchema).max(20).default([]),
-  // Owner of the project's auth-brain workspace. Only consulted on the
-  // account-key (CLI) path, where there is no session to resolve the email
-  // from; the dashboard always uses the signed-in user. Must be an existing
-  // auth-brain account.
-  ownerEmail: z.string().email().optional(),
+  // The auth-brain COMPANY (tenant uuid) the project belongs to. The API NEVER
+  // trusts this value on its own: it validates the caller actually holds
+  // tenant.admin on this company against the verify payload (session) or via a
+  // tenant-scoped can() (account key) before creating the project.
+  companyId: z.string().uuid(),
 });
 
 export const updateProjectSchema = z.object({

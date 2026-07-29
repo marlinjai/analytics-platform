@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import type { SessionVerifyResponse } from '@marlinjai/auth-brain-shared';
 import { authBrainClient } from '@/lib/auth-brain';
-import { checkWorkspaceAccessForSession, checkAccountKeyProjectAccess } from '@/lib/auth-check';
+import { checkCompanyAccessForSession, checkAccountKeyProjectAccess } from '@/lib/auth-check';
+import type { CompanyRequirement } from '@/lib/project-access';
 import { validateApiKey } from '@/lib/api-key';
 import { evaluateAnalyticsGrant, logGrantVersionSkew } from '@/lib/app-grants';
 
@@ -71,29 +72,32 @@ const NO_GRANT_FAILURE: AuthFailure = {
 };
 
 /**
- * Maps a legacy route role string to the auth-brain OpenFGA workspace relation.
+ * Maps a legacy route role string to the COMPANY (auth-brain tenant) requirement.
  *
- * The auth-brain workspace type only defines three relations: `admin`, `member`,
- * `viewer` (verified against the live OpenFGA model, there is NO `workspace.owner`
- * relation). Ownership is modelled one level up, on `tenant`/`tenant_group`, not on
- * the workspace. So at workspace granularity the most-privileged relation is
- * `workspace.admin`, and a workspace owner is granted `workspace.admin`.
+ * S2: a project belongs to a company, and the tenant role ladder is
+ * `owner > admin > member > viewer`. A route names a minimum role via a legacy
+ * relation string; we map it onto the tenant requirement:
+ *   'owner' | 'admin'   -> 'tenant.admin'  (settings, keys, destructive ops)
+ *   'member'            -> 'tenant.member' (writes: experiments, flags, funnels)
+ *   'viewer'            -> 'tenant.viewer' (read access)
  *
- * Concretely:
- *   'owner' | 'admin'   -> 'workspace.admin'  (manage settings, keys, destructive ops)
- *   'viewer' | 'member' -> 'workspace.viewer' (read access)
+ * The `owner|admin -> tenant.admin` collapse does NOT let `billing_admin`
+ * through: `billing_admin` is never a route requirement, and `hasCompanyAccess`
+ * grants `tenant.admin` only to an actual `admin`/`owner` company role — a
+ * `billing_admin` caller satisfies nothing on this ladder.
  *
  * Any other string throws: a typo or a non-existent relation must NEVER silently
  * downgrade an authorization check (which the old `.every(...)` collapse did).
  */
-function mapToWorkspaceRole(role: string): 'workspace.admin' | 'workspace.viewer' {
+function mapToCompanyRole(role: string): CompanyRequirement {
   switch (role) {
     case 'owner':
     case 'admin':
-      return 'workspace.admin';
-    case 'viewer':
+      return 'tenant.admin';
     case 'member':
-      return 'workspace.viewer';
+      return 'tenant.member';
+    case 'viewer':
+      return 'tenant.viewer';
     default:
       throw new Error(
         `authenticateRequest: unknown required role "${role}". ` +
@@ -103,16 +107,29 @@ function mapToWorkspaceRole(role: string): 'workspace.admin' | 'workspace.viewer
 }
 
 /**
- * Resolves an array of required route roles to the single workspace relation to
- * enforce. We require the LEAST-privileged relation that satisfies the set: if any
- * listed role is read-only (viewer/member), the route is readable, so we enforce
- * `workspace.viewer`; only when every listed role is privileged (owner/admin) do we
- * enforce `workspace.admin`. Unknown roles throw via mapToWorkspaceRole().
+ * Resolves an array of required route roles to the single company requirement to
+ * enforce. We require the LEAST-privileged requirement that satisfies the set on
+ * the `viewer < member < admin` ladder: a listed viewer means the route is
+ * readable (`tenant.viewer`); else a listed member means it is a write
+ * (`tenant.member`); only when every listed role is privileged (owner/admin) do
+ * we enforce `tenant.admin`. Unknown roles throw via mapToCompanyRole().
  */
-function resolveRequiredRole(requiredRoles?: string[]): 'workspace.admin' | 'workspace.viewer' {
-  if (!requiredRoles || requiredRoles.length === 0) return 'workspace.viewer';
-  const mapped = requiredRoles.map(mapToWorkspaceRole);
-  return mapped.includes('workspace.viewer') ? 'workspace.viewer' : 'workspace.admin';
+function resolveRequiredRole(requiredRoles?: string[]): CompanyRequirement {
+  if (!requiredRoles || requiredRoles.length === 0) return 'tenant.viewer';
+  const mapped = requiredRoles.map(mapToCompanyRole);
+  if (mapped.includes('tenant.viewer')) return 'tenant.viewer';
+  if (mapped.includes('tenant.member')) return 'tenant.member';
+  return 'tenant.admin';
+}
+
+/**
+ * Project (site) API keys carry implicit admin over their OWN project, but must
+ * not perform OWNER-only destructive lifecycle ops (project reset / deletion).
+ * A route flags those by requiring `owner` without `admin`; deny a project key
+ * there, and allow it on every read/write/admin route as before.
+ */
+function projectKeyForbidden(requiredRoles?: string[]): boolean {
+  return Boolean(requiredRoles?.includes('owner') && !requiredRoles.includes('admin'));
 }
 
 /**
@@ -125,10 +142,10 @@ function resolveRequiredRole(requiredRoles?: string[]): 'workspace.admin' | 'wor
  * 4. Account keys: verify user has workspace access to the route's project
  * 5. API keys carry implicit "admin" access level
  *
- * requiredRoles map to auth-brain workspace relations via resolveRequiredRole():
- *   ['viewer'] / ['member']   -> 'workspace.viewer'
- *   ['owner'] / ['admin'] / ['owner','admin'] -> 'workspace.admin'
- *   undefined / []            -> 'workspace.viewer'
+ * requiredRoles map to auth-brain tenant requirements via resolveRequiredRole():
+ *   ['viewer'] / undefined / [] -> 'tenant.viewer'
+ *   ['member']                  -> 'tenant.member'
+ *   ['admin'] / ['owner'] / ['owner','admin'] -> 'tenant.admin'
  * An unknown role string throws rather than silently downgrading the check.
  */
 export async function authenticateRequest(
@@ -143,8 +160,9 @@ export async function authenticateRequest(
   if (sessionGrant.kind === 'ungranted') return NO_GRANT_FAILURE;
   if (sessionGrant.kind === 'granted') {
     const { userId, session } = sessionGrant;
-    // Per-project authorization straight from the verified payload's roles.
-    const hasAccess = await checkWorkspaceAccessForSession(session, projectId, requiredRole);
+    // Per-project authorization straight from the verified payload's company
+    // roles (effective_roles.tenants). No FGA on the session path.
+    const hasAccess = await checkCompanyAccessForSession(session, projectId, requiredRole);
     if (!hasAccess) return { authenticated: false, error: 'Forbidden', status: 403 };
     return { authenticated: true, userId, projectId };
   }
@@ -176,7 +194,7 @@ export async function authenticateRequest(
     return { authenticated: false, error: 'API key does not belong to this project', status: 403 };
   }
 
-  if (requiredRoles && requiredRoles.length > 0 && !requiredRoles.includes('admin')) {
+  if (projectKeyForbidden(requiredRoles)) {
     return { authenticated: false, error: 'Forbidden', status: 403 };
   }
 

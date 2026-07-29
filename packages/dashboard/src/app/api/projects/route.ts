@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { createProjectSchema } from '@analytics-platform/shared';
 import { authenticateAccountRequest, corsHeaders } from '@/lib/auth-api';
 import { authBrainClient } from '@/lib/auth-brain';
 import { checkAccountKeyProjectAccess } from '@/lib/auth-check';
-import { hasWorkspaceAccess } from '@/lib/project-access';
-import { provisionProjectWorkspace, WorkspaceProvisionError } from '@/lib/workspace-provisioning';
+import { hasCompanyAccess } from '@/lib/project-access';
 import { getDb } from '@/lib/db';
 
-type ProjectRow = { id: string; workspace_id: string | null; [k: string]: unknown };
+type ProjectRow = { id: string; company_id: string | null; [k: string]: unknown };
 
 export async function GET(request: NextRequest) {
   const authResult = await authenticateAccountRequest(request);
@@ -19,35 +17,35 @@ export async function GET(request: NextRequest) {
   const db = getDb();
   const domain = request.nextUrl.searchParams.get('domain');
 
-  // Identity moved to auth-brain in migration 014 (the local memberships table
-  // was dropped). Access is decided per project by its workspace_id: load every
-  // project that has a workspace, then keep the ones this caller can read. The
-  // project count is small (one workspace per project on a self-hosted instance).
+  // A project belongs to a company (migration 018). Access is company
+  // membership: load every project that has a company, then keep the ones this
+  // caller can read. The project count is small on a self-hosted instance.
   const candidates: ProjectRow[] = domain
     ? await db<ProjectRow[]>`
         SELECT * FROM projects
-        WHERE workspace_id IS NOT NULL AND domain = ${domain}
+        WHERE company_id IS NOT NULL AND domain = ${domain}
         ORDER BY created_at DESC
       `
     : await db<ProjectRow[]>`
         SELECT * FROM projects
-        WHERE workspace_id IS NOT NULL
+        WHERE company_id IS NOT NULL
         ORDER BY created_at DESC
       `;
 
   // Decision plane depends on the principal:
-  //   - session: derive visibility from the verified payload's effective_roles
-  //     (no FGA). Inheritance is already evaluated centrally by auth-brain.
+  //   - session: derive visibility from the verified payload's company roles
+  //     (effective_roles.tenants, no FGA). Inheritance is evaluated centrally.
   //   - account key (machine): no verify payload exists, so authorize the key
-  //     owner via the named FGA survivor. Fail-closed per project.
+  //     owner via the named FGA survivor (a tenant-scoped can()). Fail-closed
+  //     per project. A project in another company is simply invisible.
   let projects: ProjectRow[];
   if (authResult.principal === 'session') {
     projects = candidates.filter((p) =>
-      hasWorkspaceAccess(authResult.session.effective_roles, p.workspace_id, 'workspace.viewer'),
+      hasCompanyAccess(authResult.session.effective_roles, p.company_id, 'tenant.viewer'),
     );
   } else {
     const allowed = await Promise.all(
-      candidates.map((p) => checkAccountKeyProjectAccess(authResult.userId, p.id, 'workspace.viewer')),
+      candidates.map((p) => checkAccountKeyProjectAccess(authResult.userId, p.id, 'tenant.viewer')),
     );
     projects = candidates.filter((_, i) => allowed[i]);
   }
@@ -67,59 +65,43 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Validation failed', details: parsed.error.issues }, { status: 400 });
   }
 
-  const { name, domain, allowedOrigins, ownerEmail: bodyOwnerEmail } = parsed.data;
+  const { name, domain, allowedOrigins, companyId } = parsed.data;
 
-  // A new project needs an auth-brain workspace, which is owned by email. The
-  // dashboard resolves the owner from the signed-in session; an account-key
-  // (CLI) caller has no session, so it must pass ownerEmail (an existing
-  // auth-brain account). Without either we fail loudly rather than insert an
-  // orphan project with no workspace — the listing query filters those out, so
-  // it would be invisible to everyone.
-  const jar = await cookies();
-  const sessionCookie = jar.get('lumitra_session')?.value;
-  const sessionUser = sessionCookie ? await authBrainClient.getCurrentUser(sessionCookie) : null;
-  const ownerEmail = sessionUser?.email ?? bodyOwnerEmail;
-  if (!ownerEmail) {
+  // Project creation is a tenant.admin action. The target company comes from the
+  // request, but is NEVER trusted on its own — we confirm the caller actually
+  // holds tenant.admin on it before creating the project:
+  //   - session: check the verified payload's company roles (no FGA).
+  //   - account key (CLI): no verify payload exists, so a tenant-scoped can()
+  //     (the named FGA survivor) authorizes the key owner. Fail-closed.
+  let authorized: boolean;
+  if (authResult.principal === 'session') {
+    authorized = hasCompanyAccess(authResult.session.effective_roles, companyId, 'tenant.admin');
+  } else {
+    try {
+      authorized = await authBrainClient.can(authResult.userId, 'tenant.admin', {
+        type: 'tenant',
+        id: companyId,
+        tenantId: companyId,
+      });
+    } catch {
+      authorized = false;
+    }
+  }
+  if (!authorized) {
     return NextResponse.json(
-      {
-        error:
-          'Project creation needs an owner. Sign in to the dashboard, or pass "ownerEmail" (an existing Lumitra account) when creating with an account key.',
-      },
-      { status: 422 },
+      { error: 'You do not have admin access to the target company, or it does not exist.' },
+      { status: 403 },
     );
   }
 
   const db = getDb();
-
   const [project] = await db`
-    INSERT INTO projects (name, domain, allowed_origins)
-    VALUES (${name}, ${domain}, ${allowedOrigins})
+    INSERT INTO projects (name, domain, allowed_origins, company_id)
+    VALUES (${name}, ${domain}, ${allowedOrigins}, ${companyId})
     RETURNING *
   `;
 
-  // Provision the auth-brain workspace that backs this project's access control.
-  // The creator becomes workspace admin automatically. If provisioning fails,
-  // roll back the project row so we never leave an unreachable project behind.
-  let workspaceId: string;
-  try {
-    const workspace = await provisionProjectWorkspace({
-      name,
-      ownerEmail,
-      projectId: project!.id,
-    });
-    workspaceId = workspace.id;
-  } catch (err) {
-    await db`DELETE FROM projects WHERE id = ${project!.id}`;
-    const message =
-      err instanceof WorkspaceProvisionError
-        ? `Could not provision workspace: ${err.message}`
-        : 'Could not provision workspace for the new project.';
-    return NextResponse.json({ error: message }, { status: 502 });
-  }
-
-  await db`UPDATE projects SET workspace_id = ${workspaceId} WHERE id = ${project!.id}`;
-
-  return NextResponse.json({ project: { ...project, workspace_id: workspaceId } }, { status: 201 });
+  return NextResponse.json({ project }, { status: 201 });
 }
 
 export async function OPTIONS() {

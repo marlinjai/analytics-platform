@@ -290,17 +290,30 @@ describe('replayQuerySchema', () => {
 });
 
 describe('createProjectSchema', () => {
-  it('accepts valid project creation', () => {
-    const result = createProjectSchema.parse({ name: 'My App', domain: 'myapp.com' });
+  it('accepts valid project creation with a target company', () => {
+    const result = createProjectSchema.parse({ name: 'My App', domain: 'myapp.com', companyId: validUuid });
     expect(result.name).toBe('My App');
+    expect(result.companyId).toBe(validUuid);
+  });
+
+  it('requires a companyId (the project must belong to a company)', () => {
+    expect(() => createProjectSchema.parse({ name: 'My App', domain: 'myapp.com' })).toThrow();
+  });
+
+  it('rejects a non-uuid companyId', () => {
+    expect(() =>
+      createProjectSchema.parse({ name: 'My App', domain: 'myapp.com', companyId: 'not-a-uuid' }),
+    ).toThrow();
   });
 
   it('rejects empty name', () => {
-    expect(() => createProjectSchema.parse({ name: '', domain: 'myapp.com' })).toThrow();
+    expect(() => createProjectSchema.parse({ name: '', domain: 'myapp.com', companyId: validUuid })).toThrow();
   });
 
   it('rejects name longer than 128 chars', () => {
-    expect(() => createProjectSchema.parse({ name: 'x'.repeat(129), domain: 'myapp.com' })).toThrow();
+    expect(() =>
+      createProjectSchema.parse({ name: 'x'.repeat(129), domain: 'myapp.com', companyId: validUuid }),
+    ).toThrow();
   });
 });
 

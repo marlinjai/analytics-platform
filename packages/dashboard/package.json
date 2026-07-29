@@ -9,14 +9,13 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "migrate:auth-brain": "node scripts/migrate-to-auth-brain.mjs"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@analytics-platform/shared": "workspace:*",
     "@clickhouse/client": "^1.18.2",
     "@marlinjai/auth-brain-sdk": "^1.4.0",
-    "@marlinjai/auth-brain-shared": "^1.5.0",
+    "@marlinjai/auth-brain-shared": "^1.6.0",
     "bcryptjs": "^3.0.3",
     "next": "^15.1.6",
     "postgres": "^3.4.8",
