@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { replayQuerySchema } from '@analytics-platform/shared';
 import { getReplayChunks, deleteSession } from '@/lib/queries/sessions';
 import { auth } from '@/lib/auth';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authorizeProjectRequest } from '@/lib/auth-check';
 
 export async function GET(
   request: NextRequest,
@@ -21,8 +21,9 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid parameters', details: parsed.error.issues }, { status: 400 });
   }
 
-  if (!(await checkProjectMembership(session.user.id, parsed.data.projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authz = await authorizeProjectRequest(session.user.id, parsed.data.projectId);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
   const chunks = await getReplayChunks(parsed.data.projectId, parsed.data.sessionId);
@@ -46,8 +47,9 @@ export async function DELETE(
     return NextResponse.json({ error: 'Invalid parameters', details: parsed.error.issues }, { status: 400 });
   }
 
-  if (!(await checkProjectMembership(session.user.id, parsed.data.projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authz = await authorizeProjectRequest(session.user.id, parsed.data.projectId);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
   await deleteSession(parsed.data.projectId, parsed.data.sessionId);

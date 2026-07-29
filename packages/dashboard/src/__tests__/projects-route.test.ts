@@ -41,12 +41,37 @@ import { POST, GET } from '@/app/api/projects/route';
 const CO_A = '019f6a89-ea4a-75d4-90ff-4e809491647e';
 const CO_B = '019f0000-0000-7000-8000-000000000000';
 
-function sessionPrincipal(companyId: string, role: string) {
+/**
+ * A session principal holding `role` on `companyId`, with `companyId` also the
+ * ACTIVE company by default (S3 boundary: the list is scoped to the active
+ * company). Pass `activeCompanyId` to override (incl. null for "none chosen")
+ * and `extraTenants` to grant roles on OTHER companies too — used to prove the
+ * list is a BOUNDARY (only the active company shows), not a filter (every
+ * readable company shows).
+ */
+function sessionPrincipal(
+  companyId: string,
+  role: string,
+  opts: {
+    activeCompanyId?: string | null;
+    extraTenants?: Array<{ id: string; role: string }>;
+  } = {},
+) {
+  const activeCompanyId =
+    opts.activeCompanyId === undefined ? companyId : opts.activeCompanyId;
+  const roleTenants = [{ id: companyId, role }, ...(opts.extraTenants ?? [])];
   const session = {
     user: { id: 'user-1' },
+    tenants: roleTenants.map((t) => ({
+      id: t.id,
+      name: `Co ${t.id.slice(0, 4)}`,
+      slug: t.id.slice(0, 4),
+      app_grants: ['analytics'],
+    })),
+    active_tenant: activeCompanyId ? { id: activeCompanyId } : null,
     effective_roles: {
       tenant_groups: [],
-      tenants: [{ id: companyId, role, source: 'direct' }],
+      tenants: roleTenants.map((t) => ({ id: t.id, role: t.role, source: 'direct' })),
       workspaces: [],
     },
   } as unknown as SessionVerifyResponse;
@@ -137,8 +162,8 @@ describe('POST /api/projects — account-key principal (tenant-scoped can())', (
   });
 });
 
-describe('GET /api/projects — no cross-company read', () => {
-  it('returns only projects in a company the session can read', async () => {
+describe('GET /api/projects — scoped to the ACTIVE company (boundary, not filter)', () => {
+  it('returns only projects in the active company the session can read', async () => {
     authResult = sessionPrincipal(CO_A, 'viewer');
     dbRows = [
       { id: 'p-a', name: 'A', company_id: CO_A },
@@ -148,5 +173,36 @@ describe('GET /api/projects — no cross-company read', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.projects.map((p: { id: string }) => p.id)).toEqual(['p-a']);
+  });
+
+  it('BOUNDARY: a project in a company the user belongs to but is NOT active is hidden', async () => {
+    // Member of BOTH A and B, but A is active -> only A's project lists. This is
+    // what makes the list a boundary (active only) rather than a filter (any
+    // readable company).
+    authResult = sessionPrincipal(CO_A, 'admin', {
+      activeCompanyId: CO_A,
+      extraTenants: [{ id: CO_B, role: 'admin' }],
+    });
+    dbRows = [
+      { id: 'p-a', name: 'A', company_id: CO_A },
+      { id: 'p-b', name: 'B', company_id: CO_B },
+    ];
+    const res = await GET(new NextRequest('http://localhost/api/projects'));
+    const json = await res.json();
+    expect(json.projects.map((p: { id: string }) => p.id)).toEqual(['p-a']);
+  });
+
+  it('NO ACTIVE SCOPE: nothing chosen -> empty list (never silently picks a company)', async () => {
+    authResult = sessionPrincipal(CO_A, 'admin', {
+      activeCompanyId: null,
+      extraTenants: [{ id: CO_B, role: 'admin' }],
+    });
+    dbRows = [
+      { id: 'p-a', name: 'A', company_id: CO_A },
+      { id: 'p-b', name: 'B', company_id: CO_B },
+    ];
+    const res = await GET(new NextRequest('http://localhost/api/projects'));
+    const json = await res.json();
+    expect(json.projects).toEqual([]);
   });
 });

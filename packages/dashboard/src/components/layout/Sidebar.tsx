@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { ScopeCompany } from '@/lib/scope';
 import { ProjectSwitcher } from './ProjectSwitcher';
+import { CompanySwitcher } from './CompanySwitcher';
 
 const navItems = [
   { href: '/', label: 'Overview', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -64,7 +66,13 @@ function UserProfileFooter() {
 
 export { UserProfileFooter };
 
-export function Sidebar() {
+export function Sidebar({
+  companies,
+  activeCompanyId,
+}: {
+  companies: ScopeCompany[];
+  activeCompanyId: string | null;
+}) {
   const pathname = usePathname();
 
   return (
@@ -74,7 +82,8 @@ export function Sidebar() {
       </div>
 
       <div className="border-b border-gray-800 px-3 py-3">
-        <ProjectSwitcher />
+        <CompanySwitcher companies={companies} activeCompanyId={activeCompanyId} />
+        <ProjectSwitcher activeCompanyId={activeCompanyId} />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">

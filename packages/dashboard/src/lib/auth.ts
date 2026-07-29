@@ -12,6 +12,7 @@
 import { cookies } from 'next/headers';
 import { authBrainClient } from './auth-brain';
 import { evaluateAnalyticsGrant, logGrantVersionSkew } from './app-grants';
+import { resolveActiveScope, type ActiveScope } from './scope';
 
 export interface CompatSession {
   user: {
@@ -34,9 +35,14 @@ export interface CompatSession {
  * API routes only need the pass/fail collapse via `auth()`. The dashboard page
  * gate needs the three-way split so it can send a no-grant user to the
  * request-access page instead of bouncing them to login.
+ *
+ * The `granted` state also carries the resolved active-company `scope` (the
+ * verify payload already holds it; deriving it here avoids a second round trip).
+ * The page gate reads it to decide between the dashboard, the "choose a company"
+ * surface (companies but none active), and request-access (zero companies).
  */
 export type SessionGate =
-  | { state: 'granted'; session: CompatSession }
+  | { state: 'granted'; session: CompatSession; scope: ActiveScope }
   | { state: 'no-session' }
   | { state: 'no-grant' };
 
@@ -70,6 +76,7 @@ export async function resolveSessionGate(): Promise<SessionGate> {
         image: session.user.picture ?? null,
       },
     },
+    scope: resolveActiveScope(session),
   };
 }
 

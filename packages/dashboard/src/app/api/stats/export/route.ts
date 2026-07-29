@@ -8,7 +8,7 @@ import {
   getCountryBreakdown,
 } from '@/lib/queries/stats';
 import { auth } from '@/lib/auth';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authorizeProjectRequest } from '@/lib/auth-check';
 import type { DashboardFilters } from '@analytics-platform/shared';
 
 function escapeCsvField(value: string | number): string {
@@ -51,8 +51,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid format. Use csv or json.' }, { status: 400 });
   }
 
-  if (!(await checkProjectMembership(session.user.id, projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authz = await authorizeProjectRequest(session.user.id, projectId);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
   const filters: DashboardFilters = {

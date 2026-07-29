@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import type { SessionVerifyResponse } from '@marlinjai/auth-brain-shared';
 import { authBrainClient } from '@/lib/auth-brain';
-import { checkCompanyAccessForSession, checkAccountKeyProjectAccess } from '@/lib/auth-check';
+import { decideProjectForSession, checkAccountKeyProjectAccess } from '@/lib/auth-check';
 import type { CompanyRequirement } from '@/lib/project-access';
 import { validateApiKey } from '@/lib/api-key';
 import { evaluateAnalyticsGrant, logGrantVersionSkew } from '@/lib/app-grants';
@@ -160,10 +160,13 @@ export async function authenticateRequest(
   if (sessionGrant.kind === 'ungranted') return NO_GRANT_FAILURE;
   if (sessionGrant.kind === 'granted') {
     const { userId, session } = sessionGrant;
-    // Per-project authorization straight from the verified payload's company
-    // roles (effective_roles.tenants). No FGA on the session path.
-    const hasAccess = await checkCompanyAccessForSession(session, projectId, requiredRole);
-    if (!hasAccess) return { authenticated: false, error: 'Forbidden', status: 403 };
+    // Per-project authorization straight from the verified payload: the
+    // active-company BOUNDARY (foreign project -> 404) then the company role
+    // check (insufficient -> 403). No FGA on the session path.
+    const decision = await decideProjectForSession(session, projectId, requiredRole);
+    if (!decision.ok) {
+      return { authenticated: false, error: decision.error, status: decision.status };
+    }
     return { authenticated: true, userId, projectId };
   }
 

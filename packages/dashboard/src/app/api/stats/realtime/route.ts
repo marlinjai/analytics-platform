@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authorizeProjectRequest } from '@/lib/auth-check';
 import { getClickHouse } from '@/lib/clickhouse';
 
 export async function GET(request: NextRequest) {
@@ -14,8 +14,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
   }
 
-  if (!(await checkProjectMembership(session.user.id, projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authz = await authorizeProjectRequest(session.user.id, projectId);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
   const ch = getClickHouse();

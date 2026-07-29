@@ -1,41 +1,29 @@
-'use client';
+import { requireProjectInScope } from '@/lib/page-scope';
+import { ReplayClient } from './ReplayClient';
 
-import { useEffect, useState, use } from 'react';
-import { ReplayPlayer } from '@/components/replay/ReplayPlayer';
+/**
+ * A single session replay — a project-scoped PAGE, and the page-class proof of
+ * the active-company boundary. The `projectId` is a URL search param, so this is
+ * a Server Component that asserts the project is in the ACTIVE company before
+ * rendering: a foreign project id returns 404 (via notFound()), exactly like the
+ * API seam, so a direct page URL never leaks that a foreign project exists.
+ */
+export default async function ReplayPlayerPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ sessionId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { sessionId } = await params;
+  const sp = await searchParams;
+  const projectId = typeof sp.projectId === 'string' ? sp.projectId : null;
 
-export default function ReplayPlayerPage({ params }: { params: Promise<{ sessionId: string }> }) {
-  const { sessionId } = use(params);
-  const [events, setEvents] = useState<unknown[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const projectId = new URLSearchParams(window.location.search).get('projectId');
-    if (!projectId) return;
-
-    fetch(`/api/sessions/${sessionId}/replay?projectId=${projectId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        const allEvents = (data.chunks as unknown[][]).flat();
-        setEvents(allEvents);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [sessionId]);
-
-  if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center">
-        <p className="text-sm text-gray-500">Loading replay...</p>
-      </div>
-    );
+  // Enforce the boundary whenever a project is addressed. With no projectId the
+  // client renders its empty state (unchanged), and the replay API stays gated.
+  if (projectId) {
+    await requireProjectInScope(projectId);
   }
 
-  return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-gray-100">
-        Session {sessionId.slice(0, 8)}...
-      </h2>
-      <ReplayPlayer events={events} />
-    </div>
-  );
+  return <ReplayClient sessionId={sessionId} />;
 }

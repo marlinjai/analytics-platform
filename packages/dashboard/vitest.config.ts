@@ -10,6 +10,12 @@ export default defineConfig({
       '@': resolve(__dirname, './src'),
     },
   },
+  // Use the automatic JSX runtime (like Next.js) so .tsx server components can be
+  // imported in tests without a manual `import React`. Only affects .tsx
+  // transforms; the .ts test/route files are unchanged.
+  esbuild: {
+    jsx: 'automatic',
+  },
   test: {
     name: 'dashboard',
     globals: true,

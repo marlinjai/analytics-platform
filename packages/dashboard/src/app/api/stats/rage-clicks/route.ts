@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { statsQuerySchema } from '@analytics-platform/shared';
 import { getRageClicks } from '@/lib/queries/advanced';
 import { auth } from '@/lib/auth';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authorizeProjectRequest } from '@/lib/auth-check';
 import { verifyToolbarToken } from '@/lib/toolbar-token';
 
 const corsHeaders = {
@@ -57,8 +57,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: corsHeaders });
     }
   } else {
-    if (!(await checkProjectMembership(session!.user.id, projectId))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: corsHeaders });
+    const authz = await authorizeProjectRequest(session!.user.id, projectId);
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status, headers: corsHeaders });
     }
   }
 

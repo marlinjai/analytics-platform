@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sessionListQuerySchema } from '@analytics-platform/shared';
 import { getSessionList } from '@/lib/queries/sessions';
 import { auth } from '@/lib/auth';
-import { checkProjectMembership } from '@/lib/auth-check';
+import { authorizeProjectRequest } from '@/lib/auth-check';
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -24,8 +24,9 @@ export async function GET(request: NextRequest) {
 
   const { projectId, dateRange, cursor, limit } = parsed.data;
 
-  if (!(await checkProjectMembership(session.user.id, projectId))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const authz = await authorizeProjectRequest(session.user.id, projectId);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
   const result = await getSessionList(projectId, dateRange, limit, cursor);
