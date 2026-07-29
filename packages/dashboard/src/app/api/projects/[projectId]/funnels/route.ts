@@ -39,7 +39,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { projectId } = await params;
-  const authResult = await authenticateRequest(request, projectId, ['owner', 'admin']);
+  const authResult = await authenticateRequest(request, projectId, ['member']);
   if (!authResult.authenticated) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }

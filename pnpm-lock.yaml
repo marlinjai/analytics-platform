@@ -72,8 +72,8 @@ importers:
         specifier: ^1.4.0
         version: 1.4.0(zod@3.25.76)
       '@marlinjai/auth-brain-shared':
-        specifier: ^1.5.0
-        version: 1.5.0
+        specifier: ^1.6.0
+        version: 1.6.0
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -1038,8 +1038,8 @@ packages:
       hono:
         optional: true
 
-  '@marlinjai/auth-brain-shared@1.5.0':
-    resolution: {integrity: sha512-TFPMyUuXAyd+CTqLjBETfSp1tnm51tETtgA/GGoqiMB9yBTd4zI4mFFxse3pfGemzRPF4azJ4UR4Av7kkcWdKg==}
+  '@marlinjai/auth-brain-shared@1.6.0':
+    resolution: {integrity: sha512-RlbvJL8r6cTPbm5GKiwlne2nt81EJEVU9iYj/98BsMM3rmoaCr9xI4NQ3TNXQziLVWWmAXXMQhEP943i4qCd9A==}
 
   '@marlinjai/brain-core@0.2.1':
     resolution: {integrity: sha512-lWLkn+X0ovN8RqIhz64BO86ECGWXs7wmc5youCb0PFJbvpWPTgELB9S+vTs/TLDPTShXc7KYoHr7UyCBYHBGVw==}
@@ -5416,12 +5416,12 @@ snapshots:
 
   '@marlinjai/auth-brain-sdk@1.4.0(zod@3.25.76)':
     dependencies:
-      '@marlinjai/auth-brain-shared': 1.5.0
+      '@marlinjai/auth-brain-shared': 1.6.0
       '@marlinjai/brain-core': 0.2.1(zod@3.25.76)
     transitivePeerDependencies:
       - zod
 
-  '@marlinjai/auth-brain-shared@1.5.0':
+  '@marlinjai/auth-brain-shared@1.6.0':
     dependencies:
       zod: 3.25.76
 

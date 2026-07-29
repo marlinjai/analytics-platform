@@ -2,30 +2,33 @@ import { cookies } from 'next/headers';
 import type { SessionVerifyResponse } from '@marlinjai/auth-brain-shared';
 import { getDb } from './db';
 import { authBrainClient } from './auth-brain';
-import { hasWorkspaceAccess, type WorkspaceRequirement } from './project-access';
+import { hasCompanyAccess, type CompanyRequirement } from './project-access';
 
 /**
  * Per-project authorization for analytics.
  *
- * Decision 2 (authz-hardening): apps read the auth-brain verify payload and
- * nothing else. This module used to call `authBrainClient.can()` (a direct
- * OpenFGA round-trip) for every project check; it now derives the decision from
- * the verified session's `effective_roles.workspaces` instead (see
- * project-access.ts). OpenFGA stays auth-brain's internal engine.
+ * S2 decision: a project belongs to a COMPANY (auth-brain tenant), not a
+ * workspace. Access is company membership, derived from the verified session's
+ * `effective_roles.tenants` (see project-access.ts `hasCompanyAccess`). OpenFGA
+ * stays auth-brain's internal engine; no SESSION path calls `can()`.
  *
- * Role mapping (the auth-brain `workspace` type defines only admin/member/viewer;
- * there is NO workspace.owner — ownership lives on tenant/tenant_group):
- *   viewer | member -> "workspace.viewer"  (read-only)
- *   admin  | owner  -> "workspace.admin"   (manage settings, keys, destructive ops)
+ * The tenant role ladder is `owner > admin > member > viewer`. A route names a
+ * minimum company role via one of the legacy relation strings, mapped here:
+ *   viewer          -> "tenant.viewer" (read-only)
+ *   member          -> "tenant.member" (write: experiments, flags, funnels, ...)
+ *   admin  | owner  -> "tenant.admin"  (settings, keys, destructive ops)
+ * `billing_admin` is not accepted as a route requirement and never satisfies a
+ * check (enforced in hasCompanyAccess).
  */
-function mapMembershipRole(role: string): WorkspaceRequirement {
+function mapMembershipRole(role: string): CompanyRequirement {
   switch (role) {
     case 'owner':
     case 'admin':
-      return 'workspace.admin';
-    case 'viewer':
+      return 'tenant.admin';
     case 'member':
-      return 'workspace.viewer';
+      return 'tenant.member';
+    case 'viewer':
+      return 'tenant.viewer';
     default:
       throw new Error(
         `checkProjectMembership: unknown required role "${role}". ` +
@@ -34,14 +37,14 @@ function mapMembershipRole(role: string): WorkspaceRequirement {
   }
 }
 
-/** Resolve a project's backing workspace id. Returns null if the project has no
- * workspace (unreachable project) or does not exist — both DENY downstream. */
-async function lookupWorkspaceId(projectId: string): Promise<string | null> {
+/** Resolve a project's owning company id. Returns null if the project has no
+ * company (unreachable project) or does not exist — both DENY downstream. */
+async function lookupCompanyId(projectId: string): Promise<string | null> {
   const db = getDb();
-  const [project] = await db<{ workspace_id: string }[]>`
-    SELECT workspace_id FROM projects WHERE id = ${projectId} AND workspace_id IS NOT NULL
+  const [project] = await db<{ company_id: string }[]>`
+    SELECT company_id FROM projects WHERE id = ${projectId} AND company_id IS NOT NULL
   `;
-  return project?.workspace_id ?? null;
+  return project?.company_id ?? null;
 }
 
 /**
@@ -49,34 +52,34 @@ async function lookupWorkspaceId(projectId: string): Promise<string | null> {
  * effective roles. No cookie re-read, no FGA. Use this on paths that already
  * hold the verified `SessionVerifyResponse` (e.g. the API auth seam).
  *
- * Fail-closed: a project with no workspace, or a workspace the session has no
+ * Fail-closed: a project with no company, or a company the session has no
  * effective role on, returns false.
  */
-export async function checkWorkspaceAccessForSession(
+export async function checkCompanyAccessForSession(
   session: SessionVerifyResponse,
   projectId: string,
-  requiredRole: WorkspaceRequirement = 'workspace.viewer',
+  requiredRole: CompanyRequirement = 'tenant.viewer',
 ): Promise<boolean> {
-  const workspaceId = await lookupWorkspaceId(projectId);
-  return hasWorkspaceAccess(session.effective_roles, workspaceId, requiredRole);
+  const companyId = await lookupCompanyId(projectId);
+  return hasCompanyAccess(session.effective_roles, companyId, requiredRole);
 }
 
 /**
  * SESSION path: derive per-project access from the caller's verified session.
  *
  * Reads the lumitra_session cookie, verifies it with auth-brain (30s cached),
- * and checks the payload's effective_roles. Retained signature so the ~dozen
- * stats/heatmap/session route call-sites need no change; `userId` is enforced
- * against the session as defense-in-depth.
+ * and checks the payload's effective_roles.tenants. Retained signature so the
+ * ~dozen stats/heatmap/session route call-sites need no change; `userId` is
+ * enforced against the session as defense-in-depth.
  *
  * Fail-closed: no cookie, a failed/expired verify (SDK maps timeouts + 5xx to
- * null), a user mismatch, or a missing workspace role all return false. There is
+ * null), a user mismatch, or a missing company role all return false. There is
  * NO "allow because we could not check" branch.
  */
 export async function checkProjectAccess(
   userId: string,
   projectId: string,
-  requiredRole: WorkspaceRequirement = 'workspace.viewer',
+  requiredRole: CompanyRequirement = 'tenant.viewer',
 ): Promise<boolean> {
   const jar = await cookies();
   const cookie = jar.get('lumitra_session')?.value;
@@ -85,12 +88,13 @@ export async function checkProjectAccess(
   const session = await authBrainClient.verifySession(cookie);
   if (!session?.user?.id || session.user.id !== userId) return false;
 
-  return checkWorkspaceAccessForSession(session, projectId, requiredRole);
+  return checkCompanyAccessForSession(session, projectId, requiredRole);
 }
 
 /**
- * @deprecated Use checkProjectAccess() with the workspace.viewer / workspace.admin role strings.
- * Kept as a backward-compat shim so existing routes continue to compile unchanged.
+ * @deprecated Use checkProjectAccess() with the tenant.viewer / tenant.member /
+ * tenant.admin role strings. Kept as a backward-compat shim so existing routes
+ * (all read-only, no requiredRoles) continue to compile unchanged.
  */
 export async function checkProjectMembership(
   userId: string,
@@ -102,11 +106,16 @@ export async function checkProjectMembership(
   // rather than silently downgrading the check.
   const role =
     !requiredRoles || requiredRoles.length === 0
-      ? 'workspace.viewer'
-      : requiredRoles.map(mapMembershipRole).includes('workspace.viewer')
-        ? 'workspace.viewer'
-        : 'workspace.admin';
+      ? 'tenant.viewer'
+      : leastPrivileged(requiredRoles.map(mapMembershipRole));
   return checkProjectAccess(userId, projectId, role);
+}
+
+/** The least-privileged (most permissive) requirement in a set. */
+function leastPrivileged(reqs: CompanyRequirement[]): CompanyRequirement {
+  if (reqs.includes('tenant.viewer')) return 'tenant.viewer';
+  if (reqs.includes('tenant.member')) return 'tenant.member';
+  return 'tenant.admin';
 }
 
 /**
@@ -120,22 +129,27 @@ export async function checkProjectMembership(
  * explicitly out of scope for this slice — the only payload-free way to
  * authorize the key owner per project is an OpenFGA `can()` by user id.
  *
- * This deliberately preserves the PRIOR semantics exactly (no widening, no local
- * rule invented) and is the single surviving direct-FGA decision in analytics.
- * Fail-closed on any FGA error. Escalated in the task report for follow-up.
+ * S2 re-point: the check is now "does this user hold `requiredRole` on the
+ * project's COMPANY" (a `tenant`-typed can()), not on its workspace. The SDK
+ * builds the FGA object as `tenant:<companyId>` with relation viewer/member/admin
+ * (verified against the SDK's can() implementation, which accepts scope=tenant).
+ *
+ * This preserves the PRIOR SHAPE (no widening, no local rule invented) and is
+ * the single surviving direct-FGA decision in analytics. Fail-closed on any FGA
+ * error and on a NULL/unknown company. Escalated in the task report for follow-up.
  */
 export async function checkAccountKeyProjectAccess(
   userId: string,
   projectId: string,
-  requiredRole: WorkspaceRequirement = 'workspace.viewer',
+  requiredRole: CompanyRequirement = 'tenant.viewer',
 ): Promise<boolean> {
-  const workspaceId = await lookupWorkspaceId(projectId);
-  if (!workspaceId) return false;
+  const companyId = await lookupCompanyId(projectId);
+  if (!companyId) return false;
   try {
     return await authBrainClient.can(userId, requiredRole, {
-      type: 'workspace',
-      id: workspaceId,
-      workspaceId,
+      type: 'tenant',
+      id: companyId,
+      tenantId: companyId,
     });
   } catch {
     // can() throws on OpenFGA errors; deny rather than 500 or fall open.

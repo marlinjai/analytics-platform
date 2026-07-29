@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 // POST — Create a new test link
 export async function POST(request: NextRequest, { params }: Params) {
   const { projectId } = await params;
-  const authResult = await authenticateRequest(request, projectId);
+  const authResult = await authenticateRequest(request, projectId, ['member']);
   if (!authResult.authenticated) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 // DELETE — Delete a test link
 export async function DELETE(request: NextRequest, { params }: Params) {
   const { projectId } = await params;
-  const authResult = await authenticateRequest(request, projectId);
+  const authResult = await authenticateRequest(request, projectId, ['member']);
   if (!authResult.authenticated) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
