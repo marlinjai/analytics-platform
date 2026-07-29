@@ -10,8 +10,11 @@
  * test builds fixtures typed as the published `ErasureWebhookPayload`, so both
  * sides are proven to agree through the real package.
  *
- * 1.4.0 added `workspace_ids: string[]` to the tenant.erased payload; the analytics
- * consumer keys its deletion off that list (its data model is workspace-scoped).
+ * 1.4.0 added `workspace_ids: string[]` to the tenant.erased payload; that field
+ * stays in the contract for other consumers, but ANALYTICS keys its deletion off
+ * `tenant_id` (the auth-brain company; post-S2 `projects.company_id` is that tenant
+ * id and NOT NULL) — see lib/erasure/erase.ts. Keying off the company is robust to
+ * the per-project workspaces being deleted (S4), which the workspace list is not.
  */
 import { z } from 'zod';
 import type { ErasureWebhookKind, ErasureWebhookPayload } from '@marlinjai/auth-brain-shared';

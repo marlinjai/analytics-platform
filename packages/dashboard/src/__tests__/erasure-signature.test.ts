@@ -116,6 +116,9 @@ describe('erasureWebhookPayloadSchema wire-contract with @marlinjai/auth-brain-s
     if (parsed.success) {
       expect(parsed.data.kind).toBe('tenant.erased');
       expect(parsed.data.workspace_ids).toHaveLength(2);
+      // Analytics keys erasure off tenant_id (the company), so the wire contract
+      // must carry it on tenant.erased and the schema must surface it intact.
+      expect(parsed.data.tenant_id).toBe('ten_1');
     }
   });
 

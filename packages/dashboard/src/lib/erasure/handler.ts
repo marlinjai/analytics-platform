@@ -12,7 +12,7 @@
  */
 import type { ErasureWebhookInput } from './schema';
 import type { ErasureStore } from './store';
-import { eraseUser, eraseWorkspaces } from './erase';
+import { eraseUser, eraseCompany } from './erase';
 
 export type ErasureOutcome = 'noop' | 'completed';
 
@@ -36,10 +36,23 @@ export async function handleErasureEvent(
   }
 
   if (payload.kind === 'tenant.erased') {
-    // 1.4.0 carries workspace_ids for tenant.erased. Analytics is workspace-scoped,
-    // so this list is what drives deletion; an absent/empty list means the tenant
-    // has no analytics workspaces (a verified no-op, never a delete-everything).
-    await eraseWorkspaces(payload.workspace_ids ?? [], store);
+    // Analytics keys erasure off the COMPANY: post-S2 `projects.company_id` is the
+    // auth-brain tenant id, and `tenant.erased` always carries `tenant_id`. This is
+    // strictly more correct than keying off the payload's `workspace_ids`, which
+    // stop covering the company's projects once the per-project workspaces are
+    // deleted (S4).
+    //
+    // An absent/empty tenant_id is a LOUD failure, never a silent no-op: we must
+    // never interpret "no company" as "delete everything", and we must never ack an
+    // erasure we could not actually perform. Throwing fails the delivery so
+    // auth-brain retries and the gap surfaces. (A company that genuinely owns no
+    // projects still resolves to `[]` inside eraseCompany and is a verified no-op.)
+    if (!payload.tenant_id) {
+      throw new Error(
+        'tenant.erased is missing tenant_id: refusing to ack an erasure that cannot be keyed to a company',
+      );
+    }
+    await eraseCompany(payload.tenant_id, store);
   } else {
     // user.erased: delete the user's account-level API keys (see erase.ts audit).
     await eraseUser(payload.user_id, store);

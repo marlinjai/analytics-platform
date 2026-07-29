@@ -30,8 +30,10 @@ export interface ErasureStore {
   /** Mark an event fully processed. Only called after ALL deletion work succeeded. */
   completeEvent(eventId: string): Promise<void>;
 
-  /** Resolve the analytics project ids owned by the given auth-brain workspaces. */
-  findProjectIdsByWorkspaces(workspaceIds: string[]): Promise<string[]>;
+  /** Resolve the analytics project ids owned by the given auth-brain company
+   * (tenant). `projects.company_id` is the auth-brain tenant id and is NOT NULL,
+   * so this covers every project of the company regardless of workspace. */
+  findProjectIdsByCompany(companyId: string): Promise<string[]>;
   /** Issue the ClickHouse events deletion for one project (async mutation). */
   purgeClickHouseForProject(projectId: string): Promise<void>;
   /** Delete the given projects; all project-scoped Postgres rows cascade (FKs). */
@@ -75,10 +77,9 @@ export function createPgErasureStore(db: Db, clickhouse: ClickHouse): ErasureSto
       `;
     },
 
-    async findProjectIdsByWorkspaces(workspaceIds) {
-      if (workspaceIds.length === 0) return [];
+    async findProjectIdsByCompany(companyId) {
       const rows = await db<{ id: string }[]>`
-        SELECT id FROM projects WHERE workspace_id = ANY(${workspaceIds}::uuid[])
+        SELECT id FROM projects WHERE company_id = ${companyId}::uuid
       `;
       return rows.map((r) => r.id);
     },
