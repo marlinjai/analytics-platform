@@ -645,12 +645,13 @@ export default function SettingsPage() {
         )}
       </section>
 
-      {/* Team section — membership is owned by auth-brain (Lumitra accounts) */}
+      {/* Team section: membership is owned by auth-brain (Lumitra accounts). */}
       <section className="rounded-xl border border-gray-800 bg-gray-900 p-6">
         <h2 className="mb-1 text-lg font-semibold text-gray-100">Team</h2>
         <p className="mb-4 text-xs text-gray-400">
-          Project access is managed centrally in your Lumitra account. Each project maps to a
-          workspace there: invite teammates, change roles, and remove access from the account portal.
+          Project access is managed centrally in your Lumitra account. Every project belongs to a
+          company, and anyone with a role on that company can reach all of its projects: invite
+          teammates, change roles, and remove access from the account portal.
         </p>
         <a
           href={process.env.NEXT_PUBLIC_AUTH_BRAIN_URL ?? 'https://auth.lumitra.co'}

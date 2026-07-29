@@ -53,7 +53,7 @@ export default function RequestAccessPage() {
           company before you can continue.
         </p>
         <p className="mt-4 text-sm leading-relaxed text-gray-400">
-          Ask your workspace administrator to grant your company the Analytics app, then reload
+          Ask an owner or admin of your company to enable the Analytics app for it, then reload
           this page.
         </p>
 
