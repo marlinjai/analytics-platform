@@ -106,10 +106,21 @@ export async function POST(request: NextRequest) {
       const data = (await upstream.json()) as { error?: string };
       if (data?.error) error = data.error;
     } catch {
-      /* non-JSON body — keep the generic message */
+      /* non-JSON body: keep the generic message */
     }
     return NextResponse.json({ error }, { status: upstream.status });
   }
+
+  // READ-YOUR-OWN-WRITE. The SDK client caches verify payloads in-process for
+  // `cacheTtlMs` (30s here). We just CHANGED the session's active scope on
+  // auth-brain, so every cached payload for this cookie is now stale by
+  // definition. Without this the page reloads, re-reads the cache, and renders
+  // the OLD company: the switch looks like it did nothing and the user clicks
+  // again (and again) until the TTL expires. Hit in production 2026-07-29.
+  //
+  // Invalidate AFTER the upstream write is confirmed, never before: clearing on
+  // a rejected switch would throw away a valid cached payload for nothing.
+  authBrainClient.invalidateSession(cookie);
 
   return NextResponse.json({ ok: true, activeCompanyId: companyId });
 }

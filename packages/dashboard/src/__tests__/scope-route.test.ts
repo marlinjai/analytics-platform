@@ -26,9 +26,15 @@ vi.mock('next/headers', () => ({
 }));
 
 let sessionToReturn: SessionVerifyResponse | null = null;
+const invalidateSession = vi.fn();
 vi.mock('@/lib/auth-brain', () => ({
   AUTH_BRAIN_URL: 'https://auth.test',
-  authBrainClient: { verifySession: vi.fn(async () => sessionToReturn) },
+  authBrainClient: {
+    verifySession: vi.fn(async () => sessionToReturn),
+    // The real client caches verify payloads for 30s. A scope switch MUST drop
+    // that entry or the next read serves the pre-switch active_tenant.
+    invalidateSession: (...args: unknown[]) => invalidateSession(...args),
+  },
 }));
 
 import { POST } from '@/app/api/scope/route';
@@ -68,6 +74,7 @@ beforeEach(() => {
   cookieValue = 'valid-cookie';
   sessionToReturn = session([{ id: CO_A, role: 'admin' }]);
   fetchMock.mockReset();
+  invalidateSession.mockReset();
   vi.stubGlobal('fetch', fetchMock);
 });
 
@@ -84,6 +91,34 @@ describe('POST /api/scope', () => {
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body)).toEqual({ tenant_id: CO_A, workspace_id: null });
     expect(init.headers.Cookie).toBe('lumitra_session=valid-cookie');
+  });
+
+  // READ-YOUR-OWN-WRITE. The real SDK client caches verify payloads for 30s, so a
+  // switch that does not invalidate leaves the next read serving the PRE-switch
+  // active_tenant: the UI snaps back to the old company and the user clicks over
+  // and over until the TTL expires. Reported live 2026-07-29.
+  it('invalidates the cached verify payload for THIS cookie after a successful switch', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+    await POST(req({ companyId: CO_A }));
+    expect(invalidateSession).toHaveBeenCalledTimes(1);
+    expect(invalidateSession).toHaveBeenCalledWith('valid-cookie');
+  });
+
+  it('does NOT invalidate when auth-brain REJECTS the switch (nothing changed upstream)', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 403, json: async () => ({ error: 'nope' }) });
+    await POST(req({ companyId: CO_A }));
+    expect(invalidateSession).not.toHaveBeenCalled();
+  });
+
+  it('does NOT invalidate when auth-brain is unreachable', async () => {
+    fetchMock.mockRejectedValue(new Error('network down'));
+    await POST(req({ companyId: CO_A }));
+    expect(invalidateSession).not.toHaveBeenCalled();
+  });
+
+  it('does NOT invalidate when the target is not switchable (auth-brain never called)', async () => {
+    await POST(req({ companyId: CO_B }));
+    expect(invalidateSession).not.toHaveBeenCalled();
   });
 
   it('propagates auth-brain rejection faithfully (never coerces to success)', async () => {
