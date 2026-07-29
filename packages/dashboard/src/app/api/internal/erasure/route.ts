@@ -9,8 +9,9 @@
  *      missing/bad signature -> 401.
  *   2. parse the body with the shared-contract schema (malformed -> 400);
  *   3. process idempotently: for a `tenant.erased`, delete every analytics project
- *      owned by the payload's `workspace_ids` plus all project-scoped Postgres rows
- *      and ClickHouse events; for a `user.erased`, delete the user's account API keys;
+ *      owned by the payload's `tenant_id` (the auth-brain company; `projects.company_id`)
+ *      plus all project-scoped Postgres rows and ClickHouse events; for a `user.erased`,
+ *      delete the user's account API keys;
  *   4. ack 200 ONLY after all deletion work succeeded. Any partial failure -> 5xx
  *      so auth-brain retries; the deletion is idempotent so the retry converges.
  *
