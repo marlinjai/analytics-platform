@@ -40,7 +40,7 @@ function mapMembershipRole(role: string): CompanyRequirement {
 
 /** Resolve a project's owning company id. Returns null if the project has no
  * company (unreachable project) or does not exist — both DENY downstream. */
-async function lookupCompanyId(projectId: string): Promise<string | null> {
+export async function lookupCompanyId(projectId: string): Promise<string | null> {
   const db = getDb();
   const [project] = await db<{ company_id: string }[]>`
     SELECT company_id FROM projects WHERE id = ${projectId} AND company_id IS NOT NULL
@@ -203,43 +203,4 @@ function leastPrivileged(reqs: CompanyRequirement[]): CompanyRequirement {
   if (reqs.includes('tenant.viewer')) return 'tenant.viewer';
   if (reqs.includes('tenant.member')) return 'tenant.member';
   return 'tenant.admin';
-}
-
-/**
- * ACCOUNT-KEY (machine) path — NAMED, JUSTIFIED OpenFGA SURVIVOR.
- *
- * Local analytics account keys (the `account_api_keys` table) authenticate a
- * machine AS an auth-brain user, but they produce NO session verify payload:
- * there is no cookie to verify, and auth-brain does not know these local keys,
- * so `verifyApiKey()` cannot return their effective_roles either. Until account
- * keys are re-issued as auth-brain service accounts — an auth-brain change,
- * explicitly out of scope for this slice — the only payload-free way to
- * authorize the key owner per project is an OpenFGA `can()` by user id.
- *
- * S2 re-point: the check is now "does this user hold `requiredRole` on the
- * project's COMPANY" (a `tenant`-typed can()), not on its workspace. The SDK
- * builds the FGA object as `tenant:<companyId>` with relation viewer/member/admin
- * (verified against the SDK's can() implementation, which accepts scope=tenant).
- *
- * This preserves the PRIOR SHAPE (no widening, no local rule invented) and is
- * the single surviving direct-FGA decision in analytics. Fail-closed on any FGA
- * error and on a NULL/unknown company. Escalated in the task report for follow-up.
- */
-export async function checkAccountKeyProjectAccess(
-  userId: string,
-  projectId: string,
-  requiredRole: CompanyRequirement = 'tenant.viewer',
-): Promise<boolean> {
-  const companyId = await lookupCompanyId(projectId);
-  if (!companyId) return false;
-  try {
-    return await authBrainClient.can(userId, requiredRole, {
-      type: 'tenant',
-      id: companyId,
-      tenantId: companyId,
-    });
-  } catch {
-    // can() throws on OpenFGA errors; deny rather than 500 or fall open.
-    return false;
-  }
 }

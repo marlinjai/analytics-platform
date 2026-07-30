@@ -173,7 +173,12 @@ async function ensureAccountKey(): Promise<StoredCredentials> {
   const cached = loadCredentials();
   if (cached) {
     try {
-      const res = await fetch(`${cached.endpoint}/api/account/keys`, {
+      // Liveness probe for the cached key. Uses the project LIST rather than a
+      // key-management endpoint: analytics no longer mints or lists machine
+      // credentials (that moved to auth-brain), so `/api/account/keys` is gone.
+      // `/api/projects` is the cheapest call that exercises the same
+      // company-scoped authorization the rest of the CLI depends on.
+      const res = await fetch(`${cached.endpoint}/api/projects`, {
         headers: { 'X-API-Key': cached.accountKey },
       });
       if (res.ok) {
@@ -195,13 +200,16 @@ async function ensureAccountKey(): Promise<StoredCredentials> {
     return { accountKey: envKey, endpoint: envEndpoint };
   }
 
-  // 3. No interactive login. The legacy browser device-flow was retired with
-  // the auth-brain cutover; account keys are issued from the dashboard. (The
-  // eventual home for a machine credential is an auth-brain service-account
-  // key, validated via the SDK's verifyApiKey.)
+  // 3. No interactive login. The legacy browser device-flow was retired with the
+  // auth-brain cutover, and as of 2026-07-30 the machine credential IS an
+  // auth-brain service-account key (the "eventual home" this comment used to
+  // anticipate). It is minted in auth-brain, not analytics: creating credentials
+  // belongs to the identity service.
   throw new Error(
-    'Not authenticated. Create an account key in the analytics dashboard, then ' +
-      'set LUMITRA_ACCOUNT_KEY (and optionally LUMITRA_ENDPOINT) and re-run.',
+    'Not authenticated. Mint a company-scoped service-account key in auth-brain ' +
+      '(https://auth.lumitra.co), then set LUMITRA_ACCOUNT_KEY (and optionally ' +
+      'LUMITRA_ENDPOINT) and re-run. The key is scoped to ONE company and reaches ' +
+      'every analytics project in it.',
   );
 }
 

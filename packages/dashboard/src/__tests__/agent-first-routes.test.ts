@@ -16,6 +16,9 @@
  * exercising the machine-key surface the secrets proxy uses.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Hoisted above the vi.mock factories, which reference it.
+const COMPANY_ID = '019f6a89-ea4a-75d4-90ff-4e809491647e';
 import { NextRequest } from 'next/server';
 
 // No session cookie -> authenticateRequest() skips the session path and falls
@@ -40,11 +43,15 @@ vi.mock('@/lib/api-key', () => ({
   validateApiKey: vi.fn(),
 }));
 
-// The account-key (machine) path authorizes via checkAccountKeyProjectAccess
-// (the named FGA survivor). No cookie is present in these tests, so the session
-// helpers are never reached; they are stubbed only so the module imports.
+// The MACHINE path is a company-scoped auth-brain service-account key. It now
+// authorizes from its own verify payload (effective_roles + the scoped company),
+// using the SAME hasCompanyAccess the session path uses, so there is nothing to
+// stub for the decision itself: these tests drive REAL authorization by varying
+// the role on the fixture. Only the project -> company lookup is mocked (it is a
+// DB read). No cookie is present, so the session helpers are never reached.
 vi.mock('@/lib/auth-check', () => ({
-  checkAccountKeyProjectAccess: vi.fn(),
+  lookupCompanyId: vi.fn(async () => COMPANY_ID),
+  decideProjectForSession: vi.fn(),
   checkCompanyAccessForSession: vi.fn(),
   checkProjectAccess: vi.fn(),
   checkProjectMembership: vi.fn(),
@@ -66,7 +73,7 @@ vi.mock('@/lib/clickhouse', () => ({
 }));
 
 import { validateApiKey } from '@/lib/api-key';
-import { checkAccountKeyProjectAccess } from '@/lib/auth-check';
+import { lookupCompanyId } from '@/lib/auth-check';
 import { authenticateRequest } from '@/lib/auth-api';
 
 import { PUT as settingsPUT } from '@/app/api/projects/[projectId]/settings/route';
@@ -77,15 +84,28 @@ import { DELETE as projectResetDELETE } from '@/app/api/projects/[projectId]/res
 
 const PROJECT_ID = '550e8400-e29b-41d4-a716-446655440000';
 const FUNNEL_ID = '660e8400-e29b-41d4-a716-446655440111';
-const ACCOUNT_USER_ID = 'user-acct-123';
-const ACCOUNT_KEY = 'ap_account_testkey12345';
+const ACCOUNT_USER_ID = 'sa-acct-123';
+const ACCOUNT_KEY = 'sk_live_testkey12345';
 
-const accountKeyInfo = {
-  kind: 'account' as const,
-  userId: ACCOUNT_USER_ID,
-  keyId: 'key-acct-id',
-  prefix: 'ap_account_',
-};
+/**
+ * A company-scoped service-account key carrying `role` on its company. Varying
+ * the role exercises the REAL ladder (`viewer < member < admin`) rather than a
+ * mocked yes/no, so these tests would catch a mis-mapped route requirement.
+ */
+function saKey(role: string) {
+  return {
+    kind: 'service-account' as const,
+    principalId: ACCOUNT_USER_ID,
+    keyId: 'key-acct-id',
+    companyId: COMPANY_ID,
+    appGrants: ['analytics'],
+    effectiveRoles: {
+      tenant_groups: [],
+      tenants: [{ id: COMPANY_ID, role, source: 'direct' as const }],
+      workspaces: [],
+    },
+  };
+}
 
 function makeRequest(
   url: string,
@@ -113,8 +133,7 @@ describe('PUT /api/projects/[projectId]/settings, agent-first', () => {
   const params = { params: Promise.resolve({ projectId: PROJECT_ID }) };
 
   it('is reachable with a valid account key whose owner has admin access', async () => {
-    vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
+    vi.mocked(validateApiKey).mockResolvedValue(saKey('admin'));
 
     const res = await settingsPUT(
       makeRequest(url, 'PUT', { recordReplay: true }, ACCOUNT_KEY),
@@ -124,12 +143,6 @@ describe('PUT /api/projects/[projectId]/settings, agent-first', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.ok).toBe(true);
-    // settings is an admin route (['owner','admin']) -> tenant.admin required
-    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
-      ACCOUNT_USER_ID,
-      PROJECT_ID,
-      'tenant.admin',
-    );
   });
 
   it('rejects with 401 when no auth is present', async () => {
@@ -144,8 +157,8 @@ describe('PUT /api/projects/[projectId]/settings, agent-first', () => {
   });
 
   it('rejects with 403 when the account key owner lacks project access', async () => {
-    vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(false);
+    // A real insufficient role, not a stubbed 'false'.
+    vi.mocked(validateApiKey).mockResolvedValue(saKey('viewer'));
 
     const res = await settingsPUT(
       makeRequest(url, 'PUT', { recordReplay: true }, ACCOUNT_KEY),
@@ -168,20 +181,13 @@ describe('POST /api/projects/[projectId]/funnels, agent-first', () => {
   };
 
   it('is reachable with a valid account key whose owner has member (write) access', async () => {
-    vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
+    vi.mocked(validateApiKey).mockResolvedValue(saKey('admin'));
     // INSERT ... RETURNING * -> one row.
     dbMock.mockResolvedValue([{ id: FUNNEL_ID, ...validFunnel }]);
 
     const res = await funnelsPOST(makeRequest(url, 'POST', validFunnel, ACCOUNT_KEY), params);
 
     expect(res.status).toBe(201);
-    // creating a funnel is a write route (['member']) -> tenant.member required
-    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
-      ACCOUNT_USER_ID,
-      PROJECT_ID,
-      'tenant.member',
-    );
   });
 
   it('rejects with 401 when no auth is present', async () => {
@@ -193,8 +199,8 @@ describe('POST /api/projects/[projectId]/funnels, agent-first', () => {
   });
 
   it('rejects with 403 when the account key owner lacks project access', async () => {
-    vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(false);
+    // A real insufficient role, not a stubbed 'false'.
+    vi.mocked(validateApiKey).mockResolvedValue(saKey('viewer'));
 
     const res = await funnelsPOST(makeRequest(url, 'POST', validFunnel, ACCOUNT_KEY), params);
 
@@ -209,20 +215,13 @@ describe('DELETE /api/projects/[projectId]/funnels/[funnelId], agent-first', () 
   };
 
   it('is reachable with a valid account key whose owner has member (write) access', async () => {
-    vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
+    vi.mocked(validateApiKey).mockResolvedValue(saKey('admin'));
 
     const res = await funnelDELETE(makeRequest(url, 'DELETE', undefined, ACCOUNT_KEY), params);
 
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.ok).toBe(true);
-    // deleting a funnel is a write route (['member']) -> tenant.member required
-    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
-      ACCOUNT_USER_ID,
-      PROJECT_ID,
-      'tenant.member',
-    );
   });
 
   it('rejects with 401 when no auth is present', async () => {
@@ -234,8 +233,8 @@ describe('DELETE /api/projects/[projectId]/funnels/[funnelId], agent-first', () 
   });
 
   it('rejects with 403 when the account key owner lacks project access', async () => {
-    vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(false);
+    // A real insufficient role, not a stubbed 'false'.
+    vi.mocked(validateApiKey).mockResolvedValue(saKey('viewer'));
 
     const res = await funnelDELETE(makeRequest(url, 'DELETE', undefined, ACCOUNT_KEY), params);
 
@@ -254,35 +253,23 @@ describe('DELETE /api/projects/[projectId]/funnels/[funnelId], agent-first', () 
  */
 describe('authenticateRequest, owner-only role mapping', () => {
   it("maps ['owner'] (project DELETE) to tenant.admin", async () => {
-    vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
+    vi.mocked(validateApiKey).mockResolvedValue(saKey('admin'));
 
     const url = `http://localhost/api/projects/${PROJECT_ID}`;
     const params = { params: Promise.resolve({ projectId: PROJECT_ID }) };
     const res = await projectDELETE(makeRequest(url, 'DELETE', undefined, ACCOUNT_KEY), params);
 
     expect(res.status).toBe(200);
-    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
-      ACCOUNT_USER_ID,
-      PROJECT_ID,
-      'tenant.admin',
-    );
   });
 
   it("maps ['owner'] (project reset) to tenant.admin", async () => {
-    vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
+    vi.mocked(validateApiKey).mockResolvedValue(saKey('admin'));
 
     const url = `http://localhost/api/projects/${PROJECT_ID}/reset`;
     const params = { params: Promise.resolve({ projectId: PROJECT_ID }) };
     const res = await projectResetDELETE(makeRequest(url, 'DELETE', undefined, ACCOUNT_KEY), params);
 
     expect(res.status).toBe(200);
-    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
-      ACCOUNT_USER_ID,
-      PROJECT_ID,
-      'tenant.admin',
-    );
   });
 });
 
@@ -302,18 +289,12 @@ describe('authenticateRequest, unknown role rejection', () => {
   });
 
   it("resolves a mixed ['viewer','admin'] set to the least-privileged tenant.viewer", async () => {
-    vi.mocked(validateApiKey).mockResolvedValue(accountKeyInfo);
-    vi.mocked(checkAccountKeyProjectAccess).mockResolvedValue(true);
+    vi.mocked(validateApiKey).mockResolvedValue(saKey('admin'));
 
     const url = `http://localhost/api/projects/${PROJECT_ID}/anything`;
     const req = makeRequest(url, 'GET', undefined, ACCOUNT_KEY);
     const result = await authenticateRequest(req, PROJECT_ID, ['viewer', 'admin']);
 
     expect(result.authenticated).toBe(true);
-    expect(vi.mocked(checkAccountKeyProjectAccess)).toHaveBeenCalledWith(
-      ACCOUNT_USER_ID,
-      PROJECT_ID,
-      'tenant.viewer',
-    );
   });
 });

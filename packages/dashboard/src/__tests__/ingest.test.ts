@@ -128,12 +128,16 @@ describe('POST /api/ingest', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 403 when an account key is used', async () => {
+  it('returns 403 when a company-scoped service-account key is used', async () => {
+    // Ingest is a PROJECT-key surface. A company-scoped machine key is a valid
+    // credential but the wrong one here, and must not be able to write events.
     vi.mocked(validateApiKey).mockResolvedValue({
-      kind: 'account',
-      userId: 'user-1',
-      keyId: 'acct-key',
-      prefix: 'ap_account_',
+      kind: 'service-account',
+      principalId: 'sa-1',
+      keyId: 'sa-key',
+      companyId: '019f6a89-ea4a-75d4-90ff-4e809491647e',
+      appGrants: ['analytics'],
+      effectiveRoles: { tenant_groups: [], tenants: [], workspaces: [] },
     });
     const res = await POST(makeRequest(makeServerEvents()));
     expect(res.status).toBe(403);

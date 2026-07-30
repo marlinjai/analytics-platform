@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createProjectSchema } from '@analytics-platform/shared';
 import { authenticateAccountRequest, corsHeaders } from '@/lib/auth-api';
-import { authBrainClient } from '@/lib/auth-brain';
-import { checkAccountKeyProjectAccess } from '@/lib/auth-check';
 import { hasCompanyAccess } from '@/lib/project-access';
 import { resolveActiveCompanyId } from '@/lib/scope';
 import { getDb } from '@/lib/db';
@@ -38,11 +36,10 @@ export async function GET(request: NextRequest) {
   //     is scoped to the ACTIVE company only (not "every company the user can
   //     read"). Otherwise the switcher would offer projects the boundary then
   //     404s. A null active scope yields an empty list — nothing is in scope.
-  //     Account keys are excluded from the boundary (see below); this is the
-  //     session-only rule.
-  //   - account key (machine): no verify payload exists and no active scope, so
-  //     authorize the key owner via the named FGA survivor (a tenant-scoped
-  //     can()) by COMPANY MEMBERSHIP as S2 left them. Fail-closed per project.
+  //     The active scope is a SESSION concept; a machine caller has none (below).
+  //   - service-account key (machine): its scoped COMPANY is its boundary, which
+  //     is the machine equivalent of an active scope. Filter to that company and
+  //     apply the same role check. Pure payload, no FGA, no per-item round trip.
   let projects: ProjectRow[];
   if (authResult.principal === 'session') {
     const activeCompanyId = resolveActiveCompanyId(authResult.session);
@@ -54,10 +51,11 @@ export async function GET(request: NextRequest) {
         )
       : [];
   } else {
-    const allowed = await Promise.all(
-      candidates.map((p) => checkAccountKeyProjectAccess(authResult.userId, p.id, 'tenant.viewer')),
+    projects = candidates.filter(
+      (p) =>
+        p.company_id === authResult.companyId &&
+        hasCompanyAccess(authResult.effectiveRoles, p.company_id, 'tenant.viewer'),
     );
-    projects = candidates.filter((_, i) => allowed[i]);
   }
 
   return NextResponse.json({ projects });
@@ -81,21 +79,16 @@ export async function POST(request: NextRequest) {
   // request, but is NEVER trusted on its own — we confirm the caller actually
   // holds tenant.admin on it before creating the project:
   //   - session: check the verified payload's company roles (no FGA).
-  //   - account key (CLI): no verify payload exists, so a tenant-scoped can()
-  //     (the named FGA survivor) authorizes the key owner. Fail-closed.
+  //   - service-account key (CLI): same check against ITS payload, and the target
+  //     must be the company the key is scoped to. A key cannot create a project in
+  //     a company it was not issued for, even if its principal holds admin there.
   let authorized: boolean;
   if (authResult.principal === 'session') {
     authorized = hasCompanyAccess(authResult.session.effective_roles, companyId, 'tenant.admin');
   } else {
-    try {
-      authorized = await authBrainClient.can(authResult.userId, 'tenant.admin', {
-        type: 'tenant',
-        id: companyId,
-        tenantId: companyId,
-      });
-    } catch {
-      authorized = false;
-    }
+    authorized =
+      companyId === authResult.companyId &&
+      hasCompanyAccess(authResult.effectiveRoles, companyId, 'tenant.admin');
   }
   if (!authorized) {
     return NextResponse.json(

@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
-import type { SessionVerifyResponse } from '@marlinjai/auth-brain-shared';
+import type { EffectiveRoles, SessionVerifyResponse } from '@marlinjai/auth-brain-shared';
 import { authBrainClient } from '@/lib/auth-brain';
-import { decideProjectForSession, checkAccountKeyProjectAccess } from '@/lib/auth-check';
-import type { CompanyRequirement } from '@/lib/project-access';
+import { decideProjectForSession, lookupCompanyId } from '@/lib/auth-check';
+import { hasCompanyAccess, type CompanyRequirement } from '@/lib/project-access';
 import { validateApiKey } from '@/lib/api-key';
-import { evaluateAnalyticsGrant, logGrantVersionSkew } from '@/lib/app-grants';
+import { ANALYTICS_APP_SLUG, evaluateAnalyticsGrant, logGrantVersionSkew } from '@/lib/app-grants';
 
 type AuthSuccess = {
   authenticated: true;
@@ -138,9 +138,11 @@ function projectKeyForbidden(requiredRoles?: string[]): boolean {
  * 1. Try session cookie -> verifySession() -> per-project decision from the
  *    payload's effective_roles (no FGA)
  * 2. If no session, try API key from X-API-Key header
- * 3. Project keys: verify the key's projectId matches the route's projectId
- * 4. Account keys: verify user has workspace access to the route's project
- * 5. API keys carry implicit "admin" access level
+ * 3. Project keys (`ap_live_`/`ap_test_`): the key's projectId must match the
+ *    route's, and they carry implicit admin over their OWN project only
+ * 4. Service-account keys (`sk_live_`): verifyApiKey() -> the SAME door + company
+ *    role check the session path runs, against the key's scoped company. There is
+ *    no OpenFGA call on either path (decision 2: one decision plane)
  *
  * requiredRoles map to auth-brain tenant requirements via resolveRequiredRole():
  *   ['viewer'] / undefined / [] -> 'tenant.viewer'
@@ -179,18 +181,28 @@ export async function authenticateRequest(
     return { authenticated: false, error: 'Invalid or revoked API key', status: 401 };
   }
 
-  if (keyInfo.kind === 'account') {
-    // Machine principal: no verify payload exists for a local account key, so
-    // this is the named FGA survivor. See checkAccountKeyProjectAccess().
-    const hasAccess = await checkAccountKeyProjectAccess(keyInfo.userId, projectId, requiredRole);
-    if (!hasAccess) {
-      return {
-        authenticated: false,
-        error: 'Account key owner does not have access to this project',
-        status: 403,
-      };
+  if (keyInfo.kind === 'service-account') {
+    // Machine principal, authorized from the SAME payload shape as a human
+    // session. auth-brain's verifyApiKey returns effective_roles + the scoped
+    // company's app_grants, so this branch runs the identical door + role check
+    // the session branch runs, and there is no OpenFGA call anywhere in
+    // analytics any more (decision 2: one decision plane).
+    //
+    // The company BOUNDARY is the key's own scope: a key scoped to company A
+    // cannot reach a project in company B, exactly as a human whose active
+    // company is A cannot. Foreign project -> 404, never 403: a machine caller
+    // must not be able to probe which project ids exist elsewhere either.
+    if (!keyInfo.appGrants.includes(ANALYTICS_APP_SLUG)) {
+      return NO_GRANT_FAILURE;
     }
-    return { authenticated: true, userId: keyInfo.userId, projectId };
+    const projectCompanyId = await lookupCompanyId(projectId);
+    if (!projectCompanyId || projectCompanyId !== keyInfo.companyId) {
+      return { authenticated: false, error: 'Not found', status: 404 };
+    }
+    if (!hasCompanyAccess(keyInfo.effectiveRoles, projectCompanyId, requiredRole)) {
+      return { authenticated: false, error: 'Forbidden', status: 403 };
+    }
+    return { authenticated: true, userId: `service_account:${keyInfo.principalId}`, projectId };
   }
 
   if (keyInfo.projectId !== projectId) {
@@ -209,13 +221,23 @@ export async function authenticateRequest(
  * Supports session auth or account-level API keys.
  *
  * On success it reports the principal kind and, for a session, the verified
- * payload — so callers that must filter a resource LIST by per-project access
- * (e.g. GET /api/projects) can decide from `session.effective_roles` instead of
- * a per-item FGA round-trip. Account-key principals carry no payload.
+ * payload, so callers that must filter a resource LIST by per-project access
+ * (e.g. GET /api/projects) can decide from `session.effective_roles`.
+ *
+ * A SERVICE-ACCOUNT principal now carries a payload too (effective roles plus its
+ * scoped company), so list filtering works identically for both: no principal
+ * needs a per-item round trip any more.
  */
 type AccountAuthSuccess =
   | { authenticated: true; principal: 'session'; userId: string; session: SessionVerifyResponse }
-  | { authenticated: true; principal: 'account-key'; userId: string; session?: undefined };
+  | {
+      authenticated: true;
+      principal: 'service-account';
+      userId: string;
+      companyId: string;
+      effectiveRoles: EffectiveRoles;
+      session?: undefined;
+    };
 
 export async function authenticateAccountRequest(
   request: NextRequest,
@@ -237,15 +259,26 @@ export async function authenticateAccountRequest(
   const keyInfo = await validateApiKey(apiKey);
   if (!keyInfo) return { authenticated: false, error: 'Invalid or revoked API key', status: 401 };
 
-  if (keyInfo.kind !== 'account') {
+  if (keyInfo.kind !== 'service-account') {
     return {
       authenticated: false,
-      error: 'Project-level API keys cannot perform account-level operations. Use an account key (ap_account_).',
+      error:
+        'Project-level API keys cannot perform account-level operations. Use an auth-brain service-account key (sk_live_) scoped to the company.',
       status: 403,
     };
   }
 
-  return { authenticated: true, principal: 'account-key', userId: keyInfo.userId };
+  // The door applies to machine callers too: a company without the analytics
+  // entitlement gets nothing, whoever is asking.
+  if (!keyInfo.appGrants.includes(ANALYTICS_APP_SLUG)) return NO_GRANT_FAILURE;
+
+  return {
+    authenticated: true,
+    principal: 'service-account',
+    userId: `service_account:${keyInfo.principalId}`,
+    companyId: keyInfo.companyId,
+    effectiveRoles: keyInfo.effectiveRoles,
+  };
 }
 
 /**

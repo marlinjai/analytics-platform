@@ -47,7 +47,6 @@ const USER_2 = '88888888-8888-4888-8888-888888888888';
 
 interface Project { id: string; companyId: string; workspaceId: string }
 interface Scoped { id: string; projectId: string }
-interface ApiKey { id: string; userId: string }
 
 /** In-memory store modelling the cascade + idempotency ledger. */
 class FakeStore implements ErasureStore {
@@ -59,7 +58,6 @@ class FakeStore implements ErasureStore {
   settings: Scoped[] = [];
   goals: Scoped[] = [];
   clickhouseEvents = new Map<string, number>(); // projectId -> event count
-  accountApiKeys: ApiKey[] = [];
 
   /** Records every project id a ClickHouse purge mutation was issued for, in order. */
   purgeCalls: string[] = [];
@@ -115,11 +113,6 @@ class FakeStore implements ErasureStore {
     this.goals = drop(this.goals);
   }
 
-  async deleteAccountApiKeysForUser(userId: string): Promise<number> {
-    const before = this.accountApiKeys.length;
-    this.accountApiKeys = this.accountApiKeys.filter((k) => k.userId !== userId);
-    return before - this.accountApiKeys.length;
-  }
 
   // Test helpers.
   hasProject(id: string) { return this.projects.some((p) => p.id === id); }
@@ -137,7 +130,6 @@ beforeEach(() => {
   store.seedProject(COMPANY_1, PROJ_A, WS_A, 'A');
   store.seedProject(COMPANY_1, PROJ_B, WS_B, 'B');
   store.seedProject(COMPANY_2, PROJ_C, WS_C, 'C');
-  store.accountApiKeys.push({ id: 'k1', userId: USER_1 }, { id: 'k2', userId: USER_1 }, { id: 'k3', userId: USER_2 });
   setErasureStoreOverride(store);
 });
 
@@ -338,7 +330,12 @@ describe('POST /api/internal/erasure - partial failure + retry', () => {
 });
 
 describe('POST /api/internal/erasure - user.erased', () => {
-  it("deletes only the erased user's account API keys, leaves others + all project data untouched", async () => {
+  // CHANGED 2026-07-30: analytics holds ZERO user-keyed rows. The last were local
+  // account API keys, which became auth-brain service-account keys (owned by a
+  // service-account principal scoped to a COMPANY, not by a human), so auth-brain
+  // erases its own credentials. This is a VERIFIED no-op, asserted as such: the
+  // request must still ack cleanly and must touch nothing.
+  it('is a verified no-op that acks cleanly and touches no project data', async () => {
     const payload: ErasureWebhookPayload = {
       event_id: 'evt-user',
       kind: 'user.erased',
@@ -349,8 +346,8 @@ describe('POST /api/internal/erasure - user.erased', () => {
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({ outcome: 'completed' });
 
-    // USER_1's two keys gone; USER_2's key remains.
-    expect(store.accountApiKeys.map((k) => k.id).sort()).toEqual(['k3']);
+    // Nothing to delete, and crucially nothing deleted by accident.
+    expect(store.purgeCalls).toHaveLength(0);
     // No project data touched, no ClickHouse mutations.
     expect(store.purgeCalls).toHaveLength(0);
     expect(store.projects).toHaveLength(3);

@@ -16,7 +16,7 @@ on the Lumitra analytics platform directly from your development environment.
 
 Credentials are read from environment variables:
 - \`LUMITRA_API_KEY\` or \`NEXT_PUBLIC_ANALYTICS_API_KEY\` -- Project-level API key (\`ap_live_\` prefix)
-- \`LUMITRA_ACCOUNT_KEY\` -- Account-level API key (\`ap_account_\` prefix) for cross-project operations
+- \`LUMITRA_ACCOUNT_KEY\` -- Company-scoped auth-brain service-account key (\`sk_live_\` prefix) for cross-project operations within one company
 - \`LUMITRA_PROJECT_ID\` or \`NEXT_PUBLIC_ANALYTICS_PROJECT_ID\` -- Project UUID
 - \`LUMITRA_ENDPOINT\` -- API base URL (default: https://analytics.lumitra.co)
 
@@ -25,12 +25,16 @@ Credentials are read from environment variables:
 All API calls use the \`X-API-Key\` header:
 \`\`\`
 X-API-Key: ap_live_xxxxx      # project-level (single project access)
-X-API-Key: ap_account_xxxxx   # account-level (all projects + can create projects)
+X-API-Key: sk_live_xxxxx      # company-scoped (all projects IN THAT COMPANY + can create projects there)
 \`\`\`
 
 ### Key types
 - **Project keys** (\`ap_live_\`, \`ap_test_\`): Scoped to a single project. Can manage experiments, flags, and ingest events for that project.
-- **Account keys** (\`ap_account_\`): Scoped to the user's account. Can access all projects the user owns, create new projects, and manage account settings. Use for CI/CD, agent automation, and Claude Code integrations.
+- **Company keys** (\`sk_live_\`): auth-brain service-account keys scoped to ONE company. They reach every project in that company and can create projects there, subject to the service account's role on it. Use for CI/CD, agent automation, and Claude Code integrations.
+
+  A key CANNOT reach another company: that is the same boundary a signed-in user has, applied to machines. For a second company, mint a second key. Keys are minted in auth-brain (https://auth.lumitra.co), NOT in analytics: creating credentials is the identity service's job.
+
+  Note there is no longer an account-wide key spanning every company. Org-scoped keys are deliberately unsupported: entitlements attach to a company (the billing unit), so an org-scoped key carries no app grants and could never pass an app's access door.
 
 ## API Reference
 

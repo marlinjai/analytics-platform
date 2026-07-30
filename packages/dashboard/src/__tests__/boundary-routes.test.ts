@@ -137,7 +137,22 @@ describe('/api/stats/** — the boundary on a stats route', () => {
 });
 
 describe('/api/projects/[projectId]/** — the boundary on a project-scoped route', () => {
-  const params = { params: Promise.resolve({ projectId: PROJECT }) };
+  function saKey(companyId: string, role: string) {
+  return {
+    kind: 'service-account' as const,
+    principalId: 'sa-1',
+    keyId: 'k1',
+    companyId,
+    appGrants: ['analytics'],
+    effectiveRoles: {
+      tenant_groups: [],
+      tenants: [{ id: companyId, role, source: 'direct' as const }],
+      workspaces: [],
+    },
+  };
+}
+
+const params = { params: Promise.resolve({ projectId: PROJECT }) };
 
   it('FORWARD: project in the active company -> 200', async () => {
     sessionToReturn = session([{ id: CO_A, role: 'viewer' }], CO_A);
@@ -159,14 +174,49 @@ describe('/api/projects/[projectId]/** — the boundary on a project-scoped rout
     expect(res.status).toBe(404);
   });
 
-  it('ACCOUNT KEY: authorizes with NO active scope (never boundaried)', async () => {
-    // No session cookie: machine principal. Account keys carry no active scope,
-    // so the boundary must NOT apply — they authorize by company membership (can()).
+  // CHANGED 2026-07-30: a machine principal IS boundaried now, by its key's own
+  // scoped company. It has no ACTIVE scope (that is a session concept), but the
+  // company the key was issued for plays the same role. Previously an account key
+  // could reach any project whose company it held a role on, ignoring boundaries
+  // entirely; a leaked key was correspondingly broader than a leaked session.
+  it('SERVICE-ACCOUNT KEY: reaches a project in ITS OWN company', async () => {
     cookieValue = undefined;
-    keyInfoToReturn = { kind: 'account', userId: 'acct-user' };
-    canImpl = () => true; // holds the role on the project's company
+    keyInfoToReturn = saKey(CO_A, 'admin');
     projectCompanyId = CO_A;
-    const res = await projectGET(projectReq({ 'x-api-key': 'ap_account_x' }), params);
+    const res = await projectGET(projectReq({ 'x-api-key': 'sk_live_x' }), params);
+    expect(res.status).toBe(200);
+  });
+
+  it('SERVICE-ACCOUNT KEY: a project in ANOTHER company is 404, even holding a role there', async () => {
+    cookieValue = undefined;
+    // The key is scoped to company A but the project lives in company B, and the
+    // principal even has admin on B. The key's scope is the boundary: 404, and
+    // 404 rather than 403 so a machine cannot probe foreign project ids either.
+    keyInfoToReturn = {
+      ...saKey(CO_A, 'admin'),
+      effectiveRoles: {
+        tenant_groups: [],
+        tenants: [
+          { id: CO_A, role: 'admin', source: 'direct' },
+          { id: CO_B, role: 'admin', source: 'direct' },
+        ],
+        workspaces: [],
+      },
+    };
+    projectCompanyId = CO_B;
+    const res = await projectGET(projectReq({ 'x-api-key': 'sk_live_x' }), params);
+    expect(res.status).toBe(404);
+  });
+
+  it('SERVICE-ACCOUNT KEY: a viewer role satisfies a READ route in its own company', async () => {
+    // The ladder applies to machines exactly as to humans: viewer is enough to
+    // read. (The insufficient-role -> 403 case is covered per-route in
+    // agent-first-routes.test.ts, which drives write/admin routes with a viewer
+    // key; this file is about the BOUNDARY, not the ladder.)
+    cookieValue = undefined;
+    keyInfoToReturn = saKey(CO_A, 'viewer');
+    projectCompanyId = CO_A;
+    const res = await projectGET(projectReq({ 'x-api-key': 'sk_live_x' }), params);
     expect(res.status).toBe(200);
   });
 });

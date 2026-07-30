@@ -39,16 +39,15 @@ export const authBrainClient = createAuthBrainClient({
   // A caller that MUTATES session state must invalidate rather than wait it out:
   // see `invalidateSession` in app/api/scope/route.ts (sdk >= 1.6.1).
   cacheTtlMs: 30_000,
-  // OpenFGA config is retained for ONE reason only: the named account-key
-  // survivor in auth-check.ts (checkAccountKeyProjectAccess) still resolves
-  // machine-principal access via can(), because local analytics account keys
-  // produce no verify payload. All SESSION (human) authorization now comes from
-  // the verify payload's effective_roles — no can() on that path. Remove this
-  // block once account keys are issued as auth-brain service accounts.
-  openfgaUrl: process.env.OPENFGA_API_URL,
-  openfgaStoreId: process.env.OPENFGA_STORE_ID,
-  openfgaModelId: process.env.OPENFGA_AUTHORIZATION_MODEL_ID,
-  // This OpenFGA runs with preshared auth: can() must send the bearer token or
-  // every check is rejected 401 and fail-closes to false. SDK >=1.1.0 forwards it.
-  openfgaToken: process.env.OPENFGA_API_TOKEN,
+  // NO OpenFGA config, deliberately. Analytics does not talk to OpenFGA at all
+  // any more: OpenFGA is auth-brain's internal engine, and every analytics
+  // authorization decision (human session AND machine service-account key) is
+  // derived from a verify payload's `effective_roles`. That is decision 2's one
+  // decision plane, now actually true rather than "true except for one survivor".
+  //
+  // The last exception was the local account-key path, which produced no payload
+  // and needed a direct `can()`. Account keys are auth-brain service accounts as
+  // of 2026-07-30, and `verifyApiKey` returns effective roles + app_grants, so
+  // the survivor is gone. Do not reintroduce these options: if something seems to
+  // need a `can()` here, the right fix is a payload, not an FGA round trip.
 });

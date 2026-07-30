@@ -1,0 +1,24 @@
+-- Migration 020: drop the local account_api_keys table.
+--
+-- Account-level machine credentials are now auth-brain SERVICE-ACCOUNT keys
+-- (`sk_live_`), scoped to a company. Analytics consumes identity; it no longer
+-- mints or stores machine credentials, exactly as it no longer creates companies.
+--
+-- Why this had to change and not merely move: a local key produced NO verify
+-- payload, so authorizing it required a direct OpenFGA `can()` inside analytics.
+-- That was the last violation of the one-decision-plane rule (every app reads a
+-- verify payload and nothing else). auth-brain's `verifyApiKey` returns
+-- `effective_roles` plus the scoped company's `app_grants`, so the machine branch
+-- now runs the SAME check as the human session branch and analytics no longer
+-- talks to OpenFGA at all.
+--
+-- Production held 3 rows (1 active) at the time of this migration. The active key
+-- was re-issued as an auth-brain service-account key scoped to the Lola Stories
+-- company as part of the same deploy. This is a HARD cutover by decision: with a
+-- single unused key, a dual-accept window would have doubled the auth surface for
+-- weeks to protect a credential nobody was using.
+--
+-- Project-level keys (`ap_live_` / `ap_test_`, table `api_keys`) are UNAFFECTED.
+-- They are per-project app credentials, never touched FGA, and are not identity.
+
+DROP TABLE IF EXISTS account_api_keys;

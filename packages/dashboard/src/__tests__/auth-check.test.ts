@@ -5,13 +5,15 @@
  * Two paths, two planes:
  *   - checkProjectAccess / checkCompanyAccessForSession: SESSION (human). The
  *     decision comes from the verified payload's effective_roles.tenants. NO FGA.
- *   - checkAccountKeyProjectAccess: the machine account-key survivor, which
- *     still resolves via OpenFGA can() (a tenant-scoped check) because local
- *     account keys carry no verify payload.
+ *   - the MACHINE path is no longer here at all. Service-account keys carry a
+ *     verify payload (effective_roles + the scoped company's app_grants), so the
+ *     machine branch lives in auth-api.ts and runs the SAME company check as the
+ *     session branch. The old `checkAccountKeyProjectAccess` FGA survivor was
+ *     deleted on 2026-07-30; analytics makes no OpenFGA call at all any more.
  *
  * next/headers, @/lib/auth-brain and @/lib/db are mocked so no live cookie,
  * auth-brain or Postgres is needed. Assertions are against the payload shape,
- * never a mocked FGA response (except the survivor, whose whole point is FGA).
+ * never a mocked FGA response.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SessionVerifyResponse } from '@marlinjai/auth-brain-shared';
@@ -41,11 +43,12 @@ let companyRows: Array<{ company_id: string }> = [];
 const dbTag = vi.fn(async () => companyRows);
 vi.mock('@/lib/db', () => ({ getDb: () => dbTag }));
 
+// Kept solely so the "no FGA call" assertions below still have something to
+// assert against. Analytics must never call OpenFGA again; these are the guard.
 import { authBrainClient } from '@/lib/auth-brain';
 import {
   checkProjectAccess,
   checkCompanyAccessForSession,
-  checkAccountKeyProjectAccess,
 } from '@/lib/auth-check';
 
 const USER = 'user-1';
@@ -152,36 +155,5 @@ describe('checkCompanyAccessForSession — direct payload decision', () => {
       },
     } as unknown as SessionVerifyResponse;
     await expect(checkCompanyAccessForSession(inherited, PROJECT, 'tenant.admin')).resolves.toBe(true);
-  });
-});
-
-describe('checkAccountKeyProjectAccess — machine survivor (tenant-scoped FGA)', () => {
-  it('ALLOWS when can() grants the tenant relation', async () => {
-    canToReturn = true;
-    await expect(checkAccountKeyProjectAccess(USER, PROJECT, 'tenant.admin')).resolves.toBe(true);
-    expect(vi.mocked(authBrainClient.can)).toHaveBeenCalledWith(
-      USER,
-      'tenant.admin',
-      expect.objectContaining({ type: 'tenant', id: CO, tenantId: CO }),
-    );
-  });
-
-  it('DENIES when can() returns false', async () => {
-    canToReturn = false;
-    await expect(checkAccountKeyProjectAccess(USER, PROJECT, 'tenant.viewer')).resolves.toBe(false);
-  });
-
-  it('fails closed (denies) when can() throws an OpenFGA error', async () => {
-    canToReturn = () => {
-      throw new Error('OpenFGA 503');
-    };
-    await expect(checkAccountKeyProjectAccess(USER, PROJECT, 'tenant.viewer')).resolves.toBe(false);
-  });
-
-  it('fails closed when the project has no owning company (no FGA call)', async () => {
-    companyRows = [];
-    canToReturn = true;
-    await expect(checkAccountKeyProjectAccess(USER, PROJECT, 'tenant.viewer')).resolves.toBe(false);
-    expect(vi.mocked(authBrainClient.can)).not.toHaveBeenCalled();
   });
 });

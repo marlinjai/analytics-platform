@@ -39,8 +39,6 @@ export interface ErasureStore {
   /** Delete the given projects; all project-scoped Postgres rows cascade (FKs). */
   deleteProjects(projectIds: string[]): Promise<void>;
 
-  /** Delete a user's account-level API keys. Returns the number removed. */
-  deleteAccountApiKeysForUser(userId: string): Promise<number>;
 }
 
 /**
@@ -103,12 +101,6 @@ export function createPgErasureStore(db: Db, clickhouse: ClickHouse): ErasureSto
       await db`DELETE FROM projects WHERE id = ANY(${projectIds}::uuid[])`;
     },
 
-    async deleteAccountApiKeysForUser(userId) {
-      const result = await db`
-        DELETE FROM account_api_keys WHERE user_id = ${userId}::uuid
-      `;
-      return result.count;
-    },
   };
 }
 
