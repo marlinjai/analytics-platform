@@ -9,6 +9,7 @@ import type {
   DateRange,
   DashboardFilters,
 } from '@analytics-platform/shared';
+import { sessionizedEvents } from './sessionize';
 
 // ── Filter helpers ────────────────────────────────────────────
 
@@ -89,23 +90,26 @@ export async function getStatsOverview(
     format: 'JSONEachRow',
   });
 
-  // Session-level metrics
+  // Session-level metrics, server-derived (query-time gap sessionization off the
+  // salted visitor key; plan D6). The client session_id is still collected for
+  // the shadow comparison but is no longer what we display. Filters apply AFTER
+  // sessionization so they don't fragment a visitor's real session.
   const sessionResult = await ch.query({
     query: `
       SELECT
-        uniqExact(session_id) AS sessions,
+        uniqExact(server_session_id) AS sessions,
         median(session_duration) AS avg_session_duration,
         countIf(session_pageviews = 1) / greatest(count(), 1) AS bounce_rate
       FROM (
         SELECT
-          session_id,
+          server_session_id,
           dateDiff('second', min(timestamp), max(timestamp)) AS session_duration,
           countIf(type = 'pageview') AS session_pageviews
-        FROM analytics.events
-        WHERE project_id = {projectId: UUID}
+        FROM (${sessionizedEvents(`project_id = {projectId: UUID}
           AND timestamp >= {from: DateTime64(3)}
-          AND timestamp <= {to: DateTime64(3)}${fSql}
-        GROUP BY session_id
+          AND timestamp <= {to: DateTime64(3)}`)})
+        WHERE 1 = 1${fSql}
+        GROUP BY server_session_id
       )
     `,
     query_params: { projectId, ...chDateParams(dateRange), ...fParams },

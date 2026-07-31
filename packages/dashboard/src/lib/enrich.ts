@@ -1,5 +1,7 @@
 import { API_KEY_PREFIX_TEST } from '@analytics-platform/shared';
 import type { TrackerEvent, StoredEvent } from '@analytics-platform/shared';
+import { getCurrentSalt } from './daily-salt';
+import { lookupCountry } from './geo';
 
 async function sha256(input: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -8,10 +10,6 @@ async function sha256(input: string): Promise<string> {
   return Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
-}
-
-function getDailySalt(): string {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
 interface UAParsed {
@@ -79,52 +77,6 @@ function extractDeviceModel(ua: string): string {
   return '';
 }
 
-// ── GeoIP ────────────────────────────────────────────────────
-
-interface GeoResult {
-  country: string;
-  countryCode: string;
-}
-
-// Simple in-memory cache: ip → { country, countryCode, expiresAt }
-const geoCache = new Map<string, GeoResult & { expiresAt: number }>();
-const GEO_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-// IPs to skip (private / loopback)
-const PRIVATE_IP_RE =
-  /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|::1$|fc00:|fe80:)/;
-
-async function lookupCountry(ip: string): Promise<GeoResult> {
-  if (!ip || PRIVATE_IP_RE.test(ip)) {
-    return { country: '', countryCode: '' };
-  }
-
-  const cached = geoCache.get(ip);
-  if (cached && cached.expiresAt > Date.now()) {
-    return { country: cached.country, countryCode: cached.countryCode };
-  }
-
-  try {
-    const res = await fetch(
-      `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=country,countryCode`,
-      { signal: AbortSignal.timeout(2000) }
-    );
-    if (res.ok) {
-      const data = (await res.json()) as { country?: string; countryCode?: string };
-      const result: GeoResult = {
-        country: data.country ?? '',
-        countryCode: data.countryCode ?? '',
-      };
-      geoCache.set(ip, { ...result, expiresAt: Date.now() + GEO_CACHE_TTL_MS });
-      return result;
-    }
-  } catch {
-    // Network error or timeout — fall through to empty result
-  }
-
-  return { country: '', countryCode: '' };
-}
-
 // ── Environment Inference ────────────────────────────────────
 
 const DEV_HOSTNAME_RE = /^localhost$|^127\.0\.0\.1$|^0\.0\.0\.0$|\.local$/;
@@ -145,28 +97,35 @@ export async function enrichEvents(
   ip: string,
   keyPrefix: string = '',
 ): Promise<StoredEvent[]> {
-  const salt = getDailySalt();
-  const ipHash = await sha256(`${ip}:${salt}`);
+  // Secret, daily-rotated salt (see daily-salt.ts). The raw IP is hashed into
+  // the visitor key here and never stored or logged.
+  const salt = await getCurrentSalt();
   const receivedAt = Date.now();
 
-  // One GeoIP lookup per batch (all events share the same IP)
+  // One GeoIP lookup per batch (all events share the same IP).
   const { country } = await lookupCountry(ip);
 
-  return events.map((event) => {
-    const ua = event.userAgent ?? '';
-    const { browser, os } = parseUserAgent(ua);
-    const deviceModel = extractDeviceModel(ua);
-    const environment = inferEnvironment(event.url, keyPrefix);
-    return {
-      ...event,
-      eventId: crypto.randomUUID(),
-      ipHash,
-      country,
-      receivedAt,
-      browser,
-      os,
-      deviceModel,
-      environment,
-    };
-  });
+  return Promise.all(
+    events.map(async (event) => {
+      const ua = event.userAgent ?? '';
+      // Cookieless visitor key: sha256(salt : ip : userAgent : projectId). Folds
+      // user-agent + project into the key so it doubles as the sessionization
+      // key (plan workstreams a+b, decisions D4/D6), not just a visitor counter.
+      const ipHash = await sha256(`${salt}:${ip}:${ua}:${event.projectId}`);
+      const { browser, os } = parseUserAgent(ua);
+      const deviceModel = extractDeviceModel(ua);
+      const environment = inferEnvironment(event.url, keyPrefix);
+      return {
+        ...event,
+        eventId: crypto.randomUUID(),
+        ipHash,
+        country,
+        receivedAt,
+        browser,
+        os,
+        deviceModel,
+        environment,
+      };
+    }),
+  );
 }
