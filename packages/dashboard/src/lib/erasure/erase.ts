@@ -71,7 +71,20 @@ export async function eraseCompany(
 }
 
 /** Delete the user's account-level API keys (the only user-keyed analytics rows). */
-export async function eraseUser(userId: string, store: ErasureStore): Promise<EraseUserResult> {
-  const accountApiKeysDeleted = await store.deleteAccountApiKeysForUser(userId);
-  return { accountApiKeysDeleted };
+export async function eraseUser(_userId: string, _store: ErasureStore): Promise<EraseUserResult> {
+  // VERIFIED NO-OP, not an unimplemented stub.
+  //
+  // Analytics holds ZERO user-keyed rows. The last one was `account_api_keys`,
+  // and those became auth-brain service-account keys on 2026-07-30 (they are
+  // scoped to a COMPANY and owned by a service-account principal, not a human),
+  // so auth-brain erases its own credentials. Everything else analytics stores is
+  // project- or company-scoped and is erased by `tenant.erased`.
+  //
+  // Note analytics only SUBSCRIBES to `tenant.erased` (auth-brain
+  // `lib/suite-apps.ts`), so this branch is defensive: it is not currently
+  // delivered. It is kept so an added subscription cannot silently do nothing.
+  //
+  // If analytics ever stores something keyed to a human user id, it MUST be
+  // deleted here, and this comment must stop being true.
+  return { accountApiKeysDeleted: 0 };
 }

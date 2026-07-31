@@ -131,32 +131,60 @@ describe('POST /api/projects — session principal', () => {
   });
 });
 
-describe('POST /api/projects — account-key principal (tenant-scoped can())', () => {
-  it('CREATES (201) when can() grants tenant.admin on the target company', async () => {
-    authResult = { authenticated: true, principal: 'account-key', userId: 'acct-user' };
-    canImpl = () => true;
+describe('POST /api/projects — service-account key principal (payload-derived)', () => {
+  // The machine path no longer calls OpenFGA. It authorizes from the key's own
+  // verify payload, using the SAME hasCompanyAccess the session path uses, and it
+  // is additionally bounded by the company the key was ISSUED for.
+  function sa(companyId: string, role: string) {
+    return {
+      authenticated: true as const,
+      principal: 'service-account' as const,
+      userId: 'service_account:sa-1',
+      companyId,
+      effectiveRoles: {
+        tenant_groups: [],
+        tenants: [{ id: companyId, role, source: 'direct' as const }],
+        workspaces: [],
+      },
+    };
+  }
+
+  it('CREATES (201) when the key holds tenant.admin on its own company', async () => {
+    authResult = sa(CO_A, 'admin');
     const res = await POST(makeReq(validBody(CO_A)));
     expect(res.status).toBe(201);
-    expect(vi.mocked(authBrainClient.can)).toHaveBeenCalledWith(
-      'acct-user',
-      'tenant.admin',
-      expect.objectContaining({ type: 'tenant', id: CO_A, tenantId: CO_A }),
-    );
+    // No FGA round trip anywhere on this path any more.
+    expect(vi.mocked(authBrainClient.can)).not.toHaveBeenCalled();
   });
 
-  it('REJECTS (403) when can() returns false', async () => {
-    authResult = { authenticated: true, principal: 'account-key', userId: 'acct-user' };
-    canImpl = () => false;
+  it('REJECTS (403) when the role is below tenant.admin', async () => {
+    authResult = sa(CO_A, 'member');
     const res = await POST(makeReq(validBody(CO_A)));
     expect(res.status).toBe(403);
     expect(dbMock).not.toHaveBeenCalled();
   });
 
-  it('fails closed (403) when can() throws an FGA error', async () => {
-    authResult = { authenticated: true, principal: 'account-key', userId: 'acct-user' };
-    canImpl = () => {
-      throw new Error('OpenFGA 503');
+  it('REJECTS (403) creating in a DIFFERENT company than the key is scoped to', async () => {
+    // Even though the principal holds admin on CO_B, the key was issued for CO_A.
+    // A credential must not act outside the scope it was minted for.
+    authResult = {
+      ...sa(CO_A, 'admin'),
+      effectiveRoles: {
+        tenant_groups: [],
+        tenants: [
+          { id: CO_A, role: 'admin', source: 'direct' as const },
+          { id: CO_B, role: 'admin', source: 'direct' as const },
+        ],
+        workspaces: [],
+      },
     };
+    const res = await POST(makeReq(validBody(CO_B)));
+    expect(res.status).toBe(403);
+    expect(dbMock).not.toHaveBeenCalled();
+  });
+
+  it('REJECTS (403) a billing_admin, which is off the ladder', async () => {
+    authResult = sa(CO_A, 'billing_admin');
     const res = await POST(makeReq(validBody(CO_A)));
     expect(res.status).toBe(403);
   });

@@ -11,7 +11,7 @@
  *   1. granted session            -> authenticated
  *   2. ungranted session          -> 403, blocked (does NOT fall through to key)
  *   3. version-skew session       -> 403 + grep-able fail-closed log
- *   4. account API key (no cookie) -> unaffected (keeps its own auth model)
+ *   4. service-account key (no cookie) -> the door applies to machines too
  *   5. no credential at all        -> 401
  *
  * `next/headers`, `@/lib/auth-brain`, `@/lib/api-key`, `@/lib/auth-check` are
@@ -21,6 +21,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GRANT_VERSION_SKEW_LOG } from '@/lib/app-grants';
+
+const CO = '019f6a89-ea4a-75d4-90ff-4e809491647e';
 
 // Controllable session cookie: undefined => no session (falls to API key).
 let cookieValue: string | undefined;
@@ -122,14 +124,41 @@ describe('authenticateAccountRequest — analytics door', () => {
     expect((warn.mock.calls[0]![0] as string).startsWith(GRANT_VERSION_SKEW_LOG)).toBe(true);
   });
 
-  it('leaves the account API-key path unaffected (no session cookie)', async () => {
+  // TIGHTENED 2026-07-30: the door now applies to MACHINE callers too. Previously
+  // an account key skipped the analytics entitlement check entirely, so a company
+  // without the analytics grant was still reachable by a machine. A door only one
+  // kind of principal has to walk through is not a door.
+  it('admits a service-account key whose company HOLDS the analytics grant', async () => {
     cookieValue = undefined;
     vi.mocked(validateApiKey).mockResolvedValue({
-      kind: 'account',
-      userId: 'acct-user',
+      kind: 'service-account',
+      principalId: 'sa-1',
+      keyId: 'k1',
+      companyId: CO,
+      appGrants: ['analytics'],
+      effectiveRoles: { tenant_groups: [], tenants: [{ id: CO, role: 'admin', source: 'direct' }], workspaces: [] },
     } as never);
-    const res = await authenticateAccountRequest(req({ 'x-api-key': 'ap_account_xxx' }));
-    expect(res).toEqual({ authenticated: true, principal: 'account-key', userId: 'acct-user' });
+    const res = await authenticateAccountRequest(req({ 'x-api-key': 'sk_live_xxx' }));
+    expect(res).toMatchObject({
+      authenticated: true,
+      principal: 'service-account',
+      companyId: CO,
+    });
+  });
+
+  it('REFUSES a service-account key whose company lacks the analytics grant', async () => {
+    cookieValue = undefined;
+    vi.mocked(validateApiKey).mockResolvedValue({
+      kind: 'service-account',
+      principalId: 'sa-1',
+      keyId: 'k1',
+      companyId: CO,
+      appGrants: ['storage'],
+      effectiveRoles: { tenant_groups: [], tenants: [{ id: CO, role: 'admin', source: 'direct' }], workspaces: [] },
+    } as never);
+    const res = await authenticateAccountRequest(req({ 'x-api-key': 'sk_live_xxx' }));
+    expect(res.authenticated).toBe(false);
+    if (!res.authenticated) expect(res.status).toBe(403);
   });
 
   it('returns 401 when there is no credential at all', async () => {

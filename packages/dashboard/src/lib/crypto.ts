@@ -1,4 +1,4 @@
-import { API_KEY_PREFIX_LIVE, API_KEY_PREFIX_TEST, API_KEY_PREFIX_ACCOUNT } from '@analytics-platform/shared';
+import { API_KEY_PREFIX_LIVE, API_KEY_PREFIX_TEST } from '@analytics-platform/shared';
 
 async function sha256(input: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -17,7 +17,7 @@ function randomHex(bytes: number): string {
     .join('');
 }
 
-export async function generateApiKey(environment: 'live' | 'test' | 'account'): Promise<{
+export async function generateApiKey(environment: 'live' | 'test'): Promise<{
   fullKey: string;
   keyHash: string;
   prefix: string;
@@ -25,7 +25,6 @@ export async function generateApiKey(environment: 'live' | 'test' | 'account'): 
   const prefixMap = {
     live: API_KEY_PREFIX_LIVE,
     test: API_KEY_PREFIX_TEST,
-    account: API_KEY_PREFIX_ACCOUNT,
   } as const;
   const typePrefix = prefixMap[environment];
   const fullKey = typePrefix + randomHex(16);
