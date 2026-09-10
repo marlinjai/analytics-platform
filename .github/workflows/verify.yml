@@ -11,6 +11,24 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # Same image and default credentials as docker-compose.yml's clickhouse
+    # service, so the integration test below talks to the same shape of
+    # server it would locally. Ports map straight to localhost on the
+    # ubuntu-latest runner.
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:24-alpine
+        env:
+          CLICKHOUSE_DB: analytics
+          CLICKHOUSE_USER: default
+          CLICKHOUSE_PASSWORD: clickhouse_dev
+        ports:
+          - 18123:8123
+        options: >-
+          --health-cmd "clickhouse-client --query 'SELECT 1'"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -39,3 +57,22 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      # Only real ClickHouse-backed proof that server-side sessionization
+      # (packages/dashboard/src/__tests__/sessionize.integration.test.ts,
+      # landed with analytics-platform #32) still matches production
+      # behaviour. Previously gated behind describe.skipIf(!RUN) with no CI
+      # runner ever setting RUN_CH_IT, so it silently never ran.
+      - name: ClickHouse integration test
+        working-directory: packages/dashboard
+        env:
+          RUN_CH_IT: '1'
+          CLICKHOUSE_URL: http://localhost:18123
+          CLICKHOUSE_USER: default
+          CLICKHOUSE_PASSWORD: clickhouse_dev
+        run: npx vitest run sessionize.integration
+
+      - name: Roadmap check
+        uses: marlinjai/actions-shared/roadmap-check@roadmap-check-v1
+        with:
+          max-age: 30
