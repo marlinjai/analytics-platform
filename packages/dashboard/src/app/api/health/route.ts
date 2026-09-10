@@ -28,7 +28,16 @@ export async function GET(request: NextRequest) {
   // Check ClickHouse
   try {
     const ch = getClickHouse();
-    await ch.query({ query: 'SELECT 1', format: 'JSONEachRow' });
+    // The Docker HEALTHCHECK (packages/dashboard/Dockerfile) polls this route
+    // every 15s. The response stream MUST be fully read (or closed): an
+    // un-drained ResultSet leaves the underlying socket open past the
+    // client's idle timeout, and @clickhouse/client then logs "socket was
+    // closed before the response was fully read" on the next reuse attempt,
+    // risking an uncaught ECONNRESET. `SELECT 1` returns one row, so reading
+    // it with .json() is cheap and just as much a correctness check as a
+    // drain.
+    const result = await ch.query({ query: 'SELECT 1', format: 'JSONEachRow' });
+    await result.json();
     checks.clickhouse = 'ok';
   } catch {
     checks.clickhouse = 'error';
