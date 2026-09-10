@@ -1,3 +1,9 @@
+---
+type: documentation
+title: Adaptive Timeseries Bucketing for Pageviews Chart
+summary: An agent task prompt/spec, not a plan with a lifecycle -- describes a concrete implementation task for adaptive time-bucketing on the pageviews chart, for a worker to execute directly rather than to be scheduled and tracked.
+---
+
 # Adaptive Timeseries Bucketing for Pageviews Chart
 
 ## Task

@@ -2,11 +2,14 @@
 title: "Device Detection & Touch Event Tracking"
 summary: "Research on mobile/tablet device identification, touch event handling, and per-device heatmap filtering"
 type: plan
-status: proposed
+status: archived
 date: 2026-03-22
 tags: [tracker, mobile, touch, device-detection, heatmap]
 projects: [analytics-platform]
 ---
+
+> [!warning] Archived (2026-09-10)
+> "Proposed" was not a valid lifecycle status. The coarse version of this research shipped separately (ROADMAP.md's "Device/browser/OS breakdowns (parse user agent server-side)", Phase 6, complete); the deeper touch-event and per-device heatmap-filtering research in this document was never picked up and no open roadmap line references it. Archived; revive by opening a roadmap line if per-device heatmap filtering becomes an actual ask.
 
 # Device Detection & Touch Event Tracking
 

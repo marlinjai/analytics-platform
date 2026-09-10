@@ -5,11 +5,14 @@ summary: >
   filtering, and turns bot transparency into a selling point. Covers research
   synthesis, competitor gap analysis, feature roadmap, and implementation plan.
 type: plan
-status: draft
+status: archived
 tags: [bot-filtering, analytics, positioning, roadmap, privacy]
 projects: [analytics-platform]
 date: 2026-04-18
 ---
+
+> [!warning] Archived (2026-09-10)
+> 145 days old, unlinked from any ROADMAP.md line, and no bot-filtering code exists anywhere in the tracker or dashboard. This directory (`docs/internal/plans`) sits outside roadmap-check's default scan set so the drift never surfaced automatically; archiving now rather than leaving it silently stale. Revive with a roadmap line if bot-filtering becomes an actual ask.
 
 # Edge vs Client-Side Analytics and Bot Filtering Strategy
 
