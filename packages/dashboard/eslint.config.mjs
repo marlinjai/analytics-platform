@@ -11,6 +11,18 @@ const eslintConfig = [
   {
     ignores: ['.next/**', 'node_modules/**', 'next-env.d.ts'],
   },
+  {
+    rules: {
+      // The codebase already uses a leading underscore to mark a
+      // deliberately-unused parameter (e.g. a mock's rest args, or a
+      // function kept for interface/signature parity). Recognise that
+      // convention instead of flagging it.
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

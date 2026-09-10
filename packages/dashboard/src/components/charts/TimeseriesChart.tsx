@@ -1,8 +1,6 @@
 'use client';
 
 import {
-  AreaChart,
-  Area,
   LineChart,
   Line,
   XAxis,
