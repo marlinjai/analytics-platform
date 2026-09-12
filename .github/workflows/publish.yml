@@ -1,0 +1,57 @@
+# Publishes the monorepo's public packages to npm via npm Trusted Publishing
+# (OIDC): no NPM_TOKEN, the id-token below is the credential. Same mechanism as
+# email-mcp and auth-brain, adapted for this pnpm monorepo with several
+# independently-versioned packages.
+#
+# Each package.json's version is the source of truth. scripts/publish-packages.mjs
+# publishes, in dependency order, only the packages whose exact version is not
+# already on npm, so this is safe to re-run and a release that bumped one
+# package publishes only that one.
+#
+# ONE-TIME npm-side setup (per package, done by a human on npmjs.com, because it
+# is an account-level trust grant): in each package's Settings, add a Trusted
+# Publisher pointing at this repository (marlinjai/analytics-platform), workflow
+# `.github/workflows/publish.yml`, no environment. Until that exists a publish
+# fails with a 404 on the PUT. Packages to register: @marlinjai/analytics-core,
+# @marlinjai/analytics-tracker, @marlinjai/analytics-node,
+# @marlinjai/analytics-react, @marlinjai/analytics-cli.
+name: Publish to npm
+
+on:
+  # A version tag is the usual trigger; versions live in each package.json, so
+  # the tag is just a marker and the script decides what is new.
+  push:
+    tags:
+      - 'v*'
+      - '*@*' # e.g. analytics-cli@1.5.0
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # required for npm Trusted Publishing (OIDC); no NPM_TOKEN needed
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Node 22 here although verify.yml runs on 20: npm@latest (12.x) no
+          # longer installs on Node 20, and Trusted Publishing needs npm >= 11.5.1.
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm install -g npm@latest
+      - run: pnpm install --frozen-lockfile
+      # Only the published packages, in dependency order. The root `pnpm build`
+      # would also run `next build` for the dashboard and the extension bundle,
+      # which need environment this job does not have. pnpm pack does not run
+      # prepublishOnly, and `files` ships dist.
+      - run: pnpm --filter @marlinjai/analytics-core build
+      - run: pnpm --filter @marlinjai/analytics-tracker build
+      - run: pnpm --filter @marlinjai/analytics-node build
+      - run: pnpm --filter @marlinjai/analytics-react build
+      - run: pnpm --filter @marlinjai/analytics-cli build
+      - run: node scripts/publish-packages.mjs
