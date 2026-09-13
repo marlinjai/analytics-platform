@@ -1,6 +1,11 @@
 {
   "name": "@marlinjai/analytics-cli",
   "version": "1.4.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marlinjai/analytics-platform.git",
+    "directory": "packages/cli"
+  },
   "description": "CLI for setting up Lumitra Analytics in your project",
   "type": "module",
   "bin": {
