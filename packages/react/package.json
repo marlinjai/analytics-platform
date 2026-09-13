@@ -20,7 +20,9 @@
       "types": "./dist/middleware.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit"
@@ -57,5 +59,10 @@
     "access": "public"
   },
   "sideEffects": false,
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marlinjai/analytics-platform.git",
+    "directory": "packages/react"
+  }
 }
