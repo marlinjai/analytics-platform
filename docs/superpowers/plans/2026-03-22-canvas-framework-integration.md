@@ -2,11 +2,14 @@
 title: "Canvas Framework Analytics Integration Research"
 summary: "Exploration of click tracking for Flutter CanvasKit, Unity WebGL, and Three.js"
 type: plan
-status: proposed
+status: archived
 date: 2026-03-22
 tags: [extension, heatmap, flutter, unity, webgl, canvas]
 projects: [analytics-platform]
 ---
+
+> [!warning] Archived (2026-09-10)
+> Exploratory research only, never a build commitment ("proposed" was not a valid lifecycle status; corrected here). No canvas-framework-specific tracking code exists 168 days later, and no open ROADMAP.md line references this work. Archived rather than left drifting; revive by opening a roadmap line if Flutter/Unity/Three.js semantic tracking becomes an actual ask.
 
 # Canvas Framework Analytics Integration Research
 

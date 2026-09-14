@@ -70,7 +70,7 @@
 - [x] GitHub OAuth via NextAuth v5 (custom Postgres adapter, AUTH_GITHUB_* env vars)
 - [x] CLI: `lumitra analytics init` with Infisical auto-detection and `--infisical-path` for monorepo support
 
-## Phase 6: Analytics Depth (complete)
+## Phase 6: Analytics Depth (in progress)
 - [x] Web analytics: UTM tracking, referrer parsing
 - [x] Geographic data (GeoIP via ip-api.com with in-memory cache; country breakdown table + flag emojis)
 - [x] Device/browser/OS breakdowns (parse user agent server-side)
@@ -78,7 +78,8 @@
 - [x] Funnel analysis — funnels page with step builder and drop-off visualization
 - [x] Scroll depth heatmap — quartile bars per page on heatmap page
 - [x] Rage click detection — table on heatmap page (3+ clicks in 2s)
-- [ ] Engagement zones — element-level click aggregation
+- [ ] Engagement zones — element-level click aggregation (2026-09-10)
+  See: docs/superpowers/plans/2026-03-22-side-panel-engagement-zones.md
 - [x] Data export (CSV and JSON via /api/stats/export; export button in dashboard header)
 - [x] Custom date ranges with calendar picker (two-click range selection)
 - [x] Dashboard filters (browser, OS, country, page, source, device) — URL-encoded for shareable views
@@ -94,9 +95,13 @@
 
 ## Phase 7: Real-time & Scale
 - [x] Real-time dashboard (WebSocket not needed — polling works; live visitor counter + auto-refresh toggle)
-- [ ] Edge ingestion (Cloudflare Workers) for lower latency
-- [ ] ClickHouse cluster / multi-region deployment
-- [ ] Alerting (anomaly detection, threshold alerts)
+- [ ] Edge ingestion (Cloudflare Workers) for lower latency (2026-09-10)
+- [ ] ClickHouse cluster / multi-region deployment (2026-09-10)
+- [ ] Alerting (anomaly detection, threshold alerts) (2026-09-10)
+- [ ] Server-side experiments: continuous-metric statistics + flow-canvas experiment surface (2026-09-10). Phase 1 (Node SDK, shared deterministic assignment, server-ingest route) shipped; the flow-canvas overlay/authoring UI lives in `@lola/flowmap`, a `lola-stories` package, so that half is blocked on lola-stories, which is dormant pending an offboarding decision.
+  See: docs/superpowers/plans/2026-06-08-server-side-experiments-and-flow-canvas-surface.md
+- [ ] Session replay asset rehosting: wire the existing extract/rewrite/SSRF-guard pipeline into the ingest path and provision R2 storage (2026-09-10). Phase 0 (tracker no longer inlines cross-origin images) shipped; Phase 1's core modules landed but nothing calls them yet.
+  See: docs/superpowers/plans/2026-06-25-session-replay-asset-rehosting-pipeline.md
 
 ## Phase 8: Browser Extension (in progress)
 - [x] Chrome extension MVP — heatmap overlay on any page (WXT + React + Shadow DOM)
@@ -104,18 +109,53 @@
 - [x] Extension popup (project picker, date range, device toggle)
 - [x] Content script with bundled heatmap.js (no CDN, CSP-safe)
 - [x] SPA navigation handling (persist overlay across client-side routing)
-- [ ] Side panel for full analytics view alongside any page
-- [ ] Scroll depth + rage click overlays in extension
-- [ ] Chrome Web Store + Firefox Add-ons publishing
-- [ ] Cross-browser support (Chrome, Firefox, Edge via webextension-polyfill)
-See: docs/superpowers/plans/2026-03-22-browser-extension.md
+- [ ] Side panel for full analytics view alongside any page (2026-09-10)
+  See: docs/superpowers/plans/2026-03-22-side-panel-engagement-zones.md
+- [ ] Scroll depth + rage click overlays in extension (2026-09-10)
+- [ ] Chrome Web Store + Firefox Add-ons publishing (2026-09-10)
+- [ ] Cross-browser support (Chrome, Firefox, Edge via webextension-polyfill) (2026-09-10)
+See: docs/superpowers/plans/2026-03-22-browser-extension.md (in-progress: Phase 1 MVP shipped, Phases 2-3 above still open)
 
 ## v2 (Deferred from MVP)
-- [ ] A/B testing & experimentation
-- [ ] Mouse move heatmap — cursor tracking with throttled sampling
-- [ ] Retention cohorts
-- [ ] Multi-tenant SaaS mode with billing
-- [ ] Error tracking
-- [ ] Custom dashboards / saved reports
-- [ ] AI-powered insights + anomaly detection
-- [ ] Team collaboration (invitations, roles, shared dashboards)
+- [x] A/B testing & experimentation — shipped in full, client-side and server-side. See docs/superpowers/plans/2026-03-22-ab-testing-experimentation.md (completed)
+- [ ] Mouse move heatmap — cursor tracking with throttled sampling (2026-09-10)
+- [ ] Retention cohorts (2026-09-10)
+- [ ] Multi-tenant SaaS mode with billing (2026-09-10)
+- [ ] Error tracking (2026-09-10)
+- [ ] Custom dashboards / saved reports (2026-09-10)
+- [ ] AI-powered insights + anomaly detection (2026-09-10)
+- [ ] Team collaboration (invitations, roles, shared dashboards) (2026-09-10)
+
+## Leftovers (work-down session 9a, 2026-09-10)
+
+Items from the fleet-wide backlog sweep that belong to this repo but need
+Marlin's decision, a secret value, a production change, or are bigger than a
+mechanical pass. See `~/software-dev/knowledge-base/backlog/intents/` for the
+full source notes.
+
+- [ ] Mint an auth-brain company-scoped service-account key to replace the
+      retired local `account_api_keys`, then set `LUMITRA_ACCOUNT_KEY` in
+      `packages/cli` and the skill-template it emits (2026-09-10). Needs a
+      human to mint the key in auth-brain (plaintext returned once) and place
+      it via the Infisical UI; the CLI has no working credential until this
+      happens.
+  See: docs/plans/2026-07-30-account-keys-to-service-accounts.md
+- [ ] Two-tier GDPR/ePrivacy consent architecture: storage-free tier 1,
+      consent-signal-driven tier 2, per-tenant IP hashing, GPC (Global Privacy
+      Control) honoring, retention/DPIA (Data Protection Impact Assessment),
+      Art. 28 DPA (Data Processing Agreement) (2026-09-10). Needs a Data
+      Protection Officer or qualified EU/German data-protection lawyer to
+      sign off on the "consent-free" claim before any of this ships as
+      marketing copy.
+  See: docs/superpowers/plans/2026-06-25-tier1-consent-free-and-consent-mode.md
+- [ ] Publish `@marlinjai/analytics-node` 1.0.1 to npm and bump the dependency
+      in lola-stories (2026-09-10). The redirect-hardening fix merged to main
+      but was never published; not urgent, the prod break it fixes was
+      already patched elsewhere. Marlin runs `/release` for
+      `@marlinjai/analytics-node`.
+- [ ] Refactor analytics-platform off its hand-copied auth seam onto
+      `@marlinjai/auth-brain-nextjs@0.1.0`, the same move lumitra-studio's
+      PR #82 (its auth-brain-nextjs migration) completed (2026-09-10).
+      Multi-step, touches auth wiring, and updates an external registry doc
+      in the auth-brain repo (`docs/internal/consuming-apps.md`); too large
+      and cross-cutting for a mechanical pass.

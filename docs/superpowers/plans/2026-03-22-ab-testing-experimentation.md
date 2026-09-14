@@ -2,11 +2,14 @@
 title: "A/B Testing & Experimentation Platform"
 summary: "Plan for integrating experiment management, feature flags, and per-variant analytics into Lumitra"
 type: plan
-status: proposed
+status: completed
 date: 2026-03-22
 tags: [ab-testing, experimentation, feature-flags, analytics]
 projects: [analytics-platform]
 ---
+
+> [!done] Reality update (2026-09-10)
+> Shipped in full: experiment lifecycle (create/configure/variants/goals/start-stop/winner), feature flags with percentage rollout, a zero-dependency Bayesian statistics engine, per-variant heatmaps (ClickHouse materialized views, commit `d6017d5`), the React SDK, the experiment dashboard UI, and remote config serving active experiments to the tracker (see `CHANGELOG.md`). Server-side experiments (Node SDK, deterministic assignment shared with the browser tracker) shipped as a further phase, see `docs/superpowers/plans/2026-06-08-server-side-experiments-and-flow-canvas-surface.md`. ROADMAP.md's v2 "A/B testing & experimentation" line ticked to match.
 
 # A/B Testing & Experimentation Platform
 

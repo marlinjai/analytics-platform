@@ -2,7 +2,10 @@ import { Resend } from 'resend';
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
   const resend = new Resend(process.env.RESEND_API_KEY);
-  const FROM = process.env.RESEND_FROM_EMAIL ?? 'noreply@whiz-art.com';
+  // Default matches docs/public/getting-started.md's documented RESEND_FROM_EMAIL
+  // default. The old fallback, noreply@whiz-art.com, pointed at a Resend
+  // domain deleted 2026-07-17 and would have silently failed to send.
+  const FROM = process.env.RESEND_FROM_EMAIL ?? 'noreply@lumitra.co';
   await resend.emails.send({
     from: FROM,
     to,

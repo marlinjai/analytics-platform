@@ -2,11 +2,14 @@
 title: "Browser Extension for Heatmap Overlay"
 summary: "Chrome/Firefox extension replacing the bookmarklet — works on any site regardless of CSP, React, or SPA stack"
 type: plan
-status: completed
+status: in-progress
 date: 2026-03-22
 tags: [extension, heatmap, chrome, firefox, browser-extension, overlay]
 projects: [analytics-platform]
 ---
+
+> [!info] Reality update (2026-09-10)
+> Marked `completed`, but only Phase 1 (MVP: popup UI, auth flow, content-script overlay, SPA handling) actually shipped. Phase 2 (Side Panel, scroll-depth/rage-click overlays) and Phase 3 (Chrome Web Store + Firefox Add-ons publishing, cross-browser support) are still open per ROADMAP.md's Phase 8. Corrected to in-progress.
 
 # Browser Extension — Implementation Plan
 

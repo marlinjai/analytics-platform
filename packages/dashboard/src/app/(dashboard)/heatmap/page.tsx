@@ -191,7 +191,7 @@ function HeatmapPageInner() {
           <div className="rounded-xl border border-gray-800 bg-gray-900 p-6">
             <h2 className="mb-4 text-lg font-semibold text-white">Bookmarklet</h2>
             <div className="flex flex-col items-start gap-3">
-              {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
+              { }
               <a
                 href={bookmarkletHref}
                 onClick={(e) => e.preventDefault()}

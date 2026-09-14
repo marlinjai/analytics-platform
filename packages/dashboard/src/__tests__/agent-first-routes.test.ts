@@ -73,7 +73,6 @@ vi.mock('@/lib/clickhouse', () => ({
 }));
 
 import { validateApiKey } from '@/lib/api-key';
-import { lookupCompanyId } from '@/lib/auth-check';
 import { authenticateRequest } from '@/lib/auth-api';
 
 import { PUT as settingsPUT } from '@/app/api/projects/[projectId]/settings/route';

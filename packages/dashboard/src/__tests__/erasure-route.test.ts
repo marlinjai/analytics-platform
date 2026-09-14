@@ -43,7 +43,6 @@ const PROJ_A = '11111111-1111-4111-8111-111111111111';
 const PROJ_B = '22222222-2222-4222-8222-222222222222';
 const PROJ_C = '33333333-3333-4333-8333-333333333333';
 const USER_1 = '99999999-9999-4999-8999-999999999999';
-const USER_2 = '88888888-8888-4888-8888-888888888888';
 
 interface Project { id: string; companyId: string; workspaceId: string }
 interface Scoped { id: string; projectId: string }

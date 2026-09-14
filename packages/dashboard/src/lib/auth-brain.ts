@@ -36,6 +36,16 @@ export const authBrainClient = createAuthBrainClient({
   // serves genuinely adversarial multi-tenant users rather than a handful of
   // known companies.
   //
+  // SECOND ACCEPTED TRADE, latent rather than active: this cache lives in the
+  // SDK client instance, which is per-process, in-memory, with no shared
+  // store. Every Next.js server process (container/replica) keeps its own
+  // 30s cache, so a revocation can appear cleared on one process and still
+  // honoured on another for up to 30s. Harmless today because analytics runs
+  // as a single replica; it only bites if analytics is ever scaled
+  // horizontally, at which point this needs a shared cache (Redis, or the
+  // SDK's own distributed-cache option if one exists by then) rather than
+  // silent rediscovery.
+  //
   // A caller that MUTATES session state must invalidate rather than wait it out:
   // see `invalidateSession` in app/api/scope/route.ts (sdk >= 1.6.1).
   cacheTtlMs: 30_000,

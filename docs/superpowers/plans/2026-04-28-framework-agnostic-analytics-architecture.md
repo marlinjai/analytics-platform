@@ -1,12 +1,15 @@
 ---
 title: Framework-Agnostic Web Analytics Architecture
 type: plan
-status: draft
+status: archived
 date: 2026-04-28
 tags: [research, architecture, heatmaps, experiments, dom-fingerprint, framer-clone-integration, visual-editor, breakpoints]
 projects: [analytics-platform, framer-clone, lola-stories]
 summary: Long-form research plan for evolving the platform from a React-leaning, code-based experiments tool into a stack-agnostic system with runtime DOM-mutation experiments, multi-viewport heatmap visualization, and native integration into the Framer-clone visual editor.
 ---
+
+> [!warning] Archived (2026-09-10)
+> 135 days unlinked, explicitly "Not yet a build plan." Cross-repo strategic research (analytics-platform + framer-clone + lola-stories) that nobody has picked up; the related backlog intent `analytics-abc-engine-and-framer-hosting-platform` was itself demoted from HIGH to MEDIUM on 2026-08-14 as not a core-workstream dependency. The A/B-testing and per-variant-heatmap half of what this doc scopes has since shipped through a different, narrower path (see `2026-03-22-ab-testing-experimentation.md`, completed). Archived rather than left drifting; revive with a roadmap line if the Framer-clone integration becomes an active priority.
 
 # Framework-Agnostic Web Analytics Architecture
 

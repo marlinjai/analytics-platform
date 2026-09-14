@@ -2,11 +2,14 @@
 title: "Feature Prioritization — Q2 2026"
 summary: "ICE-scored prioritization of remaining extension, dashboard, and platform features"
 type: plan
-status: proposed
+status: archived
 date: 2026-03-22
 tags: [roadmap, prioritization, strategy]
 projects: [analytics-platform]
 ---
+
+> [!warning] Archived (2026-09-10)
+> "Proposed" was not a valid lifecycle status. A point-in-time ICE-scored snapshot from 2026-03-22; ROADMAP.md itself is the living prioritization record since, and most of what this doc ranked (extension MVP, per-variant heatmaps, remote config, experiments) has since shipped per CHANGELOG.md. Archived as superseded rather than left drifting.
 
 # Feature Prioritization — Q2 2026
 

@@ -1,11 +1,14 @@
 ---
 title: Multi-User and Organizations
 type: plan
-status: draft
+status: completed
 date: 2026-05-30
 tags: [auth, organizations, multi-tenant, rbac, auth-brain]
 summary: Add an organization layer above projects so multiple users can collaborate under a shared billing/ownership boundary. Central decision: adopt the suite-wide auth-brain service vs extend the standalone NextAuth model. Recommends an interim standalone org layer shaped to migrate onto auth-brain later.
 ---
+
+> [!done] Reality update (2026-09-10)
+> Formalizing the status field to match what the plan's own banners already say: the auth-brain cutover (Option A, per-project workspace under a dedicated `lumitra-analytics` tenant) completed and verified live 2026-06-19. Status was still `draft`, which read as unfinished and made roadmap-check treat it as a stale unlinked draft.
 
 # Multi-User and Organizations Implementation Plan
 

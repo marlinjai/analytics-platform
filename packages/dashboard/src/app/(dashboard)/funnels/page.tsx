@@ -82,14 +82,10 @@ function FunnelVisualization({ results }: { results: FunnelStepResult[] }) {
 
 function FunnelCard({
   funnel,
-  from,
-  to,
   onDelete,
   onExpand,
 }: {
   funnel: FunnelWithResults;
-  from: string;
-  to: string;
   onDelete: () => void;
   onExpand: (id: string) => void;
 }) {
@@ -424,8 +420,6 @@ function FunnelsPageInner() {
                 <FunnelCard
                   key={funnel.id}
                   funnel={funnel}
-                  from={from}
-                  to={to}
                   onDelete={() => deleteFunnel(funnel.id)}
                   onExpand={fetchResults}
                 />

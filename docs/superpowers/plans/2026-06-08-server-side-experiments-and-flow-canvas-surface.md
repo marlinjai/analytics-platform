@@ -2,13 +2,16 @@
 title: Server-Side Experiments + Unified Flow-Canvas Experiment Surface
 summary: Extend Lumitra's (already-shipped, client-side) experimentation stack to server-side frameworks via a node SDK + shared deterministic assignment, propagate server-decided variants to the browser tracker so heatmaps/replays attribute correctly, add an admin forced-variant override, and surface + configure both client and server experiments from one place (the app-flow canvas). First consumer: the lola-stories story-writer experiment.
 type: plan
-status: draft
+status: in-progress
 date: 2026-06-08
 tags: [ab-testing, experimentation, feature-flags, server-side, node-sdk, flowmap, lola-stories]
 projects: [analytics-platform, lola-stories]
 ---
 
 # Server-Side Experiments + Unified Flow-Canvas Experiment Surface
+
+> [!info] Reality update (2026-09-10)
+> Phase 1 (D1-D4: shared deterministic assignment `@marlinjai/analytics-core`, server SDK `@marlinjai/analytics-node`, `POST /api/ingest`, server-to-client variant propagation) shipped, see `CHANGELOG.md`'s "Server-side experiments, Phase 1 (platform foundation)". D5 (continuous-metric statistics) and D6 phases 3-4 (the flow-canvas overlay and authoring UI, which lives in `@lola/flowmap`, a `lola-stories` package) remain undone. Marked in-progress and linked from a new ROADMAP.md line; the lola-stories half is naturally blocked on that repo, which is dormant pending an offboarding decision.
 
 ## Context
 

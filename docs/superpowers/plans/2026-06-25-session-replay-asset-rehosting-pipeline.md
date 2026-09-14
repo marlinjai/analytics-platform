@@ -1,6 +1,6 @@
 ---
 type: plan
-status: draft
+status: in-progress
 date: 2026-06-25
 title: Session Replay Asset Rehosting Pipeline (replays that render in any project)
 summary: Make session replays render faithfully across arbitrary customer sites without asking anyone to reconfigure CORS. Root cause is rrweb's inlineImages tainting the canvas on cross-origin assets. Phase 0 is a one-line tracker change that likely fixes the visible breakage; Phase 1 is a server-side asset-capture pipeline (fetch assets server-side, store in R2, rewrite replay events) for permanence against expiry, deletion, and auth-gated assets.
@@ -9,6 +9,9 @@ projects: [analytics-platform]
 ---
 
 # Session Replay Asset Rehosting Pipeline
+
+> [!info] Reality update (2026-09-10)
+> Phase 0 shipped (`@marlinjai/analytics-tracker` 1.4.0, `inlineImages: false`, see `CHANGELOG.md`). Phase 1's core modules (`packages/dashboard/src/lib/replay-assets/{extract,rewrite,ssrf,walk}.ts` + tests) landed via PR #29 ("ssrf-safe asset-rehosting core + schema"), but nothing in the app calls them yet: no route or job wires them into the ingest/collect pipeline, and no R2 bucket is provisioned. Marked in-progress rather than draft, and linked from a new ROADMAP.md line; wiring it up is genuinely the next step, not a re-plan.
 
 ## Goal
 
