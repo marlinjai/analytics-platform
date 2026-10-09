@@ -148,11 +148,17 @@ full source notes.
       sign off on the "consent-free" claim before any of this ships as
       marketing copy.
   See: docs/superpowers/plans/2026-06-25-tier1-consent-free-and-consent-mode.md
-- [ ] Publish `@marlinjai/analytics-node` 1.0.1 to npm and bump the dependency
-      in lola-stories (2026-09-10). The redirect-hardening fix merged to main
-      but was never published; not urgent, the prod break it fixes was
-      already patched elsewhere. Marlin runs `/release` for
-      `@marlinjai/analytics-node`.
+- [x] Published `@marlinjai/analytics-node` 1.0.1 with the redirect-hardening
+      fix on 2026-09-13. Re-verified 2026-10-10: the public npm registry lists
+      1.0.1 as latest, and [publishing run 34745977793](https://github.com/marlinjai/analytics-platform/actions/runs/34745977793)
+      succeeded for commit `f3cd7a1`. The old "never published" claim was stale.
+- [ ] Successor-owned, parked for Marlin: adopt `@marlinjai/analytics-node`
+      1.0.1 in Lola Stories after its new owner chooses to resume product work.
+      The default-branch lockfile at `d8b238fb` still resolves 1.0.0 despite
+      its compatible `^1.0.0` manifest range. This is consumer adoption,
+      not an unpublished package. Preserve Lola's required team review and
+      its current offboarding-only scope; do not open an unsolicited product
+      change for the successor. (2026-10-10)
 - [ ] Refactor analytics-platform off its hand-copied auth seam onto
       `@marlinjai/auth-brain-nextjs@0.1.0`, the same move lumitra-studio's
       PR #82 (its auth-brain-nextjs migration) completed (2026-09-10).
