@@ -135,10 +135,12 @@ full source notes.
 
 - [ ] Mint an auth-brain company-scoped service-account key to replace the
       retired local `account_api_keys`, then set `LUMITRA_ACCOUNT_KEY` in
-      `packages/cli` and the skill-template it emits (2026-09-10). Needs a
-      human to mint the key in auth-brain (plaintext returned once) and place
-      it via the Infisical UI; the CLI has no working credential until this
-      happens.
+      `packages/cli` and the skill-template it emits (2026-10-10). Open: mint
+      the key in auth-brain (plaintext returned once) and store it in
+      Infisical without printing it, after first confirming that the Lola
+      Stories company key is still wanted, given that Lola Stories is being
+      handed to a new owner (see the adoption line below). The CLI has no
+      working credential until this happens.
   See: docs/plans/2026-07-30-account-keys-to-service-accounts.md
 - [ ] Two-tier GDPR/ePrivacy consent architecture: storage-free tier 1,
       consent-signal-driven tier 2, per-tenant IP hashing, GPC (Global Privacy
