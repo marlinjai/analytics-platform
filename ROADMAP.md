@@ -78,7 +78,7 @@
 - [x] Funnel analysis — funnels page with step builder and drop-off visualization
 - [x] Scroll depth heatmap — quartile bars per page on heatmap page
 - [x] Rage click detection — table on heatmap page (3+ clicks in 2s)
-- [ ] Engagement zones — element-level click aggregation (2026-09-10)
+- [ ] Engagement zones — element-level click aggregation (2026-10-23)
   See: docs/superpowers/plans/2026-03-22-side-panel-engagement-zones.md
 - [x] Data export (CSV and JSON via /api/stats/export; export button in dashboard header)
 - [x] Custom date ranges with calendar picker (two-click range selection)
@@ -95,12 +95,12 @@
 
 ## Phase 7: Real-time & Scale
 - [x] Real-time dashboard (WebSocket not needed — polling works; live visitor counter + auto-refresh toggle)
-- [ ] Edge ingestion (Cloudflare Workers) for lower latency (2026-09-10)
-- [ ] ClickHouse cluster / multi-region deployment (2026-09-10)
-- [ ] Alerting (anomaly detection, threshold alerts) (2026-09-10)
-- [ ] Server-side experiments: continuous-metric statistics + flow-canvas experiment surface (2026-09-10). Phase 1 (Node SDK, shared deterministic assignment, server-ingest route) shipped; the flow-canvas overlay/authoring UI lives in `@lola/flowmap`, a `lola-stories` package, so that half is blocked on lola-stories, which is dormant pending an offboarding decision.
+- [ ] Edge ingestion (Cloudflare Workers) for lower latency (2026-10-23)
+- [ ] ClickHouse cluster / multi-region deployment (2026-10-23)
+- [ ] Alerting (anomaly detection, threshold alerts) (2026-10-23)
+- [ ] Server-side experiments: continuous-metric statistics + flow-canvas experiment surface (2026-10-23). Phase 1 (Node SDK, shared deterministic assignment, server-ingest route) shipped; the flow-canvas overlay/authoring UI lives in `@lola/flowmap`, a `lola-stories` package, so that half is blocked on lola-stories, which is dormant pending an offboarding decision.
   See: docs/superpowers/plans/2026-06-08-server-side-experiments-and-flow-canvas-surface.md
-- [ ] Session replay asset rehosting: wire the existing extract/rewrite/SSRF-guard pipeline into the ingest path (2026-09-20). Phase 0 (tracker no longer inlines cross-origin images) shipped; Phase 1's core modules landed but nothing calls them yet. **The storage half is now done**: the Cloudflare R2 bucket `lumitra-replay-assets` exists in the EU jurisdiction (data residency for first-party customer content), is managed by Terraform in `infra/deployments/lumitra-replay-assets` (imported 2026-09-20, plan clean), and its public custom domain `replay-assets.lumitra.co` is active and verified serving a probe object over HTTPS. What is left here is the code (the R2 adapter, enqueueing on ingest, the fetch worker, the read-time rewrite) only. **The credential is done too (2026-09-20)**: Marlin minted the bucket-scoped Cloudflare R2 token `analytics-replay-assets` (Object Read and Write, applied to `lumitra-replay-assets` only) and it is live in the analytics Infisical project (`45b9c32b-3deb-42ef-ad8a-9a931b86c01a`, prod, root path) as `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. Verified without ever reading the value: a write through that key landed in the bucket and downloaded over `replay-assets.lumitra.co` at the right size, and the same key is refused (HTTP 403) on `storage-brain-files-eu` and `linkforge-qr-images-eu`, so its blast radius really is one bucket. The non-secret configuration is complete as well: `R2_ENDPOINT` (the EU host `<account>.eu.r2.cloudflarestorage.com`, which is the only host an EU-jurisdiction bucket answers on), `R2_REPLAY_ASSETS_BUCKET` and `REPLAY_ASSETS_CDN_BASE`. So this line is now purely a code task.
+- [ ] Session replay asset rehosting: wire the existing extract/rewrite/SSRF-guard pipeline into the ingest path (2026-10-23). Phase 0 (tracker no longer inlines cross-origin images) shipped; Phase 1's core modules landed but nothing calls them yet. **The storage half is now done**: the Cloudflare R2 bucket `lumitra-replay-assets` exists in the EU jurisdiction (data residency for first-party customer content), is managed by Terraform in `infra/deployments/lumitra-replay-assets` (imported 2026-09-20, plan clean), and its public custom domain `replay-assets.lumitra.co` is active and verified serving a probe object over HTTPS. What is left here is the code (the R2 adapter, enqueueing on ingest, the fetch worker, the read-time rewrite) only. **The credential is done too (2026-09-20)**: Marlin minted the bucket-scoped Cloudflare R2 token `analytics-replay-assets` (Object Read and Write, applied to `lumitra-replay-assets` only) and it is live in the analytics Infisical project (`45b9c32b-3deb-42ef-ad8a-9a931b86c01a`, prod, root path) as `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. Verified without ever reading the value: a write through that key landed in the bucket and downloaded over `replay-assets.lumitra.co` at the right size, and the same key is refused (HTTP 403) on `storage-brain-files-eu` and `linkforge-qr-images-eu`, so its blast radius really is one bucket. The non-secret configuration is complete as well: `R2_ENDPOINT` (the EU host `<account>.eu.r2.cloudflarestorage.com`, which is the only host an EU-jurisdiction bucket answers on), `R2_REPLAY_ASSETS_BUCKET` and `REPLAY_ASSETS_CDN_BASE`. So this line is now purely a code task.
   See: docs/superpowers/plans/2026-06-25-session-replay-asset-rehosting-pipeline.md
 
 ## Phase 8: Browser Extension (in progress)
@@ -109,22 +109,22 @@
 - [x] Extension popup (project picker, date range, device toggle)
 - [x] Content script with bundled heatmap.js (no CDN, CSP-safe)
 - [x] SPA navigation handling (persist overlay across client-side routing)
-- [ ] Side panel for full analytics view alongside any page (2026-09-10)
+- [ ] Side panel for full analytics view alongside any page (2026-10-23)
   See: docs/superpowers/plans/2026-03-22-side-panel-engagement-zones.md
-- [ ] Scroll depth + rage click overlays in extension (2026-09-10)
-- [ ] Chrome Web Store + Firefox Add-ons publishing (2026-09-10)
-- [ ] Cross-browser support (Chrome, Firefox, Edge via webextension-polyfill) (2026-09-10)
+- [ ] Scroll depth + rage click overlays in extension (2026-10-23)
+- [ ] Chrome Web Store + Firefox Add-ons publishing (2026-10-23)
+- [ ] Cross-browser support (Chrome, Firefox, Edge via webextension-polyfill) (2026-10-23)
 See: docs/superpowers/plans/2026-03-22-browser-extension.md (in-progress: Phase 1 MVP shipped, Phases 2-3 above still open)
 
 ## v2 (Deferred from MVP)
 - [x] A/B testing & experimentation — shipped in full, client-side and server-side. See docs/superpowers/plans/2026-03-22-ab-testing-experimentation.md (completed)
-- [ ] Mouse move heatmap — cursor tracking with throttled sampling (2026-09-10)
-- [ ] Retention cohorts (2026-09-10)
-- [ ] Multi-tenant SaaS mode with billing (2026-09-10)
-- [ ] Error tracking (2026-09-10)
-- [ ] Custom dashboards / saved reports (2026-09-10)
-- [ ] AI-powered insights + anomaly detection (2026-09-10)
-- [ ] Team collaboration (invitations, roles, shared dashboards) (2026-09-10)
+- [ ] Mouse move heatmap — cursor tracking with throttled sampling (2026-10-23)
+- [ ] Retention cohorts (2026-10-23)
+- [ ] Multi-tenant SaaS mode with billing (2026-10-23)
+- [ ] Error tracking (2026-10-23)
+- [ ] Custom dashboards / saved reports (2026-10-23)
+- [ ] AI-powered insights + anomaly detection (2026-10-23)
+- [ ] Team collaboration (invitations, roles, shared dashboards) (2026-10-23)
 
 ## Leftovers (work-down session 9a, 2026-09-10)
 
@@ -145,7 +145,7 @@ full source notes.
 - [ ] Two-tier GDPR/ePrivacy consent architecture: storage-free tier 1,
       consent-signal-driven tier 2, per-tenant IP hashing, GPC (Global Privacy
       Control) honoring, retention/DPIA (Data Protection Impact Assessment),
-      Art. 28 DPA (Data Processing Agreement) (2026-09-10). Needs a Data
+      Art. 28 DPA (Data Processing Agreement) (2026-10-23). Needs a Data
       Protection Officer or qualified EU/German data-protection lawyer to
       sign off on the "consent-free" claim before any of this ships as
       marketing copy.
@@ -163,7 +163,7 @@ full source notes.
       change for the successor. (2026-10-10)
 - [ ] Refactor analytics-platform off its hand-copied auth seam onto
       `@marlinjai/auth-brain-nextjs@0.1.0`, the same move lumitra-studio's
-      PR #82 (its auth-brain-nextjs migration) completed (2026-09-10).
+      PR #82 (its auth-brain-nextjs migration) completed (2026-10-23).
       Multi-step, touches auth wiring, and updates an external registry doc
       in the auth-brain repo (`docs/internal/consuming-apps.md`); too large
       and cross-cutting for a mechanical pass.
