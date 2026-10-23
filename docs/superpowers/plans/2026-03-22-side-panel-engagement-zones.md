@@ -2,11 +2,14 @@
 title: "Side Panel, Engagement Zones & Heatmap Controls"
 summary: "Technical plan for Chrome Side Panel, dashboard engagement zones table, and widget heatmap tuning controls"
 type: plan
-status: draft
+status: completed
 date: 2026-03-22
 tags: [extension, side-panel, engagement-zones, heatmap-controls]
 projects: [analytics-platform]
 ---
+
+> [!info] Reality update (2026-10-23)
+> Completed. All three features shipped on 2026-03-22: the Chrome Side Panel (d464749), the dashboard engagement zones table and the widget heatmap controls (2383d04). The 2026-09-10 note below called them not built, which was wrong. Both ROADMAP.md lines are ticked.
 
 > [!info] Reality update (2026-09-10)
 > "Proposed" was not a valid lifecycle status, corrected to `draft` (still genuinely wanted, not built). Linked from ROADMAP.md's open "Engagement zones" (Phase 6) and "Side panel for full analytics view" (Phase 8) lines.
