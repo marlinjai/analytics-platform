@@ -23,6 +23,7 @@ Thumbs.db
 
 # Infisical
 .infisical.json
+.infisical.yaml
 
 # Docker
 docker-compose.override.yml
