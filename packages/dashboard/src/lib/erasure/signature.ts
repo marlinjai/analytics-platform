@@ -26,7 +26,7 @@ export const ERASURE_SECRET_ENV = 'ANALYTICS_ERASURE_WEBHOOK_SECRET';
 
 /** Header carrying the hex HMAC-SHA256 of the raw body. Lower-cased: the Headers
  * API is case-insensitive, and auth-brain may send any casing. */
-export const ERASURE_SIGNATURE_HEADER = 'x-erasure-signature';
+export const ERASURE_SIGNATURE_HEADER = 'x-lumitra-erasure-signature';
 
 /** A shared secret shorter than this is treated as misconfigured (fail closed). */
 const MIN_SECRET_LENGTH = 16;

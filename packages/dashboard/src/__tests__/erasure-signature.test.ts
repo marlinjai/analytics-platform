@@ -87,8 +87,8 @@ describe('verifyErasureSignature', () => {
     expect(verifyErasureSignature(body, 'zz'.repeat(32), SECRET)).toMatchObject({ ok: false, status: 401 });
   });
 
-  it('exposes the header name the route reads', () => {
-    expect(ERASURE_SIGNATURE_HEADER).toBe('x-erasure-signature');
+  it('reads the header auth-brain signs with (x-lumitra-erasure-signature, packages/app/src/lib/erasure/webhook-signature.ts there)', () => {
+    expect(ERASURE_SIGNATURE_HEADER).toBe('x-lumitra-erasure-signature');
   });
 });
 
