@@ -176,7 +176,7 @@ describe('POST /api/collect', () => {
     });
 
     it('returns 403 when event projectId does not match API key project', async () => {
-      const differentProjectId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+      const differentProjectId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
       const eventsForOtherProject = makeValidEvents([{ projectId: differentProjectId }]);
       const req = makeRequest(eventsForOtherProject);
       const res = await POST(req);

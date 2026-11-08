@@ -22,7 +22,7 @@ const createExperimentSchema = z.object({
   description: z.string().optional().default(''),
   hypothesis: z.string().optional().default(''),
   variants: z.array(variantSchema).min(2).max(5),
-  targeting: z.record(z.unknown()).optional().default({}),
+  targeting: z.record(z.string(), z.unknown()).optional().default({}),
   minSessionsPerVariant: z.number().int().min(1).max(100000).optional().default(100),
 });
 

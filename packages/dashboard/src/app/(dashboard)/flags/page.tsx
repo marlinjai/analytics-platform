@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useCurrentProjectId } from '@/components/layout/ProjectSwitcher';
 import { CodeSnippet } from '@/components/ui/CodeSnippet';
+import { MAX_FLAG_VARIANTS } from '@analytics-platform/shared';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ function CreateFlagForm({
   }, [name, keyManual]);
 
   function addVariant() {
-    setVariants((v) => [...v, { key: '', weight: 0 }]);
+    setVariants((v) => (v.length >= MAX_FLAG_VARIANTS ? v : [...v, { key: '', weight: 0 }]));
   }
 
   function removeVariant(i: number) {
@@ -321,7 +322,9 @@ function CreateFlagForm({
               <button
                 type="button"
                 onClick={addVariant}
-                className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition"
+                disabled={variants.length >= MAX_FLAG_VARIANTS}
+                title={variants.length >= MAX_FLAG_VARIANTS ? `A flag can have at most ${MAX_FLAG_VARIANTS} variants` : undefined}
+                className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition disabled:cursor-not-allowed disabled:text-gray-500 disabled:hover:text-gray-500"
               >
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

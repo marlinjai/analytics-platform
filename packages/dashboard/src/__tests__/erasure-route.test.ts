@@ -21,11 +21,12 @@
  * user.erased key deletion.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import type { ErasureWebhookPayload } from '@marlinjai/auth-brain-shared';
 import type { ErasureStore, ErasureLedgerRecord } from '@/lib/erasure/store';
 import { ERASURE_SIGNATURE_HEADER, ERASURE_SECRET_ENV } from '@/lib/erasure/signature';
 import { POST } from '@/app/api/internal/erasure/route';
+import { MAX_ERASURE_WORKSPACE_IDS } from '@/lib/erasure/schema';
 import { setErasureStoreOverride } from '@/lib/erasure/store';
 import type { NextRequest } from 'next/server';
 
@@ -43,6 +44,17 @@ const PROJ_A = '11111111-1111-4111-8111-111111111111';
 const PROJ_B = '22222222-2222-4222-8222-222222222222';
 const PROJ_C = '33333333-3333-4333-8333-333333333333';
 const USER_1 = '99999999-9999-4999-8999-999999999999';
+
+/**
+ * An event id shaped exactly like auth-brain's real ones: the first 16 bytes of
+ * a SHA-256, formatted 8-4-4-4-12 (deterministicEventId in auth-brain's erasure
+ * fanout). Such ids mostly carry no RFC version or variant bits, so the route
+ * must accept them (z.guid(), not z.uuid()).
+ */
+function eventIdFor(label: string): string {
+  const d = createHash('sha256').update(`analytics-test|${label}`).digest().subarray(0, 16).toString('hex');
+  return `${d.slice(0, 8)}-${d.slice(8, 12)}-${d.slice(12, 16)}-${d.slice(16, 20)}-${d.slice(20, 32)}`;
+}
 
 interface Project { id: string; companyId: string; workspaceId: string }
 interface Scoped { id: string; projectId: string }
@@ -173,22 +185,22 @@ function tenantErased(
 
 describe('POST /api/internal/erasure - signature gate', () => {
   it('rejects a wrong-secret signature with 401 and deletes nothing', async () => {
-    const res = await postErasure(tenantErased('evt-401'), { secret: 'the-wrong-but-long-secret' });
+    const res = await postErasure(tenantErased(eventIdFor('401')), { secret: 'the-wrong-but-long-secret' });
     expect(res.status).toBe(401);
     expect(store.purgeCalls).toHaveLength(0);
     expect(store.hasProject(PROJ_A)).toBe(true);
-    expect(await store.findEvent('evt-401')).toBeNull();
+    expect(await store.findEvent(eventIdFor('401'))).toBeNull();
   });
 
   it('rejects a missing signature header with 401', async () => {
-    const res = await postErasure(tenantErased('evt-nohdr'), { omitHeader: true });
+    const res = await postErasure(tenantErased(eventIdFor('nohdr')), { omitHeader: true });
     expect(res.status).toBe(401);
     expect(store.hasProject(PROJ_A)).toBe(true);
   });
 
   it('fails closed with 500 when the secret env is missing', async () => {
     delete process.env[ERASURE_SECRET_ENV];
-    const res = await postErasure(tenantErased('evt-noenv'));
+    const res = await postErasure(tenantErased(eventIdFor('noenv')));
     expect(res.status).toBe(500);
     expect(store.hasProject(PROJ_A)).toBe(true);
   });
@@ -197,11 +209,36 @@ describe('POST /api/internal/erasure - signature gate', () => {
     const res = await postErasure({ kind: 'tenant.erased' });
     expect(res.status).toBe(400);
   });
+
+  it('accepts a real-shaped event id with no RFC version or variant bits', async () => {
+    // Version nibble 'd' and variant nibble '1': z.uuid() refuses this, auth-brain
+    // sends ids like it (15 of 16 production event ids on 2026-11-08).
+    const nonRfc = 'a3c1f0e2-9b7d-d4e5-1f60-7a8b9c0d1e2f';
+    const res = await postErasure(tenantErased(nonRfc, { tenantId: COMPANY_1 }));
+    expect(res.status).toBe(200);
+    expect((await store.findEvent(nonRfc))?.completedAt).not.toBeNull();
+  });
+
+  it('rejects an event id that is not 8-4-4-4-12 hex with 400 and records nothing', async () => {
+    const res = await postErasure(tenantErased('evt-not-a-guid', { tenantId: COMPANY_1 }));
+    expect(res.status).toBe(400);
+    expect(await store.findEvent('evt-not-a-guid')).toBeNull();
+    expect(store.hasProject(PROJ_A)).toBe(true);
+  });
+
+  it('rejects an oversized workspace_ids list quickly with 400 and deletes nothing', async () => {
+    const huge = Array.from({ length: MAX_ERASURE_WORKSPACE_IDS + 1 }, () => WS_A);
+    const started = performance.now();
+    const res = await postErasure(tenantErased(eventIdFor('oversized'), { tenantId: COMPANY_1, workspaceIds: huge }));
+    expect(res.status).toBe(400);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(store.hasProject(PROJ_A)).toBe(true);
+  });
 });
 
 describe('POST /api/internal/erasure - tenant.erased cascade + company isolation', () => {
   it("erases the company's projects (projects + cascaded rows + ClickHouse events) and leaves another company untouched", async () => {
-    const res = await postErasure(tenantErased('evt-cascade', { tenantId: COMPANY_1 }));
+    const res = await postErasure(tenantErased(eventIdFor('cascade'), { tenantId: COMPANY_1 }));
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({ ok: true, outcome: 'completed' });
 
@@ -223,7 +260,7 @@ describe('POST /api/internal/erasure - tenant.erased cascade + company isolation
     expect(store.purgeCalls).not.toContain(PROJ_C);
 
     // Ledger recorded + completed.
-    const evt = await store.findEvent('evt-cascade');
+    const evt = await store.findEvent(eventIdFor('cascade'));
     expect(evt?.completedAt).not.toBeNull();
   });
 
@@ -235,7 +272,7 @@ describe('POST /api/internal/erasure - tenant.erased cascade + company isolation
     // A workspace-keyed delete would have silently no-op'd here — the whole defect.
     const staleWorkspace = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
     const res = await postErasure(
-      tenantErased('evt-s4', { tenantId: COMPANY_1, workspaceIds: [staleWorkspace] }),
+      tenantErased(eventIdFor('s4'), { tenantId: COMPANY_1, workspaceIds: [staleWorkspace] }),
     );
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({ outcome: 'completed' });
@@ -254,11 +291,11 @@ describe('POST /api/internal/erasure - tenant.erased cascade + company isolation
   });
 
   it('replays a completed event as a 200 no-op (no re-deletion)', async () => {
-    const first = await postErasure(tenantErased('evt-replay', { tenantId: COMPANY_2 }));
+    const first = await postErasure(tenantErased(eventIdFor('replay'), { tenantId: COMPANY_2 }));
     expect(first.status).toBe(200);
     expect(store.purgeCalls).toEqual([PROJ_C]);
 
-    const replay = await postErasure(tenantErased('evt-replay', { tenantId: COMPANY_2 }));
+    const replay = await postErasure(tenantErased(eventIdFor('replay'), { tenantId: COMPANY_2 }));
     expect(replay.status).toBe(200);
     await expect(replay.json()).resolves.toMatchObject({ outcome: 'noop' });
     // No further ClickHouse mutations on replay.
@@ -267,7 +304,7 @@ describe('POST /api/internal/erasure - tenant.erased cascade + company isolation
 
   it('a company with no analytics projects is a verified completed no-op (never a delete-everything)', async () => {
     const emptyCompany = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
-    const res = await postErasure(tenantErased('evt-empty-company', { tenantId: emptyCompany }));
+    const res = await postErasure(tenantErased(eventIdFor('empty-company'), { tenantId: emptyCompany }));
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({ outcome: 'completed' });
     // Nothing deleted: all three seeded projects survive, no ClickHouse mutations.
@@ -278,7 +315,7 @@ describe('POST /api/internal/erasure - tenant.erased cascade + company isolation
 
 describe('POST /api/internal/erasure - missing/empty tenant_id is a LOUD failure', () => {
   it('a tenant.erased with NO tenant_id deletes nothing and does NOT ack as a completed no-op', async () => {
-    const res = await postErasure(tenantErased('evt-no-tenant', { tenantId: null }));
+    const res = await postErasure(tenantErased(eventIdFor('no-tenant'), { tenantId: null }));
     // Failing the delivery (5xx) is correct: auth-brain retries and the gap surfaces.
     expect(res.status).toBe(500);
     await expect(res.json()).resolves.not.toMatchObject({ outcome: 'completed' });
@@ -287,14 +324,14 @@ describe('POST /api/internal/erasure - missing/empty tenant_id is a LOUD failure
     // never a silent "verified no-op": a legitimate retry (with tenant_id) still runs.
     expect(store.purgeCalls).toHaveLength(0);
     expect(store.projects).toHaveLength(3);
-    const evt = await store.findEvent('evt-no-tenant');
+    const evt = await store.findEvent(eventIdFor('no-tenant'));
     expect(evt?.completedAt ?? null).toBeNull();
   });
 
   it('a tenant.erased with an EMPTY tenant_id is likewise a loud failure, not a no-op', async () => {
     // An empty string must never be interpreted as "no company => delete everything"
     // nor acked as a completed no-op.
-    const res = await postErasure(tenantErased('evt-empty-tenant', { tenantId: '' }));
+    const res = await postErasure(tenantErased(eventIdFor('empty-tenant'), { tenantId: '' }));
     // '' fails the schema's min(1) — a 400 rejection is still a loud, non-acking
     // failure (auth-brain sees the delivery did not succeed). Assert it never acks a
     // deletion it did not perform.
@@ -307,23 +344,23 @@ describe('POST /api/internal/erasure - missing/empty tenant_id is a LOUD failure
 describe('POST /api/internal/erasure - partial failure + retry', () => {
   it('a ClickHouse failure returns 5xx, leaves the event incomplete and rows intact, and a retry completes it', async () => {
     store.failNextPurge = true;
-    const fail = await postErasure(tenantErased('evt-retry', { tenantId: COMPANY_2 }));
+    const fail = await postErasure(tenantErased(eventIdFor('retry'), { tenantId: COMPANY_2 }));
     expect(fail.status).toBe(500);
 
     // ClickHouse-first ordering: the Postgres rows must remain, and the event must
     // NOT be marked complete.
     expect(store.hasProject(PROJ_C)).toBe(true);
     expect(store.childCountFor(PROJ_C)).toBe(5);
-    const incomplete = await store.findEvent('evt-retry');
+    const incomplete = await store.findEvent(eventIdFor('retry'));
     expect(incomplete).not.toBeNull();
     expect(incomplete?.completedAt).toBeNull();
 
     // Retry: ClickHouse now succeeds -> remaining deletions complete and ack 200.
-    const retry = await postErasure(tenantErased('evt-retry', { tenantId: COMPANY_2 }));
+    const retry = await postErasure(tenantErased(eventIdFor('retry'), { tenantId: COMPANY_2 }));
     expect(retry.status).toBe(200);
     expect(store.hasProject(PROJ_C)).toBe(false);
     expect(store.childCountFor(PROJ_C)).toBe(0);
-    const done = await store.findEvent('evt-retry');
+    const done = await store.findEvent(eventIdFor('retry'));
     expect(done?.completedAt).not.toBeNull();
   });
 });
@@ -336,7 +373,7 @@ describe('POST /api/internal/erasure - user.erased', () => {
   // request must still ack cleanly and must touch nothing.
   it('is a verified no-op that acks cleanly and touches no project data', async () => {
     const payload: ErasureWebhookPayload = {
-      event_id: 'evt-user',
+      event_id: eventIdFor('user'),
       kind: 'user.erased',
       user_id: USER_1,
       requested_at: '2026-07-25T10:00:00.000Z',
@@ -351,7 +388,7 @@ describe('POST /api/internal/erasure - user.erased', () => {
     expect(store.purgeCalls).toHaveLength(0);
     expect(store.projects).toHaveLength(3);
 
-    const evt = await store.findEvent('evt-user');
+    const evt = await store.findEvent(eventIdFor('user'));
     expect(evt?.completedAt).not.toBeNull();
   });
 });

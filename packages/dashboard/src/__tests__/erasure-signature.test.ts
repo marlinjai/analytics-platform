@@ -10,7 +10,7 @@ import {
   computeErasureSignature,
   ERASURE_SIGNATURE_HEADER,
 } from '@/lib/erasure/signature';
-import { erasureWebhookPayloadSchema, ERASURE_CONTRACT_PROOF } from '@/lib/erasure/schema';
+import { erasureWebhookPayloadSchema, ERASURE_CONTRACT_PROOF, MAX_ERASURE_WORKSPACE_IDS } from '@/lib/erasure/schema';
 
 const SECRET = 'erasure-shared-secret-0123456789';
 
@@ -92,7 +92,7 @@ describe('verifyErasureSignature', () => {
   });
 });
 
-describe('erasureWebhookPayloadSchema wire-contract with @marlinjai/auth-brain-shared@1.4.0', () => {
+describe('erasureWebhookPayloadSchema wire-contract with @marlinjai/auth-brain-shared', () => {
   it('the published-type proof holds (schema is congruent with the package)', () => {
     // If the shared package changed the payload shape, schema.ts fails to compile;
     // this asserts the proof value is present at runtime too.
@@ -101,7 +101,7 @@ describe('erasureWebhookPayloadSchema wire-contract with @marlinjai/auth-brain-s
 
   it('parses a REAL tenant.erased payload (with workspace_ids) typed as the published type', () => {
     const payload: ErasureWebhookPayload = {
-      event_id: 'evt_tenant_1',
+      event_id: 'a3c1f0e2-9b7d-d4e5-1f60-7a8b9c0d1e2f',
       kind: 'tenant.erased',
       user_id: 'usr_1',
       tenant_id: 'ten_1',
@@ -124,12 +124,45 @@ describe('erasureWebhookPayloadSchema wire-contract with @marlinjai/auth-brain-s
 
   it('parses a REAL user.erased payload (tenant_id + workspace_ids omitted)', () => {
     const payload: ErasureWebhookPayload = {
-      event_id: 'evt_user_1',
+      event_id: '7f1e2d3c-4b5a-0697-0817-263544536271',
       kind: 'user.erased',
       user_id: 'usr_2',
       requested_at: '2026-07-25T10:00:00.000Z',
     };
     expect(erasureWebhookPayloadSchema.safeParse(payload).success).toBe(true);
+  });
+
+  it('accepts event ids without RFC version or variant bits (auth-brain derives them from a SHA-256)', () => {
+    // Both fixtures above are non-RFC on purpose: z.uuid() would refuse them.
+    for (const event_id of ['a3c1f0e2-9b7d-d4e5-1f60-7a8b9c0d1e2f', '00000000-0000-0000-0000-000000000000']) {
+      expect(erasureWebhookPayloadSchema.safeParse({
+        event_id, kind: 'user.erased', user_id: 'u', requested_at: 't',
+      }).success).toBe(true);
+    }
+  });
+
+  it('rejects an event id that is not 8-4-4-4-12 hex', () => {
+    for (const event_id of ['evt_user_1', '', 'a3c1f0e2-9b7d-d4e5-1f60-7a8b9c0d1e2', 'g3c1f0e2-9b7d-d4e5-1f60-7a8b9c0d1e2f']) {
+      expect(erasureWebhookPayloadSchema.safeParse({
+        event_id, kind: 'user.erased', user_id: 'u', requested_at: 't',
+      }).success).toBe(false);
+    }
+  });
+
+  it('accepts workspace_ids up to the cap and rejects one more quickly', () => {
+    const base = { event_id: 'a3c1f0e2-9b7d-d4e5-1f60-7a8b9c0d1e2f', kind: 'tenant.erased', user_id: 'u', tenant_id: 't', requested_at: 't' };
+    expect(erasureWebhookPayloadSchema.safeParse({
+      ...base, workspace_ids: Array.from({ length: MAX_ERASURE_WORKSPACE_IDS }, () => 'w'),
+    }).success).toBe(true);
+    // Oversized AND every element invalid: before the Zod 4.6.6 fix this collected
+    // one issue per element; with the .max() cap it is refused up front.
+    const started = performance.now();
+    const res = erasureWebhookPayloadSchema.safeParse({
+      ...base, workspace_ids: Array.from({ length: 1_000_000 }, () => 42),
+    });
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(res.success).toBe(false);
+    if (!res.success) expect(res.error.issues.length).toBeLessThan(10);
   });
 
   it('rejects an unknown kind and a missing event_id', () => {
