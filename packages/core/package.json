@@ -1,6 +1,6 @@
 {
   "name": "@marlinjai/analytics-core",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Runtime-agnostic deterministic experiment assignment and feature-flag evaluation for Lumitra Analytics",
   "type": "module",
   "exports": {
