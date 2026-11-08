@@ -1,6 +1,6 @@
 {
   "name": "@marlinjai/analytics-react",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "React hooks for Lumitra Analytics — A/B testing, feature flags, and experiments",
   "type": "module",
   "main": "dist/index.js",

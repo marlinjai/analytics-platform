@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- **`@marlinjai/analytics-core`** 1.0.1, **`@marlinjai/analytics-tracker`** 1.4.1 and **`@marlinjai/analytics-react`** 1.0.1: patch releases with no code change, published through the `publish.yml` workflow to validate the re-created npm Trusted Publisher (OpenID Connect, no token) of each package before npm's validation deadline.
+
 ### Added
 - **Server-side experiments, Phase 1 (platform foundation)** — backends can now assign variants and emit per-variant events that match the browser tracker's assignment exactly.
   - **`@marlinjai/analytics-core`** — new runtime-agnostic, zero-side-effect package holding the canonical deterministic assignment: `assign(experiment, unitId)` and `evaluateFlag(flag, unitId)`, ported byte-for-byte from the tracker's MurmurHash3 + bucket-by-weight algorithm. A parity test drives the real tracker `ExperimentManager` to prove server and client agree for the same `(experimentKey, unitId)`.
