@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EVENT_TYPES, MAX_BATCH_SIZE } from './constants.js';
+import { EVENT_TYPES, MAX_BATCH_SIZE, MAX_REPLAY_CHUNK_EVENTS } from './constants.js';
 
 // ── Primitives ───────────────────────────────────────────────
 
@@ -16,18 +16,18 @@ export const eventTypeSchema = z.enum([
 export const deviceTypeSchema = z.enum(['mobile', 'tablet', 'desktop']);
 
 export const dateRangeSchema = z.object({
-  from: z.string().datetime(),
-  to: z.string().datetime(),
+  from: z.iso.datetime(),
+  to: z.iso.datetime(),
 });
 
 // ── Tracker Event ────────────────────────────────────────────
 
 export const trackerEventSchema = z.object({
   type: eventTypeSchema,
-  projectId: z.string().uuid(),
+  projectId: z.uuid(),
   sessionId: z.string().min(1),
   timestamp: z.number().int().positive(),
-  url: z.string().url(),
+  url: z.url(),
   referrer: z.string().optional(),
 
   // Pageview
@@ -41,10 +41,11 @@ export const trackerEventSchema = z.object({
 
   // Custom
   eventName: z.string().max(128).optional(),
-  properties: z.record(z.unknown()).optional(),
+  properties: z.record(z.string(), z.unknown()).optional(),
 
-  // Replay
-  replayChunk: z.array(z.unknown()).optional(),
+  // Replay. Capped so an oversized chunk is refused before Zod walks every
+  // element (GHSA-mrhx-c7xc-m3w5); see MAX_REPLAY_CHUNK_EVENTS.
+  replayChunk: z.array(z.unknown()).max(MAX_REPLAY_CHUNK_EVENTS).optional(),
 
   // Device
   screenWidth: z.number().int().positive().optional(),
@@ -79,10 +80,10 @@ export const serverEventSchema = z.object({
   eventName: z.string().min(1).max(128),
   unitId: z.string().min(1).max(256),
   timestamp: z.number().int().positive().optional(),
-  url: z.string().url().optional(),
+  url: z.url().optional(),
   experimentId: z.string().max(128).optional(),
   variant: z.string().max(128).optional(),
-  properties: z.record(z.unknown()).optional(),
+  properties: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const serverEventBatchSchema = z
@@ -93,14 +94,14 @@ export const serverEventBatchSchema = z
 // ── Query Schemas ────────────────────────────────────────────
 
 export const statsQuerySchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: z.uuid(),
   dateRange: dateRangeSchema,
   interval: z.enum(['five_minute', 'hour', 'day', 'week', 'month']).optional(),
 });
 
 export const heatmapQuerySchema = z.object({
-  projectId: z.string().uuid(),
-  url: z.string().url(),
+  projectId: z.uuid(),
+  url: z.url(),
   dateRange: dateRangeSchema,
   deviceType: deviceTypeSchema.optional(),
 });
@@ -110,26 +111,26 @@ export const selectorHeatmapQuerySchema = heatmapQuerySchema.extend({
 });
 
 export const sessionListQuerySchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: z.uuid(),
   dateRange: dateRangeSchema,
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional().default(50),
 });
 
 export const replayQuerySchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: z.uuid(),
   sessionId: z.string().min(1),
 });
 
 // ── Page Versioning Schemas ──────────────────────────────────
 
 export const pageVersionQuerySchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: z.uuid(),
   url: z.string().min(1),
 });
 
 export const pageSnapshotQuerySchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: z.uuid(),
   url: z.string().min(1),
   pageHash: z.string().max(8),
 });
@@ -153,7 +154,7 @@ export const createProjectSchema = z.object({
   // trusts this value on its own: it validates the caller actually holds
   // tenant.admin on this company against the verify payload (session) or via a
   // tenant-scoped can() (account key) before creating the project.
-  companyId: z.string().uuid(),
+  companyId: z.uuid(),
 });
 
 export const updateProjectSchema = z.object({
@@ -163,7 +164,7 @@ export const updateProjectSchema = z.object({
 });
 
 export const createApiKeySchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: z.uuid(),
   label: z.string().min(1).max(128),
   environment: z.enum(['live', 'test']),
 });

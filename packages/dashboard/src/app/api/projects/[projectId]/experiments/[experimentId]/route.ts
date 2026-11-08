@@ -21,7 +21,7 @@ const updateExperimentSchema = z.object({
     .min(2)
     .max(5)
     .optional(),
-  targeting: z.record(z.unknown()).optional(),
+  targeting: z.record(z.string(), z.unknown()).optional(),
   minSessionsPerVariant: z.number().int().min(1).max(100000).optional(),
 });
 

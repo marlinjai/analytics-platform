@@ -1,7 +1,7 @@
 /**
  * Runtime schema for auth-brain's erasure webhook payload.
  *
- * @marlinjai/auth-brain-shared@1.4.0 publishes the payload TYPE
+ * @marlinjai/auth-brain-shared (1.4.0 onward, 2.0.0 today) publishes the payload TYPE
  * (`ErasureWebhookPayload`) and the `ErasureWebhookKind` union, but no zod schema
  * for the webhook body. Rather than hand-roll a divergent shape, we build the zod
  * schema here and PIN it to the published types with a compile-time congruence
@@ -22,12 +22,24 @@ import type { ErasureWebhookKind, ErasureWebhookPayload } from '@marlinjai/auth-
 /** The two erasure kinds, mirrored from the published `ErasureWebhookKind`. */
 export const ERASURE_KINDS = ['tenant.erased', 'user.erased'] as const satisfies readonly ErasureWebhookKind[];
 
+/**
+ * Upper bound on `workspace_ids` in one tenant.erased body. Analytics does not
+ * key deletion off this list (see above); the cap only keeps validation of the
+ * array bounded (Zod advisory GHSA-mrhx-c7xc-m3w5). A company has a handful of
+ * workspaces, so a limit this high never refuses a real delivery.
+ */
+export const MAX_ERASURE_WORKSPACE_IDS = 10_000;
+
 export const erasureWebhookPayloadSchema = z.object({
-  event_id: z.string().min(1),
+  // auth-brain derives event_id from a SHA-256 of the delivery's identity and
+  // formats it as a uuid (deterministicEventId in auth-brain's erasure fanout),
+  // so most ids carry no RFC version or variant bits. z.guid() checks the
+  // 8-4-4-4-12 hex format only; z.uuid() would refuse those real deliveries.
+  event_id: z.guid(),
   kind: z.enum(ERASURE_KINDS),
   user_id: z.string().min(1),
   tenant_id: z.string().min(1).optional(),
-  workspace_ids: z.array(z.string()).optional(),
+  workspace_ids: z.array(z.string()).max(MAX_ERASURE_WORKSPACE_IDS).optional(),
   requested_at: z.string().min(1),
 });
 

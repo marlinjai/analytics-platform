@@ -11,7 +11,9 @@ import {
   replayQuerySchema,
   createProjectSchema,
   createApiKeySchema,
+  serverEventBatchSchema,
 } from '../schemas.js';
+import { MAX_BATCH_SIZE, MAX_REPLAY_CHUNK_EVENTS } from '../constants.js';
 
 const validUuid = '550e8400-e29b-41d4-a716-446655440000';
 
@@ -335,5 +337,78 @@ describe('createApiKeySchema', () => {
         environment: 'staging',
       })
     ).toThrow();
+  });
+});
+
+// Zod advisory GHSA-mrhx-c7xc-m3w5: an uncapped array collects one issue per
+// failing element. Every array that faces untrusted input carries a .max(), and
+// an oversized input must be refused up front, not walked element by element.
+describe('array caps on untrusted input', () => {
+  it('accepts a replay chunk at the event cap', () => {
+    const result = trackerEventSchema.safeParse({
+      ...validTrackerEvent,
+      type: 'replay_chunk',
+      replayChunk: Array.from({ length: MAX_REPLAY_CHUNK_EVENTS }, () => ({ type: 3 })),
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an oversized replay chunk quickly with a bounded issue list', () => {
+    const started = performance.now();
+    const result = eventBatchSchema.safeParse([
+      { ...validTrackerEvent, type: 'replay_chunk', replayChunk: Array.from({ length: 1_000_000 }, () => 0) },
+    ]);
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.length).toBeLessThan(10);
+  });
+
+  it('rejects an oversized event batch quickly with a bounded issue list, even when every element is invalid', () => {
+    const started = performance.now();
+    const tracker = eventBatchSchema.safeParse(Array.from({ length: 1_000_000 }, () => 42));
+    const server = serverEventBatchSchema.safeParse(Array.from({ length: 1_000_000 }, () => 42));
+    expect(performance.now() - started).toBeLessThan(500);
+    for (const result of [tracker, server]) {
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.error.issues.length).toBeLessThan(10);
+    }
+    expect(MAX_BATCH_SIZE).toBe(50);
+  });
+
+  it('rejects more than 20 allowed origins', () => {
+    const result = createProjectSchema.safeParse({
+      name: 'p',
+      domain: 'example.com',
+      companyId: validUuid,
+      allowedOrigins: Array.from({ length: 21 }, (_, i) => `a${i}.example.com`),
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('Zod 4 behaviour the ingest contract relies on', () => {
+  it('keeps custom-event properties as a string-keyed record', () => {
+    const result = trackerEventSchema.parse({
+      ...validTrackerEvent,
+      type: 'custom',
+      eventName: 'signup',
+      properties: { plan: 'pro', seats: 3, nested: { a: 1 } },
+    });
+    expect(result.properties).toEqual({ plan: 'pro', seats: 3, nested: { a: 1 } });
+  });
+
+  it('applies list defaults when the field is absent', () => {
+    expect(sessionListQuerySchema.parse({
+      projectId: validUuid,
+      dateRange: { from: '2025-01-01T00:00:00Z', to: '2025-01-31T23:59:59Z' },
+    }).limit).toBe(50);
+    expect(createProjectSchema.parse({ name: 'p', domain: 'example.com', companyId: validUuid }).allowedOrigins).toEqual([]);
+  });
+
+  it('accepts a random v4 project id and refuses an id without RFC version bits', () => {
+    // Project ids come from Postgres gen_random_uuid() (v4), so the stricter
+    // Zod 4 uuid() check accepts every real one.
+    expect(trackerEventSchema.safeParse({ ...validTrackerEvent, projectId: crypto.randomUUID() }).success).toBe(true);
+    expect(trackerEventSchema.safeParse({ ...validTrackerEvent, projectId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' }).success).toBe(false);
   });
 });

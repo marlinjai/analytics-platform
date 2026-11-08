@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type postgres from 'postgres';
+import { MAX_FLAG_VARIANTS } from '@analytics-platform/shared';
 import { z } from 'zod';
 import { getDb } from '@/lib/db';
 import { authenticateRequest, corsHeaders } from '@/lib/auth-api';
@@ -17,9 +18,10 @@ const updateFlagSchema = z.object({
         weight: z.number().min(0).max(100),
       }),
     )
+    .max(MAX_FLAG_VARIANTS)
     .nullable()
     .optional(),
-  targeting: z.record(z.unknown()).optional(),
+  targeting: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function OPTIONS(request: NextRequest) {
