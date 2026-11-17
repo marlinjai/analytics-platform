@@ -178,8 +178,8 @@ full source notes.
       not an unpublished package. Preserve Lola's required team review and
       its current offboarding-only scope; do not open an unsolicited product
       change for the successor. Reviewed 2026-11-17, still parked; status
-      NOT verified in this review
-      (missing evidence: a look at the Lola Stories lockfile). (2026-11-17)
+      NOT verified in this review (missing evidence: a look at the Lola
+      Stories lockfile). (2026-11-17)
 - [ ] Refactor analytics-platform off its hand-copied auth seam onto
       `@marlinjai/auth-brain-nextjs@0.1.0`, the same move lumitra-studio's
       PR #82 (its auth-brain-nextjs migration) completed (2026-10-23).

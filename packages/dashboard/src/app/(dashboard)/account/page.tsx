@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { SkeletonKeyList } from '@/components/ui/Skeleton';
+import { RevealedKey } from '@/components/ui/RevealedKey';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -120,17 +121,7 @@ function AccountKeysSection() {
           <p className="mb-2 text-sm font-semibold text-yellow-300">
             Copy this key now — it won&apos;t be shown again
           </p>
-          <div className="flex items-center gap-2">
-            <code className="block flex-1 break-all rounded bg-gray-800 px-3 py-2 text-sm text-gray-100" data-feedback-mask>
-              {revealedKey}
-            </code>
-            <button
-              onClick={() => copyKey(revealedKey)}
-              className="shrink-0 rounded-lg bg-gray-700 px-3 py-2 text-sm font-medium text-gray-100 hover:bg-gray-600 transition"
-            >
-              {copied ? 'Copied!' : 'Copy'}
-            </button>
-          </div>
+          <RevealedKey value={revealedKey} copied={copied} onCopy={() => copyKey(revealedKey)} />
         </div>
       )}
 

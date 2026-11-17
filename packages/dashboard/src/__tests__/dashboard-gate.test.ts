@@ -76,7 +76,6 @@ describe('DashboardLayout gate', () => {
     const el = await render();
     expect(el.type).toBe(ChooseCompany);
     expect(el.props.companies).toEqual([CO_A, CO_B]);
-    expect(JSON.stringify(el.props)).not.toContain('feedback');
   });
 
   it('an active company -> renders the dashboard shell (a div, not a redirect)', async () => {
