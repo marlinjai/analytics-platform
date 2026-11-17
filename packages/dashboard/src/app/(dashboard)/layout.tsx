@@ -3,6 +3,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { ChooseCompany } from '@/components/layout/ChooseCompany';
 import { resolveSessionGate } from '@/lib/auth';
+import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
 
 /**
  * Analytics door + active-company gate for every page under the dashboard shell.
@@ -49,6 +50,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {children}
         </div>
       </main>
+      <FeedbackWidget />
     </div>
   );
 }
