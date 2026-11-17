@@ -22,7 +22,8 @@ export function TopPagesTable({ pages, loading, onFilterClick }: Props) {
   }
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900">
+    // Tracked visitors' page addresses can carry personal data: black in a feedback screenshot.
+    <div className="rounded-xl border border-gray-800 bg-gray-900" data-feedback-mask>
       <div className="border-b border-gray-800 px-4 py-3">
         <h3 className="text-sm font-medium text-gray-300">Top Pages</h3>
       </div>

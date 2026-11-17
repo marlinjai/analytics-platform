@@ -37,6 +37,7 @@ vi.mock('@/components/layout/ChooseCompany', () => ({
 
 import DashboardLayout from '@/app/(dashboard)/layout';
 import { ChooseCompany } from '@/components/layout/ChooseCompany';
+import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
 
 const CO_A = { id: 'co-a', name: 'A', slug: 'a' };
 const CO_B = { id: 'co-b', name: 'B', slug: 'b' };
@@ -75,6 +76,7 @@ describe('DashboardLayout gate', () => {
     const el = await render();
     expect(el.type).toBe(ChooseCompany);
     expect(el.props.companies).toEqual([CO_A, CO_B]);
+    expect(JSON.stringify(el.props)).not.toContain('feedback');
   });
 
   it('an active company -> renders the dashboard shell (a div, not a redirect)', async () => {
@@ -85,5 +87,8 @@ describe('DashboardLayout gate', () => {
     };
     const el = await render();
     expect(el.type).toBe('div');
+    // Lumitra Feedback sits in the shell only, never on the pick surface or a redirect.
+    const children = (el.props.children as unknown[]).flat() as Array<{ type?: unknown }>;
+    expect(children.some((c) => c?.type === FeedbackWidget)).toBe(true);
   });
 });

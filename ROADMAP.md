@@ -132,10 +132,13 @@ See: docs/superpowers/plans/2026-03-22-browser-extension.md (in-progress: Phase 
       on every dashboard page, sending to the feedback service's "Analytics
       (dogfood)" project, which mails founder@ (go-live stage 4 of the feedback
       service; its two-week "no lost delivery" gate is tracked on the
-      feedback-service roadmap). Replays and heatmaps are iframes, which the
-      widget blacks out, and the session list is marked `data-feedback-mask`.
-      Lands once the project's email channel is confirmed (the confirmation
-      mail is limited to one per day per address and company). (2026-11-17)
+      feedback-service roadmap). Screenshots keep tracked visitors' data out:
+      replays, heatmaps and the URL picker are blacked out by the widget, and
+      the session list, the page tables, the heatmap's page lists, the filter
+      pills and a fresh API key are masked. Anonymous and without a privacy
+      link while only the owner and Lumitra staff hold the app. Lands once the
+      project's email channel is confirmed (the confirmation mail is limited
+      to one per day per address and company). (2026-11-17)
 
 ## Leftovers (work-down session 9a, 2026-09-10)
 
@@ -152,7 +155,9 @@ full source notes.
       Stories company key is still wanted, given that Lola Stories is being
       handed to a new owner (see the adoption line below). The CLI has no
       working credential until this happens.
-      Reviewed 2026-11-17 while adding the feedback widget, still listed as open; status NOT verified in this review (missing evidence: a check in auth-brain and Infisical). (2026-11-17)
+      Reviewed 2026-11-17, still listed as open; status NOT verified in this
+      review (missing evidence: a check in auth-brain and Infisical).
+      (2026-11-17)
   See: docs/plans/2026-07-30-account-keys-to-service-accounts.md
 - [ ] Two-tier GDPR/ePrivacy consent architecture: storage-free tier 1,
       consent-signal-driven tier 2, per-tenant IP hashing, GPC (Global Privacy
@@ -172,8 +177,8 @@ full source notes.
       its compatible `^1.0.0` manifest range. This is consumer adoption,
       not an unpublished package. Preserve Lola's required team review and
       its current offboarding-only scope; do not open an unsolicited product
-      change for the successor. Reviewed 2026-11-17 while adding the
-      feedback widget, still parked; status NOT verified in this review
+      change for the successor. Reviewed 2026-11-17, still parked; status
+      NOT verified in this review
       (missing evidence: a look at the Lola Stories lockfile). (2026-11-17)
 - [ ] Refactor analytics-platform off its hand-copied auth seam onto
       `@marlinjai/auth-brain-nextjs@0.1.0`, the same move lumitra-studio's
