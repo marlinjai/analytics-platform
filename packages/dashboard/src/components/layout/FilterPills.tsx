@@ -26,7 +26,8 @@ export function FilterPills({ filters, onRemove, onClearAll }: Props) {
   if (activeEntries.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    // A filter can name a tracked page address: black in a feedback screenshot.
+    <div className="flex flex-wrap items-center gap-2" data-feedback-mask>
       <span className="text-xs text-gray-500">Filtered by:</span>
       {activeEntries.map(([key, value]) => (
         <span

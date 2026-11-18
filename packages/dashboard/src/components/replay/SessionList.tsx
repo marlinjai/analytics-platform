@@ -53,7 +53,8 @@ export function SessionList({ sessions, loading, hasMore, onLoadMore, onDelete, 
   };
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900">
+    // Visitors' sessions: blacked out in a feedback screenshot.
+    <div className="rounded-xl border border-gray-800 bg-gray-900" data-feedback-mask>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-800 text-left text-xs text-gray-500">

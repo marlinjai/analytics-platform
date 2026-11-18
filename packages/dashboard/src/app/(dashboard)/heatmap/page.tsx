@@ -244,7 +244,7 @@ function HeatmapPageInner() {
             {loadingUrls ? (
               <SkeletonUrlList rows={5} />
             ) : urls.length > 0 ? (
-              <ul className="mt-4 space-y-1 text-sm text-gray-400">
+              <ul className="mt-4 space-y-1 text-sm text-gray-400" data-feedback-mask>
                 {urls.map((url) => (
                   <li key={url} className="truncate">
                     {url}
@@ -414,7 +414,7 @@ function PickUrlPrompt({
           </>
         )}
       </p>
-      <ul className="space-y-1">
+      <ul className="space-y-1" data-feedback-mask>
         {urls.map((url) => (
           <li key={url}>
             <button
