@@ -9,6 +9,12 @@ projects: [analytics-platform, auth-brain]
 
 # Retire the account-key FGA survivor
 
+> [!info] Decision 2026-11-26: no key for Lola Stories
+> Lola Stories is archived and has no successor. The operator step below that mints a replacement key
+> scoped to Lola Stories is archived: no record shows that it ran, and it is not to be run. The rest
+> of the plan stands; a CLI credential needs a key for another company, none is named yet.
+> Statements below about where the analytics data lives describe 2026-07-30.
+
 ## The debt
 
 `checkAccountKeyProjectAccess` is the ONE remaining direct OpenFGA `can()` in

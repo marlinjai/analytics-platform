@@ -98,7 +98,7 @@
 - [ ] Edge ingestion (Cloudflare Workers) for lower latency (2026-10-23)
 - [ ] ClickHouse cluster / multi-region deployment (2026-10-23)
 - [ ] Alerting (anomaly detection, threshold alerts) (2026-10-23)
-- [ ] Server-side experiments: continuous-metric statistics + flow-canvas experiment surface (2026-10-23). Phase 1 (Node SDK, shared deterministic assignment, server-ingest route) shipped; the flow-canvas overlay/authoring UI lives in `@lola/flowmap`, a `lola-stories` package, so that half is blocked on lola-stories, which is dormant pending an offboarding decision.
+- [ ] Server-side experiments: continuous-metric statistics, decision D5 "add now or defer", still open in the plan (2026-10-23). Phase 1 (Node SDK, shared deterministic assignment, server-ingest route) shipped. The flow-canvas half is archived (see "Archived by decision" at the end).
   See: docs/superpowers/plans/2026-06-08-server-side-experiments-and-flow-canvas-surface.md
 - [ ] Session replay asset rehosting: wire the existing extract/rewrite/SSRF-guard pipeline into the ingest path (2026-10-23). Phase 0 (tracker no longer inlines cross-origin images) shipped; Phase 1's core modules landed but nothing calls them yet. **The storage half is now done**: the Cloudflare R2 bucket `lumitra-replay-assets` exists in the EU jurisdiction (data residency for first-party customer content), is managed by Terraform in `infra/deployments/lumitra-replay-assets` (imported 2026-09-20, plan clean), and its public custom domain `replay-assets.lumitra.co` is active and verified serving a probe object over HTTPS. What is left here is the code (the R2 adapter, enqueueing on ingest, the fetch worker, the read-time rewrite) only. **The credential is done too, as of 2026-09-20**: Marlin minted the bucket-scoped Cloudflare R2 token `analytics-replay-assets` (Object Read and Write, applied to `lumitra-replay-assets` only) and it is live in the analytics Infisical project (`45b9c32b-3deb-42ef-ad8a-9a931b86c01a`, prod, root path) as `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. Verified without ever reading the value: a write through that key landed in the bucket and downloaded over `replay-assets.lumitra.co` at the right size, and the same key is refused (HTTP 403) on `storage-brain-files-eu` and `linkforge-qr-images-eu`, so its blast radius really is one bucket. The non-secret configuration is complete as well: `R2_ENDPOINT` (the EU host `<account>.eu.r2.cloudflarestorage.com`, which is the only host an EU-jurisdiction bucket answers on), `R2_REPLAY_ASSETS_BUCKET` and `REPLAY_ASSETS_CDN_BASE`. So this line is now purely a code task.
   See: docs/superpowers/plans/2026-06-25-session-replay-asset-rehosting-pipeline.md
@@ -151,10 +151,7 @@ full source notes.
       retired local `account_api_keys`, then set `LUMITRA_ACCOUNT_KEY` in
       `packages/cli` and the skill-template it emits (2026-10-10). Open: mint
       the key in auth-brain (plaintext returned once) and store it in
-      Infisical without printing it, after first confirming that the Lola
-      Stories company key is still wanted, given that Lola Stories is being
-      handed to a new owner (see the adoption line below). The CLI has no
-      working credential until this happens.
+      Infisical without printing it, scoped to a company that is not Lola Stories: a key for that company is not wanted (Lola Stories is archived, 2026-11-26), and the plan's step to mint it is archived without a record that it ran. No other company is named yet. The CLI has no working credential until this happens.
       Reviewed 2026-11-17, still listed as open; status NOT verified in this
       review (missing evidence: a check in auth-brain and Infisical).
       (2026-11-17)
@@ -171,18 +168,31 @@ full source notes.
       fix on 2026-09-13. Re-verified 2026-10-10: the public npm registry lists
       1.0.1 as latest, and [publishing run 34745977793](https://github.com/marlinjai/analytics-platform/actions/runs/34745977793)
       succeeded for commit `f3cd7a1`. The old "never published" claim was stale.
-- [ ] Successor-owned, parked for Marlin: adopt `@marlinjai/analytics-node`
-      1.0.1 in Lola Stories after its new owner chooses to resume product work.
-      The default-branch lockfile at `d8b238fb` still resolves 1.0.0 despite
-      its compatible `^1.0.0` manifest range. This is consumer adoption,
-      not an unpublished package. Preserve Lola's required team review and
-      its current offboarding-only scope; do not open an unsolicited product
-      change for the successor. Reviewed 2026-11-17, still parked; status
-      NOT verified in this review (missing evidence: a look at the Lola
-      Stories lockfile). (2026-11-17)
 - [ ] Refactor analytics-platform off its hand-copied auth seam onto
       `@marlinjai/auth-brain-nextjs@0.1.0`, the same move lumitra-studio's
       PR #82 (its auth-brain-nextjs migration) completed (2026-10-23).
       Multi-step, touches auth wiring, and updates an external registry doc
       in the auth-brain repo (`docs/internal/consuming-apps.md`); too large
       and cross-cutting for a mechanical pass.
+
+## Archived by decision (2026-11-26)
+
+Marlin decided on 2026-11-26 that Lola Stories is archived and that there is no successor team.
+The lines below left the open set through that decision. Archived is not done: archiving a line
+paid, cancelled, revoked, rotated or executed nothing. Each label says what is on record, and an
+outcome marked unknown stays unknown. The original text is kept as evidence; no work in it is
+scheduled.
+
+- Archived 2026-11-26. Never executed: there is no successor. No change to the Lola Stories repository is wanted; whether its lockfile changed since was not checked. Original line:
+  Successor-owned, parked for Marlin: adopt `@marlinjai/analytics-node`
+  1.0.1 in Lola Stories after its new owner chooses to resume product work.
+  The default-branch lockfile at `d8b238fb` still resolves 1.0.0 despite
+  its compatible `^1.0.0` manifest range. This is consumer adoption,
+  not an unpublished package. Preserve Lola's required team review and
+  its current offboarding-only scope; do not open an unsolicited product
+  change for the successor. Reviewed 2026-11-17, still parked; status
+  NOT verified in this review (missing evidence: a look at the Lola
+  Stories lockfile). (2026-11-17)
+- Archived 2026-11-26. Never executed: the flow-canvas half of the server-side experiments line (D6 overlay and
+  authoring UI, which lived in the Lola Stories package `@lola/flowmap`) and Lola Stories as the first consumer.
+  The shipped platform parts (assignment core, Node SDK, server-ingest route, results API) stay.

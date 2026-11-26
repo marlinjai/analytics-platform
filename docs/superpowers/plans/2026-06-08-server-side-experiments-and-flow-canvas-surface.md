@@ -10,6 +10,13 @@ projects: [analytics-platform, lola-stories]
 
 # Server-Side Experiments + Unified Flow-Canvas Experiment Surface
 
+> [!info] Decision 2026-11-26: the Lola Stories parts are archived
+> Lola Stories is archived and has no successor. Archived, not done: D6 (flow-canvas overlay and
+> authoring, phases 3 and 4), the writer experiment and every other `lola` step in the phase table.
+> The D0 `allowed_origins` change for the Lola project has no recorded outcome (unknown) and is no
+> longer wanted. The shipped platform parts stay. The one thing left open here is D5
+> (continuous-metric statistics, "add now or defer"). The text below is kept as history.
+
 > [!info] Reality update (2026-09-10)
 > Phase 1 (D1-D4: shared deterministic assignment `@marlinjai/analytics-core`, server SDK `@marlinjai/analytics-node`, `POST /api/ingest`, server-to-client variant propagation) shipped, see `CHANGELOG.md`'s "Server-side experiments, Phase 1 (platform foundation)". D5 (continuous-metric statistics) and D6 phases 3-4 (the flow-canvas overlay and authoring UI, which lives in `@lola/flowmap`, a `lola-stories` package) remain undone. Marked in-progress and linked from a new ROADMAP.md line; the lola-stories half is naturally blocked on that repo, which is dormant pending an offboarding decision.
 

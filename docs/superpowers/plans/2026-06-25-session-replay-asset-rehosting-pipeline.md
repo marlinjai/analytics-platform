@@ -10,6 +10,11 @@ projects: [analytics-platform]
 
 # Session Replay Asset Rehosting Pipeline
 
+> [!info] Decision 2026-11-26: Lola Stories is archived
+> The Lola Stories replays below are the historic example that showed the defect. The check "record a
+> Lola session after deploy" is archived: this plan holds no record that it ran, and it will not.
+> The pipeline itself is a shared deliverable and stays open.
+
 > [!info] Reality update (2026-09-10)
 > Phase 0 shipped (`@marlinjai/analytics-tracker` 1.4.0, `inlineImages: false`, see `CHANGELOG.md`). Phase 1's core modules (`packages/dashboard/src/lib/replay-assets/{extract,rewrite,ssrf,walk}.ts` + tests) landed via PR #29 ("ssrf-safe asset-rehosting core + schema"), but nothing in the app calls them yet: no route or job wires them into the ingest/collect pipeline, and no R2 bucket is provisioned. Marked in-progress rather than draft, and linked from a new ROADMAP.md line; wiring it up is genuinely the next step, not a re-plan.
 
